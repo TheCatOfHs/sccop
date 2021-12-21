@@ -8,10 +8,6 @@ shell版本: bash
 
 python版本: python3.5及以后。需要有ase, pytorch, DPT库
 
-
-
-
-
 ## 测试样本
 
 test/Optim：POSCAR-015-002-131 
@@ -19,6 +15,15 @@ test/Optim：POSCAR-015-002-131
             POSCAR-024-002-131
 
 需求：
-1.Optim文件夹中的POSCAR做结构优化
-2.计算声子谱，能带等性质
-3.通过ssh连接到指定节点调用程序计算，ssh工具在utils.py，节点信息在global_var.py
+
+1. Optim文件夹中的POSCAR做结构优化
+2. 计算声子谱，能带等性质
+3. 通过ssh连接到指定节点调用程序计算，ssh工具在utils.py，节点信息在global_var.py
+
+## VASP计算
+
+目前可计算
+
+1. 结构优化(libs/VASP_inputs/Optimization)
+2. 声子谱(libs/VASP_inputs/Phonon)
+3. PBE能带(libs/VASP_inputs/ElectronicStructure)

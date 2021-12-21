@@ -1,0 +1,18 @@
+ISTART  = 0
+ICHARG  = 2
+PREC    = ACCURATE
+GGA     = PE
+ADDGRID = .TRUE.
+
+# Electronic relaxation
+ENCUT   = 500
+EDIFF   = 1E-6
+EDIFFG  = -0.001
+
+ISMEAR  = 0
+SIGMA   = 0.05
+POTIM   = 0.20
+
+LWAVE   = .TRUE.
+LCHARG  = .TRUE.
+
