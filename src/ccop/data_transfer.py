@@ -7,7 +7,8 @@ from ccop.utils import ListRWTools
 
 
 class Transfer(ListRWTools):
-    #Transfer atoms_pos and atoms_type to the input of gragh network
+    #transfer atoms_pos and atoms_type to the input of gragh network
+    #all configurations with same grid
     def __init__(self, grid_name, 
                  nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
         """
@@ -33,7 +34,7 @@ class Transfer(ListRWTools):
         
     def atom_initilizer(self, atom_type):
         """
-        Initialize atom features
+        initialize atom features
 
         Parameters
         ----------
@@ -47,8 +48,7 @@ class Transfer(ListRWTools):
 
     def find_nbr_dis(self, atom_pos):
         """
-        Cutoff by n neighboring atoms
-        Return nbr_dis
+        cutoff by n neighboring atoms
     
         Parameters
         ----------
@@ -71,8 +71,7 @@ class Transfer(ListRWTools):
     
     def find_nbr(self, atom_pos):
         """
-        Cutoff by n neighboring atoms
-        Return nbr_idx and nbr_dis
+        cutoff by n neighboring atoms
     
         Parameters
         ----------
@@ -100,7 +99,7 @@ class Transfer(ListRWTools):
     
     def idx_transfer(self, atom_pos, nbr_idx):
         """
-        Make nbr_idx consistent with nbr_dis
+        make nbr_idx consistent with nbr_dis
     
         Parameters
         ----------
@@ -117,7 +116,7 @@ class Transfer(ListRWTools):
     
     def expand(self, distances):
         """
-        Near distance expanded in gaussian feature space
+        near distance expanded in gaussian feature space
         
         Parameters
         ----------
@@ -132,7 +131,7 @@ class Transfer(ListRWTools):
 
     def single(self, atom_pos, atom_type):
         """
-        Transfer configurations by single
+        transfer configurations by single
                 
         Parameters
         ----------
@@ -152,7 +151,7 @@ class Transfer(ListRWTools):
     
     def batch(self, atom_pos, atom_type):
         """
-        Transfer configurations by batch
+        transfer configurations by batch
                 
         Parameters
         ----------
@@ -176,6 +175,77 @@ class Transfer(ListRWTools):
         return batch_atom_fea, batch_nbr_fea, \
                 batch_nbr_fea_idx
 
+
+class MultiGridTransfer:
+    #transfer configurations in different grid into the input of PPM
+    def __init__(self):
+        pass
+    
+    def find_batch_nbr_dis(self, atom_pos, grid_name):
+        """
+        calculate near distance of configurations
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        grid_name [int, 1d]: name of grids  
+
+        Returns
+        ----------
+        nbr_dis [float, 3d]: near distance of configurations
+        """
+        last_grid = grid_name[0]
+        transfer = Transfer(last_grid)
+        nbr_dis = []
+        i = 0
+        for j, grid in enumerate(grid_name):
+            if not grid == last_grid:
+                batch_nbr_dis = \
+                    [transfer.find_nbr_dis(pos) for pos in atom_pos[i:j]]
+                nbr_dis += batch_nbr_dis
+                transfer = Transfer(grid)
+                last_grid = grid
+                i = j
+        batch_nbr_dis = [transfer.find_nbr_dis(pos) for pos in atom_pos[i:]]
+        nbr_dis += batch_nbr_dis
+        return nbr_dis
+
+    def batch(self, atom_pos, atom_type, grid_name):
+        """
+        transfer configurations into input of PPM in batch
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: name of grids
+
+        Returns:
+        atom_feas [float, 3d]: atom feature of configurations 
+        nbr_feas [float, 4d]: bond feature of configurations
+        nbr_fea_idxes [int, 3d]: near index of configurations
+        """
+        last_grid = grid_name[0]
+        transfer = Transfer(last_grid)
+        atom_feas, nbr_feas, nbr_fea_idxes = [], [], []
+        i = 0
+        for j, grid in enumerate(grid_name):
+            if not grid == last_grid:
+                atom_fea, nbr_fea, nbr_fea_idx = \
+                    transfer.batch(atom_pos[i:j], atom_type[i:j])
+                atom_feas += atom_fea
+                nbr_feas += nbr_fea
+                nbr_fea_idxes += nbr_fea_idx
+                transfer = Transfer(grid)
+                last_grid = grid
+                i = j
+        atom_fea, nbr_fea, nbr_fea_idx = \
+            transfer.batch(atom_pos[i:], atom_type[i:])
+        atom_feas += atom_fea
+        nbr_feas += nbr_fea
+        nbr_fea_idxes += nbr_fea_idx
+        return atom_feas, nbr_feas, nbr_fea_idxes
+    
 
 if __name__ == "__main__":
     grid_name = 1
