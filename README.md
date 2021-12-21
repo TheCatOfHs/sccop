@@ -22,3 +22,11 @@ test/Optim：POSCAR-015-002-131
 1.Optim文件夹中的POSCAR做结构优化
 2.计算声子谱，能带等性质
 3.通过ssh连接到指定节点调用程序计算，ssh工具在utils.py，节点信息在global_var.py
+
+## VASP计算
+
+目前可计算
+
+- 结构优化(libs/VASP_inputs/Optimization)
+- 声子谱(libs/VASP_inputs/Phonon)
+- PBE能带(libs/VASP_inputs/ElectronicStructure)
