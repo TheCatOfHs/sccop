@@ -41,7 +41,7 @@ class Initial(SSHTools):
         
         Returns
         ----------
-        file_num [int, 0d]: number of file
+        flag [bool, 0d]: whether job is done
         """
         command = f'ls -l data/ | grep node | wc -l'
         flag = self.check_num_file(command, file_num)

@@ -168,7 +168,7 @@ class SubVASP(ListRWTools, SSHTools):
             VASP_output_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
             with open(VASP_output_file, 'r') as f:
                 ct = f.readlines()
-            energy_line, state_line = [], []
+            energy_line, atom_line, state_line = [], []
             for line in ct:
                 if 'F=' in line:
                     energy_line.append(line)
