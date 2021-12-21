@@ -1,7 +1,9 @@
 
 
 class Optimize:
-    pass
+    # 
+    def __init__(self, sleep_time=1):
+        self.sleep_time = sleep_time
 
 
 class Phonon:

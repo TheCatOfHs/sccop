@@ -1,0 +1,25 @@
+Global Parameters
+    ISTART  = 1
+    ICHARGE = 11
+    LREAL   = F
+    ENCUT   = 500
+    PREC    = ACCURATE
+    LWAVE   = .TRUE.
+    LCHARG  = .TRUE.
+    ADDGRID = .TRUE.
+
+Electronic Relaxation
+    ISMEAR  = 0
+    SIGMA   = 0.05
+    EDIFF   = 1E-06
+    GGA     = PE
+    LORBIT  = 11
+    NEDOS   = 2000
+  # ISPIN   = 2
+
+Ionic Relaxation
+    NEW     = 0
+    IBRION  = -1
+    ISIF    = 2
+    EDIFFG  = -0.001
+
