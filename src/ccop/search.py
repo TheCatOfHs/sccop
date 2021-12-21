@@ -1,8 +1,7 @@
 import os, sys
 import argparse
 
-sys.path.append(os.getcwd()) 
-from ccop.data_transfer import Transfer
+sys.path.append(os.getcwd())
 from ccop.workers import Search
 
 
@@ -27,6 +26,5 @@ if __name__ == "__main__":
     model_name = args.model_name
     
     #Search
-    inizer = Transfer(grid_name)
-    worker = Search(round, inizer)
+    worker = Search(round, grid_name)
     worker.explore(atom_pos, atom_type, model_name, path, node)

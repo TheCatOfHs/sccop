@@ -5,7 +5,7 @@ import time
 from ccop.global_var import *
 from ccop.pretrain import Initial
 from ccop.grid_divide import MultiDivide, GridDivide
-from ccop.data_transfer import Transfer
+from ccop.data_transfer import MultiGridTransfer
 from ccop.sample_select import Select
 from ccop.sub_vasp import SubVASP
 from ccop.workers import MultiWorkers, Search
@@ -22,55 +22,17 @@ def delete_duplicates():
     #TODO delete duplicates that are already in training set
     pass
 
-def find_batch_nbr_dis(atom_pos, grid_name):
-    last_grid = grid_name[0]
-    transfer = Transfer(last_grid)
-    nbr_dis = []
-    i = 0
-    for j, grid in enumerate(grid_name):
-        if not grid == last_grid:
-            batch_nbr_dis = \
-                [transfer.find_nbr_dis(pos) for pos in atom_pos[i:j]]
-            nbr_dis += batch_nbr_dis
-            transfer = Transfer(grid)
-            last_grid = grid
-            i = j
-    batch_nbr_dis = [transfer.find_nbr_dis(pos) for pos in atom_pos[i:]]
-    nbr_dis += batch_nbr_dis
-    return nbr_dis
-
-def batch_initialize(atom_pos, atom_type, grid_name):
-    last_grid = grid_name[0]
-    transfer = Transfer(last_grid)
-    atom_feas, nbr_feas, nbr_fea_idxes = [], [], []
-    i = 0
-    for j, grid in enumerate(grid_name):
-        if not grid == last_grid:
-            atom_fea, nbr_fea, nbr_fea_idx = \
-                transfer.batch(atom_pos[i:j], atom_type[i:j])
-            atom_feas += atom_fea
-            nbr_feas += nbr_fea
-            nbr_fea_idxes += nbr_fea_idx
-            transfer = Transfer(grid)
-            last_grid = grid
-            i = j
-    atom_fea, nbr_fea, nbr_fea_idx = \
-        transfer.batch(atom_pos[i:], atom_type[i:])
-    atom_feas += atom_fea
-    nbr_feas += nbr_fea
-    nbr_fea_idxes += nbr_fea_idx
-    return atom_feas, nbr_feas, nbr_fea_idxes
-
 
 if __name__ == '__main__':
     init = Initial()
     grid = GridDivide()
     divide = MultiDivide()
     rwtools = ListRWTools()
+    mul_transfer = MultiGridTransfer()
     os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
     
     #Build grid
-    build = True
+    build = False
     if build:
         grid.build_grid(0, latt_vec, grain, cutoff)
     grid_store = [0]
@@ -99,10 +61,9 @@ if __name__ == '__main__':
         grid_name = sorted(grid_name)
         
         #Geometry check
-        transfer = Transfer(0)
-        batch_nbr_dis = find_batch_nbr_dis(atom_pos, grid_name)
+        batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
 
-        worker = Search(round, transfer)
+        worker = Search(round, grid_name[0])
         check_near = [worker.near_check(i) for i in batch_nbr_dis]
         check_overlay = [worker.overlay_check(i, len(i)) for i in atom_pos]
         check = [i and j for i, j in zip(check_near, check_overlay)]
@@ -149,10 +110,10 @@ if __name__ == '__main__':
         #TODO Delete duplicates
         #atom_pos_right, atom_type_right, grid_name_right = \
         #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
-            
+        
         num_poscars = len(energys)
         a = int(num_poscars*0.6)        
-        atom_fea, nbr_fea, nbr_fea_idx = batch_initialize(atom_pos_right, atom_type_right, grid_name_right)
+        atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
 
         #Training data
         pos_buffer += atom_pos_right[0:a]

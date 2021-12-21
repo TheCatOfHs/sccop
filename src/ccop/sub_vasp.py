@@ -209,7 +209,7 @@ class SubVASP(ListRWTools, SSHTools):
                 current_true_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
                 shutil.copyfile(last_true_file, current_true_file)
             system_echo(f'Copy true vasp out to next---true numbers: {len(true_out)}.')
-            
+    
     
 if __name__ == "__main__":
     sub_vasp = SubVASP()

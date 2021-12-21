@@ -13,7 +13,7 @@ orig_atom_fea_len = 92
 nbr_bond_fea_len = 41
 
 #Searching
-T = 1.
+T = .1
 decay = .99
 steps = 150
 min_bond = 1.4

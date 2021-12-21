@@ -5,6 +5,7 @@ from functools import reduce
 
 sys.path.append(os.getcwd())
 from ccop.global_var import *
+from ccop.data_transfer import Transfer
 from ccop.utils import ListRWTools, SSHTools, system_echo
 from ccop.environment import CrystalGraphConvNet, Normalizer
 
@@ -247,8 +248,8 @@ class MultiWorkers(ListRWTools, SSHTools):
     
 class Search(ListRWTools):
     #Searching on PES by machine-learned potential
-    def __init__(self, round, transfer):
-        self.transfer = transfer
+    def __init__(self, round, grid_name):
+        self.transfer = Transfer(grid_name)
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([[0.]]))
         self.round = f'{round:03.0f}'
