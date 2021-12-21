@@ -168,12 +168,14 @@ class SubVASP(ListRWTools, SSHTools):
             VASP_output_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
             with open(VASP_output_file, 'r') as f:
                 ct = f.readlines()
-            energy_line, atom_line, state_line = [], []
+            energy_line, state_line = [], []
             for line in ct:
                 if 'F=' in line:
                     energy_line.append(line)
                 if 'DAV: ' in line:
                     state_line.append(line)
+                if 'POSCAR found :' in line:
+                    atom_num = int(line.split()[-2])
             if len(energy_line) == 0:
                 system_echo(' *WARNING* Relaxation is failed!')
                 cur_E = 1e6
@@ -183,7 +185,7 @@ class SubVASP(ListRWTools, SSHTools):
                     true_E.append(True)
                 else:
                     true_E.append(False)
-                cur_E = float(energy_line[-1].split()[2])
+                cur_E = float(energy_line[-1].split()[2])/atom_num
                 system_echo(f'{out}, {true_E[-1]}, {cur_E:18.9f}')
             energys.append([out, true_E[-1], cur_E])
         self.write_list2d(f'{vasp_out_dir}/Energy-{round}.dat', energys, '{0}')
