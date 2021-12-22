@@ -151,7 +151,6 @@ if __name__ == '__main__':
         search = True
         if search:
             num_seed = 30
-            num_initial = 30*len(nodes)
             min_idx = np.argsort(train_energys)[:num_seed]
             grid_pool = np.array(grid_buffer)[min_idx] 
             
@@ -169,7 +168,7 @@ if __name__ == '__main__':
             
             #Initial search start point
             init_pos, init_type, init_grid = [], [], []
-            for _ in range(num_initial):
+            for _ in range(num_paths):
                 seed = np.random.choice(min_idx)
                 init_pos.append(pos_buffer[seed])
                 init_type.append(type_buffer[seed])
@@ -183,9 +182,8 @@ if __name__ == '__main__':
                 else:
                     init_grid.append(grid_buffer[seed])
             
-            repeat = 30
             workers = MultiWorkers()
-            workers.assign_job(round+1, repeat, init_pos, init_type, init_grid)
+            workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
 
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)

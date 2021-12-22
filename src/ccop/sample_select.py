@@ -9,13 +9,13 @@ from sklearn.cluster import KMeans
 sys.path.append(os.getcwd()) 
 from ccop.global_var import *
 from ccop.data_transfer import Transfer
-from ccop.utils import ListRWTools, system_echo
+from ccop.utils import ListRWTools, SSHTools, system_echo
 from ccop.environment import CrystalGraphConvNet
 from ccop.environment import DataParallel, Normalizer
 from ccop.environment import PPMData, get_loader
 
 
-class Select(ListRWTools):
+class Select(ListRWTools, SSHTools):
     #Select training samples by active learning
     def __init__(self, round,
                  batch_size=256, num_workers=0):
@@ -350,7 +350,8 @@ class Select(ListRWTools):
         type [int, 2d]: input type
         grid_name [int, 1d, np]: input grid name
         """
-        node_assign = self.assign_node(idx)
+        num_jobs = len(idx)
+        node_assign = self.assign_node(num_jobs)
         grid_slt = grid_name[idx]
         order = np.argsort(grid_slt)
         grid_order = grid_slt[order]
@@ -380,27 +381,6 @@ class Select(ListRWTools):
                           type_order, '{0}')
         self.write_list2d(f'{self.sh_save_dir}/grid_name_select.dat', 
                           np.transpose([grid_order]), '{0}')
-    
-    def assign_node(self, idx):
-        """
-        assign vasp jobs to nodes
-
-        Returns
-        ----------
-        node_assign [int, 1d]: vasp job list of nodes
-        """
-        num_poscars = len(idx)
-        num_nodes = len(nodes)
-        num_assign, node_assign = 0, []
-        while not num_assign == num_poscars:
-            poscars = num_poscars - num_assign
-            assign = poscars//num_nodes
-            if assign == 0:
-                node_assign = node_assign + nodes[:poscars]
-            else:
-                node_assign = [i for i in nodes for _ in range(assign)]
-            num_assign = len(node_assign)
-        return sorted(node_assign)
     
     def write_POSCAR(self, pos, type, num, node, transfer, elements):
         """
@@ -460,7 +440,7 @@ class Select(ListRWTools):
             os.mkdir(self.poscar_save_dir)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize configurations: {num_poscars}')
-        
+
     
 class FeatureExtractNet(CrystalGraphConvNet):
     #Calculate crys_fea

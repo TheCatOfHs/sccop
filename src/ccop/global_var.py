@@ -8,7 +8,7 @@ num_mutate = 6
 
 
 #Recycling
-num_round = 20
+num_round = 30
 num_poscars = 10
 
 #Training
@@ -21,7 +21,9 @@ nbr_bond_fea_len = 41
 T = .1
 decay = .99
 steps = 150
+num_paths = 180
 min_bond = 1.4
+wait_time = 240
 
 #Sample Select
 num_models = 5

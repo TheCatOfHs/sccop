@@ -4,6 +4,7 @@ import paramiko
 import numpy as np
 
 sys.path.append(os.getcwd())
+from ccop.global_var import *
 
 
 def system_echo(ct):
@@ -147,6 +148,30 @@ class SSHTools:
         ssh.exec_command(shell_script)
         ssh.close()
 
+    def assign_node(self, num_jobs):
+        """
+        assign jobs to nodes
+        
+        Parameters
+        ----------
+        num_jobs [int, 0d]: number of jobs
+        
+        Returns
+        ----------
+        node_assign [int, 1d]: vasp job list of nodes
+        """
+        num_nodes = len(nodes)
+        num_assign, node_assign = 0, []
+        while not num_assign == num_jobs:
+            jobs = num_jobs - num_assign
+            assign = jobs//num_nodes
+            if assign == 0:
+                node_assign = node_assign + nodes[:jobs]
+            else:
+                node_assign = [i for i in nodes for _ in range(assign)]
+            num_assign = len(node_assign)
+        return sorted(node_assign)
+    
     def check_num_file(self, command, file_num):
         """
         If shell is completed, return True
@@ -164,13 +189,16 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    class test:
-        def __init__(self):
-            self.a = 1
-            self.b = self.a + 1
-            
-        def func(self, a):
-            self.a = a
-            print(self.b)
-    t = test()
-    t.func(2)
+    rwtools = ListRWTools()
+    job = rwtools.import_list2d('data/Search/001/worker_job_001.dat', str, numpy=True)
+    print(job)
+    def find_fail_ssh_jobs(job):
+        all_path = [int(i) for i in job[:,1]]
+        print(all_path)
+        shell_script = f'ls data/Search/001 | grep energy'
+        file = os.popen(shell_script).read()
+        file = [int(i.split('-')[2]) for i in file.split()]
+        print(file)
+        need = np.setdiff1d(all_path, file)
+        print(need)
+    find_fail_ssh_jobs(job)
