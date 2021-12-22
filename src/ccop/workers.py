@@ -12,7 +12,8 @@ from ccop.environment import CrystalGraphConvNet, Normalizer
 
 class MultiWorkers(ListRWTools, SSHTools):
     #Assign sampling jobs to each node
-    def __init__(self, sleep_time=1):
+    def __init__(self, repeat=2, sleep_time=1):
+        self.repeat = repeat
         self.wait_time = wait_time
         self.sleep_time = sleep_time
     
@@ -41,7 +42,6 @@ class MultiWorkers(ListRWTools, SSHTools):
         pos, type, job = self.read_job()
         update_flag = len(nodes) + 3
         worker_flag = len(nodes) + 3*len(job) + 3
-        time_counter = 0
         system_echo('Get the job node!')
         for node in nodes:
             self.update_with_ssh(node)
@@ -50,15 +50,8 @@ class MultiWorkers(ListRWTools, SSHTools):
         system_echo('Successful update each node!')
         self.sub_job_to_workers(pos, type, job)
         system_echo('Successful assign works to workers!')
-        while not self.is_done(worker_flag):
-            time.sleep(self.sleep_time)
-            time_counter += 1
-            if time_counter > self.wait_time:
-                pos, type, job = self.find_fail_jobs(pos, type, job)
-                self.sub_job_to_workers(pos, type, job)
-                time_counter = 0
-                system_echo(f'Failure ssh jobs: {len(job)}')
-        atom_pos, atom_type, grid_name = self.collect(job)
+        job_finish = self.woker_monitor(pos, type, job, worker_flag)
+        atom_pos, atom_type, grid_name = self.collect(job_finish)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
         self.write_list2d(f'{self.sh_save_dir}/atom_pos.dat', 
                           atom_pos, '{0:3.0f}')
@@ -85,7 +78,7 @@ class MultiWorkers(ListRWTools, SSHTools):
             os.mkdir(self.sh_save_dir)
         worker_job = []
         model = 'model_best.pth.tar'
-        #use index to find ignored jobs
+        #use index to find failure jobs
         node_assign = self.assign_node(num_paths)
         for i, node in enumerate(node_assign):
             job = [round, i, node, init_grid[i], model]
@@ -113,7 +106,47 @@ class MultiWorkers(ListRWTools, SSHTools):
                         '''
         self.ssh_node(shell_script, ip)
     
-    def find_fail_jobs(self, pos, type, job):
+    def woker_monitor(self, pos, type, job, worker_flag):
+        """
+        monitor workers whether have done
+        
+        Parameters
+        ----------
+        pos [str, 1d, np]: initial pos
+        type [str, 1d, np]: initial type
+        job [str, 2d, np]: jobs assigned to nodes
+        worker_flag [int, 0d]: number of file if finish
+
+        Returns
+        ----------
+        job_finish [str, 2d, np]: finished jobs
+        """
+        time_counter, repeat_counter = 0, 0
+        while not self.is_done(worker_flag):
+            time.sleep(self.sleep_time)
+            time_counter += 1
+            if time_counter > self.wait_time:
+                fail_path, exist_path = self.find_fail_jobs(job)
+                num_fail = len(fail_path)
+                pos_fail, type_fail, job_fail = \
+                    pos[fail_path], type[fail_path], job[fail_path]
+                self.sub_job_to_workers(pos_fail, type_fail, job_fail)
+                repeat_counter += 1
+                time_counter = 0
+                if num_fail < 6:
+                    self.wait_time = 10*num_fail
+                else:
+                    self.wait_time = 60
+                system_echo(f'Failure ssh jobs: {fail_path}')
+            if repeat_counter == self.repeat:
+                break 
+        if repeat_counter == 0:
+            job_finish = job
+        else:
+            job_finish = job[exist_path]
+        return job_finish
+    
+    def find_fail_jobs(self, job):
         """
         find ssh failure jobs
         
@@ -125,16 +158,15 @@ class MultiWorkers(ListRWTools, SSHTools):
 
         Returns
         ----------
-        pos [str, 1d, np]: fail ssh pos
-        type [str, 1d, np]: fail ssh type
-        job [str, 2d, np]: fail jobs
+        exist_path [int, 1d, np]:
+        fail_path [int, 1d, np]: index of failure job
         """
         all_path = [int(i) for i in job[:,1]]
         shell_script = f'ls {self.sh_save_dir} | grep energy'
         ct = os.popen(shell_script).read()
         exist_path = [int(i.split('-')[2]) for i in ct.split()]
-        idx = np.setdiff1d(all_path, exist_path)
-        return pos[idx], type[idx], job[idx]
+        fail_path = np.setdiff1d(all_path, exist_path)
+        return fail_path, sorted(exist_path)
     
     def sub_job_to_workers(self, pos, type, job):
         """
@@ -142,9 +174,9 @@ class MultiWorkers(ListRWTools, SSHTools):
 
         Parameters
         ----------
-        pos [str, 1d, np]: all initial pos
-        type [str, 1d, np]: all initial type
-        job [str, 2d, np]: all jobs
+        pos [str, 1d, np]: initial pos
+        type [str, 1d, np]: initial type
+        job [str, 2d, np]: jobs
         """
         for atom_pos, atom_type, assign in zip(pos, type, job):
             self.sampling_with_ssh(atom_pos, atom_type, *assign)
