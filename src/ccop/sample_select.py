@@ -54,7 +54,7 @@ class Select(ListRWTools):
         mean_pred_few = mean_pred[idx_few].cpu().numpy()
         crys_mean_few = crys_mean[idx_few].cpu().numpy()
         crys_embedded = self.reduce(crys_mean_few)
-        clusters = self.cluster(crys_embedded)
+        clusters = self.cluster(crys_embedded, n_clusters)
         idx_slt = self.min_in_cluster(idx_few, mean_pred_few, clusters)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         
@@ -272,7 +272,7 @@ class Select(ListRWTools):
     
     def reduce(self, crys_fea):
         """
-        reduce dimension of crys_fea from 128 to 2
+        reduce dimension of crys_fea from 128 to n_components
         
         Parameters
         ----------
@@ -288,7 +288,7 @@ class Select(ListRWTools):
                           random_state=0).fit_transform(crys_fea)
         return crys_embedded
     
-    def cluster(self, crys_embedded):
+    def cluster(self, crys_embedded, num_clusters):
         """
         group reduced crys_fea into n clusters
         
@@ -300,7 +300,7 @@ class Select(ListRWTools):
         ----------
         kmeans.labels_ [int, 1d, np]: cluster labels 
         """
-        kmeans = KMeans(n_clusters, 
+        kmeans = KMeans(num_clusters, 
                         random_state=0).fit(crys_embedded)
         return kmeans.labels_
     
@@ -358,7 +358,7 @@ class Select(ListRWTools):
         grid_last = grid_slt[0]
         transfer = Transfer(grid_last)
         pos_order, type_order = [], []
-        elements = self.import_list2d('data/elements.dat',
+        elements = self.import_list2d(elements_dir,
                                       str, numpy=True).ravel()
         for i, grid in enumerate(grid_order):
             idx_slt = idx_order[i]
@@ -428,7 +428,40 @@ class Select(ListRWTools):
         with open(file, 'w') as f:
             f.write('\n'.join(POSCAR))
 
+    def export(self, atom_pos, atom_type, grid_name):
+        """
+        export configurations after ccop
 
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 2d]: name of grid
+        """
+        self.num_crys = len(atom_pos)
+        system_echo(f'Training set---sample number: {self.num_crys}')
+        atom_pos, atom_type, grid_name = \
+            self.delete_duplicates(atom_pos, atom_type, grid_name)
+        self.num_crys = len(atom_pos)
+        system_echo(f'Delete duplicates---sample number: {self.num_crys}')
+        loader = self.dataloader(atom_pos, atom_type, grid_name)
+        model_names = self.model_select()
+        mean_pred, _, crys_mean = self.mean(model_names, loader)
+        idx_all = np.arange(self.num_crys)
+        mean_pred_all = mean_pred.cpu().numpy()
+        crys_mean_all = crys_mean.cpu().numpy()
+        crys_embedded = self.reduce(crys_mean_all)
+        clusters = self.cluster(crys_embedded, num_poscars)
+        idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
+        self.round = 'CCOP_POSCARS'
+        self.poscar_save_dir = f'{poscar_dir}/{self.round}'
+        self.sh_save_dir = self.poscar_save_dir
+        if not os.path.exists(self.poscar_save_dir):
+            os.mkdir(self.poscar_save_dir)
+        self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
+        system_echo(f'CCOP optimize configurations: {num_poscars}')
+        
+    
 class FeatureExtractNet(CrystalGraphConvNet):
     #Calculate crys_fea
     def __init__(self, orig_atom_fea_len, nbr_fea_len):
