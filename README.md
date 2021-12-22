@@ -6,7 +6,7 @@
 
 shell版本: bash
 
-python版本: python3.5及以后。需要有ase, pytorch, DPT库
+python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy库
 
 ## 测试样本
 
@@ -25,5 +25,9 @@ test/Optim：POSCAR-015-002-131
 目前可计算
 
 1. 结构优化(libs/VASP_inputs/Optimization)
-2. 声子谱(libs/VASP_inputs/Phonon)
-3. PBE能带(libs/VASP_inputs/ElectronicStructure)
+2. 声子谱(libs/VASP_inputs/Phonon), 需安装Phonopy, 运行完毕后会直接输出声子谱图(利用libs/scripts/plot-phonon-band.py)
+3. PBE能带(libs/VASP_inputs/ElectronicStructure), 运行完毕后会直接输出能带图(利用libs/scripts/plot-energy-band.py)
+
+注：所有计算的布里渊区路径为
+
+Z(0.0, 0.5, 0.0) -> G(0.0, 0.0, 0.0) -> Y(0.5, 0.0, 0.0) -> A(0.5, 0.0, 0.5) -> B(0.0, 0.0, 0.5) -> D(0.0, 0.5, 0.5) -> E(0.5, 0.5, 0.5) -> C(0.5, 0.5, 0.0)
