@@ -13,6 +13,7 @@ from ccop.environment import CrystalGraphConvNet, Normalizer
 class MultiWorkers(ListRWTools, SSHTools):
     #Assign sampling jobs to each node
     def __init__(self, sleep_time=1):
+        self.wait_time = wait_time
         self.sleep_time = sleep_time
     
     def assign_job(self, round, repeat, init_pos, init_type, init_grid):
@@ -40,17 +41,23 @@ class MultiWorkers(ListRWTools, SSHTools):
         pos, type, job = self.read_job()
         update_flag = len(nodes) + 3
         worker_flag = len(nodes) + 3*len(job) + 3
+        time_counter = 0
         system_echo('Get the job node!')
         for node in nodes:
             self.update_with_ssh(node)
         while not self.is_done(update_flag):
             time.sleep(self.sleep_time)
-        system_echo('Successful update information of each node!')
-        for atom_pos, atom_type, input in zip(pos, type, job):
-            self.sampling_with_ssh(atom_pos, atom_type, *input)
+        system_echo('Successful update each node!')
+        self.sub_job_to_workers(pos, type, job)
         system_echo('Successful assign works to workers!')
         while not self.is_done(worker_flag):
             time.sleep(self.sleep_time)
+            time_counter += 1
+            if time_counter > self.wait_time:
+                pos, type, job = self.find_fail_jobs(pos, type, job)
+                self.sub_job_to_workers(pos, type, job)
+                time_counter = 0
+                system_echo(f'Failure ssh jobs: {len(job)}')
         atom_pos, atom_type, grid_name = self.collect(job)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
         self.write_list2d(f'{self.sh_save_dir}/atom_pos.dat', 
@@ -61,15 +68,15 @@ class MultiWorkers(ListRWTools, SSHTools):
                           grid_name, '{0:3.0f}')
         self.remove()
     
-    def generate_job(self, round, repeat, init_pos, 
+    def generate_job(self, round, num_paths, init_pos, 
                      init_type, init_grid):
         """
-        job assign to each node
+        generate initial searching files
         
         Parameters
         ----------
         round [int, 0d]: searching round
-        repeat [int, 0d]: repeat times of each node
+        num_paths [int, 0d]: number of searching path
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
         init_grid [int, 2d]: initial grid name
@@ -78,10 +85,11 @@ class MultiWorkers(ListRWTools, SSHTools):
             os.mkdir(self.sh_save_dir)
         worker_job = []
         model = 'model_best.pth.tar'
-        for i, node in enumerate(nodes):
-            for path in range(repeat):
-                job = [round, path+1, node, init_grid[i], model]
-                worker_job.append(job)
+        #use index to find ignored jobs
+        node_assign = self.assign_node(num_paths)
+        for i, node in enumerate(node_assign):
+            job = [round, i, node, init_grid[i], model]
+            worker_job.append(job)
         worker_file = f'{self.sh_save_dir}/worker_job_{self.round}.dat'
         pos_file = f'{self.sh_save_dir}/initial_pos_{self.round}.dat'
         type_file = f'{self.sh_save_dir}/initial_type_{self.round}.dat'
@@ -104,6 +112,42 @@ class MultiWorkers(ListRWTools, SSHTools):
                         mv {ip} ~/ccop/program/{self.sh_save_dir}/
                         '''
         self.ssh_node(shell_script, ip)
+    
+    def find_fail_jobs(self, pos, type, job):
+        """
+        find ssh failure jobs
+        
+        Parameters
+        ----------
+        pos [str, 1d, np]: all initial pos
+        type [str, 1d, np]: all initial type
+        job [str, 2d, np]: all jobs
+
+        Returns
+        ----------
+        pos [str, 1d, np]: fail ssh pos
+        type [str, 1d, np]: fail ssh type
+        job [str, 2d, np]: fail jobs
+        """
+        all_path = [int(i) for i in job[:,1]]
+        shell_script = f'ls {self.sh_save_dir} | grep energy'
+        ct = os.popen(shell_script).read()
+        exist_path = [int(i.split('-')[2]) for i in ct.split()]
+        idx = np.setdiff1d(all_path, exist_path)
+        return pos[idx], type[idx], job[idx]
+    
+    def sub_job_to_workers(self, pos, type, job):
+        """
+        sub searching jobs to nodes
+
+        Parameters
+        ----------
+        pos [str, 1d, np]: all initial pos
+        type [str, 1d, np]: all initial type
+        job [str, 2d, np]: all jobs
+        """
+        for atom_pos, atom_type, assign in zip(pos, type, job):
+            self.sampling_with_ssh(atom_pos, atom_type, *assign)
     
     def sampling_with_ssh(self, atom_pos, atom_type,
                           round, path, node, grid_name, model_name):
@@ -147,7 +191,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         
         Parameters
         ----------
-        job [str, 2d]: assignment of node
+        job [str, 2d, np]: assignment of node
         
         Returns
         ----------
