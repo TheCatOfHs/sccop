@@ -6,7 +6,7 @@
 
 shell版本: bash
 
-python版本: python3.5及以后。需要有ase, pytorch, DPT库
+python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy库
 
 ## 测试样本
 
@@ -25,5 +25,5 @@ test/Optim：POSCAR-015-002-131
 目前可计算
 
 1. 结构优化(libs/VASP_inputs/Optimization)
-2. 声子谱(libs/VASP_inputs/Phonon)
+2. 声子谱(libs/VASP_inputs/Phonon), 需安装Phonopy
 3. PBE能带(libs/VASP_inputs/ElectronicStructure)
