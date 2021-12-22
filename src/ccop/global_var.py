@@ -6,6 +6,11 @@ grain = [.1, .1, .1]
 #Mutate
 num_mutate = 6
 
+
+#Recycling
+num_round = 20
+num_poscars = 10
+
 #Training
 
 
@@ -37,3 +42,5 @@ vasp_in_dir = 'data/VASP_inputs'
 vasp_out_dir = 'data/VASP_outs'
 grid_prop_dir = 'data/grid/Property_grid'
 grid_poscar_dir = 'data/grid/POSCAR_grid'
+
+elements_dir = 'data/elements.dat'

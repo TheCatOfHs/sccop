@@ -164,17 +164,13 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    def batch_divide(dataset_list):
-        sample_num = len(dataset_list)
-        assign_num = sample_num//2
-        assign_plan = []
-        counter = 0
-        for i in range(2):
-            counter += assign_num
-            if i == 1:
-                assign_plan.append(sample_num)
-            else:
-                assign_plan.append(counter)
-        return assign_plan
-    
-    print(batch_divide([i for i in range(63)]))
+    class test:
+        def __init__(self):
+            self.a = 1
+            self.b = self.a + 1
+            
+        def func(self, a):
+            self.a = a
+            print(self.b)
+    t = test()
+    t.func(2)

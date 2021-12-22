@@ -22,7 +22,7 @@ class Initial(SSHTools):
         
     def update_with_ssh(self, node):
         """
-        SSH to target node and update ccop file
+        SSH to target node and update ccop
         """
         ip = f'node{node}'
         shell_script = f'''

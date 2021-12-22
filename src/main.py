@@ -32,7 +32,7 @@ if __name__ == '__main__':
     os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
     
     #Build grid
-    build = False
+    build = True
     if build:
         grid.build_grid(0, latt_vec, grain, cutoff)
     grid_store = [0]
@@ -88,7 +88,7 @@ if __name__ == '__main__':
     
     pos_buffer, type_buffer, grid_buffer = [], [], []
     train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
-    for round in range(30):
+    for round in range(num_round):
         #Data import
         energy_file = rwtools.import_list2d(f'{vasp_out_dir}/Energy-{round:03.0f}.dat', str, numpy=True)
         true_E = np.array(energy_file)[:,1]
@@ -153,6 +153,7 @@ if __name__ == '__main__':
             num_seed = 30
             num_initial = 30*len(nodes)
             min_idx = np.argsort(train_energys)[:num_seed]
+            grid_pool = np.array(grid_buffer)[min_idx] 
             
             #Lattice mutate
             if round > 0:
@@ -161,11 +162,12 @@ if __name__ == '__main__':
                 mutate = False
             if mutate:
                 num_grid = len(grid_store)
-                grid_origin = np.random.choice(grid_name_right, num_mutate)
+                grid_origin = np.random.choice(grid_pool, num_mutate)
                 grid_mutate = [i for i in range(num_grid, num_grid+num_mutate)]
                 grid_store = grid_store + grid_mutate
                 divide.assign(grid_origin, grid_mutate)
             
+            #Initial search start point
             init_pos, init_type, init_grid = [], [], []
             for _ in range(num_initial):
                 seed = np.random.choice(min_idx)
@@ -195,3 +197,8 @@ if __name__ == '__main__':
         #VASP calculate
         sub_vasp = SubVASP()
         sub_vasp.sub_VASP_job(round+1)
+
+    #Export searched POSCARS
+    select = Select(num_round)
+    grid_buffer = [[i] for i in grid_buffer]
+    select.export(pos_buffer, type_buffer, grid_buffer)

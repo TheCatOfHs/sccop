@@ -14,7 +14,7 @@ class MultiWorkers(ListRWTools, SSHTools):
     #Assign sampling jobs to each node
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        
+    
     def assign_job(self, round, repeat, init_pos, init_type, init_grid):
         """
         Assign jobs by the following files
@@ -345,7 +345,7 @@ class Search(ListRWTools):
         
         Returns
         ----------
-        flag [bool]: whether atoms are overlay
+        flag [bool, 0d]: whether atoms are overlay
         """
         pos_differ = np.unique(pos)
         num_differ = len(pos_differ)
@@ -360,7 +360,7 @@ class Search(ListRWTools):
         
         Returns
         ----------
-        flag [bool]: whether atoms are too closely
+        flag [bool, 0d]: whether atoms are too closely
         """
         nearest = nbr_dis[:,0]
         error_bond = \
@@ -378,11 +378,11 @@ class Search(ListRWTools):
         ----------
         value_1 [float, 0d]: current value
         value_2 [float, 0d]: next value
-        T [float, 0d]: temperature
+        T [float, 0d]: annealing temperature
         
         Returns
         ----------
-        flag [bool]: whether do the action
+        flag [bool, 0d]: whether do the action
         """
         delta = value_2 - value_1
         if np.exp(-delta/T) > np.random.rand():
