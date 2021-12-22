@@ -12,10 +12,10 @@ class PostProcess(SSHTools):
         self.vasp_files_path = f'{self.libs_path}/VASP_inputs'
         self.optim_strs_path = './optim_strs'   # save all the optimizated structures
         self.poscars = os.listdir(self.str_path)    # all poscar names
-        self.num_poscar = len(self.poscar)
+        self.num_poscar = len(self.poscars)
 
-        
-
+    
+    
     def run_optimization(self):
         ''' 
         prepare the optimization files and submit the job.
@@ -238,5 +238,5 @@ class PostProcess(SSHTools):
 if __name__ == '__main__':
     a = PostProcess('../test/Optim', './VASP_calculations')
     a.run_optimization()
-    a.run_phonon()
-    a.run_pbe_band()
+    #a.run_phonon()
+    #a.run_pbe_band()

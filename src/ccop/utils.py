@@ -189,16 +189,6 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    rwtools = ListRWTools()
-    job = rwtools.import_list2d('data/Search/001/worker_job_001.dat', str, numpy=True)
-    print(job)
-    def find_fail_ssh_jobs(job):
-        all_path = [int(i) for i in job[:,1]]
-        print(all_path)
-        shell_script = f'ls data/Search/001 | grep energy'
-        file = os.popen(shell_script).read()
-        file = [int(i.split('-')[2]) for i in file.split()]
-        print(file)
-        need = np.setdiff1d(all_path, file)
-        print(need)
-    find_fail_ssh_jobs(job)
+    a = [1, 2, 3]
+    b = [2, 3]
+    print(np.setdiff1d(a, b))

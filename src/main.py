@@ -29,7 +29,8 @@ if __name__ == '__main__':
     divide = MultiDivide()
     rwtools = ListRWTools()
     mul_transfer = MultiGridTransfer()
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+    workers = MultiWorkers()
+    sub_vasp = SubVASP()
     
     #Build grid
     build = True
@@ -83,7 +84,6 @@ if __name__ == '__main__':
         select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
 
         #VASP calculate
-        sub_vasp = SubVASP()
         sub_vasp.sub_VASP_job(round)
     
     pos_buffer, type_buffer, grid_buffer = [], [], []
@@ -182,7 +182,6 @@ if __name__ == '__main__':
                 else:
                     init_grid.append(grid_buffer[seed])
             
-            workers = MultiWorkers()
             workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
 
         #Sample
@@ -193,9 +192,8 @@ if __name__ == '__main__':
         select.samples(atom_pos, atom_type, grid_name)
 
         #VASP calculate
-        sub_vasp = SubVASP()
         sub_vasp.sub_VASP_job(round+1)
-
+    
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]

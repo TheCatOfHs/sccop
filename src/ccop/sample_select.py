@@ -359,7 +359,7 @@ class Select(ListRWTools, SSHTools):
         grid_last = grid_slt[0]
         transfer = Transfer(grid_last)
         pos_order, type_order = [], []
-        elements = self.import_list2d(elements_dir,
+        elements = self.import_list2d(elements_file,
                                       str, numpy=True).ravel()
         for i, grid in enumerate(grid_order):
             idx_slt = idx_order[i]

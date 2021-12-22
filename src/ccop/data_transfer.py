@@ -19,7 +19,7 @@ class Transfer(ListRWTools):
         self.nbr, self.var = nbr, var
         file_prefix = f'{grid_prop_dir}/{grid_name:03.0f}'
         self.elem_embed = self.import_list2d(
-            'data/atom_init.dat', int, numpy=True)
+            atom_init_file, int, numpy=True)
         self.latt_vec = self.import_list2d(
             f'{file_prefix}_latt_vec.dat', float, numpy=True)
         self.frac_coor = self.import_list2d(

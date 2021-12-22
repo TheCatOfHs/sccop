@@ -1,3 +1,5 @@
+import os
+
 #Grid
 cutoff = 5
 latt_vec = [[3.24, 0, 0], [0, 5.54, 0], [0, 0, 5.61]]
@@ -23,7 +25,7 @@ decay = .99
 steps = 150
 num_paths = 180
 min_bond = 1.4
-wait_time = 240
+wait_time = 180
 
 #Sample Select
 num_models = 5
@@ -35,6 +37,7 @@ ratio_max_std = 0.2
 #Server
 num_gpus = 2
 nodes = [131, 132, 133, 134, 135, 136]
+os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 #Save directory
 poscar_dir = 'data/POSCARs' 
@@ -45,4 +48,6 @@ vasp_out_dir = 'data/VASP_outs'
 grid_prop_dir = 'data/grid/Property_grid'
 grid_poscar_dir = 'data/grid/POSCAR_grid'
 
-elements_dir = 'data/elements.dat'
+#File
+elements_file = 'data/elements.dat'
+atom_init_file = 'data/atom_init.dat'
