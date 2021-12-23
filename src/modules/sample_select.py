@@ -7,12 +7,12 @@ from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.data_transfer import Transfer
-from ccop.utils import ListRWTools, SSHTools, system_echo
-from ccop.environment import CrystalGraphConvNet
-from ccop.environment import DataParallel, Normalizer
-from ccop.environment import PPMData, get_loader
+from modules.global_var import *
+from modules.data_transfer import Transfer
+from modules.utils import ListRWTools, SSHTools, system_echo
+from modules.predict import CrystalGraphConvNet
+from modules.predict import DataParallel, Normalizer
+from modules.predict import PPMData, get_loader
 
 
 class Select(ListRWTools, SSHTools):

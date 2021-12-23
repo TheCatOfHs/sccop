@@ -43,10 +43,12 @@ os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 poscar_dir = 'data/poscar' 
 model_dir = 'data/ppmodel'
 search_dir = 'data/search'
-vasp_in_dir = 'data/vasp_input'
 vasp_out_dir = 'data/vasp_out'
 grid_prop_dir = 'data/grid/property'
 grid_poscar_dir = 'data/grid/poscar'
+
+#DFT directory
+sing_point_energy_dir = 'libs/VASP_inputs/SinglePointEnergy'
 
 #File
 log_file = 'data/system.log'

@@ -4,8 +4,8 @@ import argparse
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.utils import ListRWTools, SSHTools, system_echo
+from modules.global_var import *
+from modules.utils import ListRWTools, SSHTools, system_echo
 from pymatgen.core.structure import Structure
 
 
@@ -79,12 +79,12 @@ class MultiDivide(ListRWTools, SSHTools):
         latt_vec = f'{mutate:03.0f}_latt_vec.dat'
         nbr_dis = f'{mutate:03.0f}_nbr_dis.dat'
         nbr_idx = f'{mutate:03.0f}_nbr_idx.dat'
-        local_prop_dir = f'~/ccop/program/{grid_prop_dir}'
+        local_prop_dir = f'~/ccop/{grid_prop_dir}'
         options = f'--origin {origin} --mutate {mutate}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/program/
-                        python ccop/grid_divide.py {options}
+                        cd /local/ccop/
+                        python src/modules/grid_divide.py {options}
                         cd {grid_prop_dir}
                         mv {frac_coor} {local_prop_dir}/
                         mv {latt_vec} {local_prop_dir}/
@@ -109,13 +109,13 @@ class MultiDivide(ListRWTools, SSHTools):
         file = ' '.join(file)
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/program/{grid_prop_dir}
+                        cd /local/ccop/{grid_prop_dir}
                         for i in {file}
                         do
-                            cp ~/ccop/program/{grid_prop_dir}/$i .
+                            cp ~/ccop/{grid_prop_dir}/$i .
                         done
                         > {ip}
-                        mv {ip} ~/ccop/program/{grid_prop_dir}/
+                        mv {ip} ~/ccop/{grid_prop_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     

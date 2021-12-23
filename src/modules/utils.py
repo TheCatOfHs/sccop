@@ -4,7 +4,7 @@ import paramiko
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
+from modules.global_var import *
 
 
 def system_echo(ct):
@@ -13,7 +13,7 @@ def system_echo(ct):
     
     Parameters
     ----------
-    ct ([str, 0d]): [content]
+    ct [str, 0d]: content
     """
     echo_ct = time.strftime("%Y-%m-%d %H:%M:%S",
                             time.localtime()) + ' -- ' + ct

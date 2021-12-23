@@ -3,8 +3,8 @@ import shutil, time
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.utils import ListRWTools, SSHTools, system_echo
+from modules.global_var import *
+from modules.utils import ListRWTools, SSHTools, system_echo
 
 
 class SubVASP(ListRWTools, SSHTools):
@@ -112,7 +112,7 @@ class SubVASP(ListRWTools, SSHTools):
                             mkdir VASP_calculations
                             cd VASP_calculations
                             mkdir VASP_inputs
-                            cp ~/ccop/program/{vasp_in_dir}/* VASP_inputs/.
+                            cp ~/ccop/{sing_point_energy_dir}/* VASP_inputs/.
                             cd ..
                       fi
                       cd VASP_calculations
@@ -121,13 +121,13 @@ class SubVASP(ListRWTools, SSHTools):
                             mkdir $i
                             cd $i
                             cp ../VASP_inputs/* . 
-                            cp ~/ccop/program/{poscar_dir}/{round}/$i POSCAR
+                            cp ~/ccop/{poscar_dir}/{round}/$i POSCAR
                             DPT -v potcar
                             date > $i.out
                             echo 'VASP-JOB-FINISH' >> $i.out
                             /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $i.out
                             date >> $i.out
-                            cp $i.out ~/ccop/program/{vasp_out_dir}/{round}-{repeat}/.
+                            cp $i.out ~/ccop/{vasp_out_dir}/{round}-{repeat}/.
                             rm *
                             cd ..
                       done

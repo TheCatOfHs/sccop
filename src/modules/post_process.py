@@ -1,5 +1,5 @@
 import os, time
-from ccop.utils import SSHTools, system_echo
+from modules.utils import SSHTools, system_echo
 
 class PostProcess(SSHTools):
     #process the crystals by VASP to relax the structures and calculate the properties

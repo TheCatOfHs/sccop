@@ -2,8 +2,8 @@ import os, sys
 import time
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.utils import SSHTools, system_echo
+from modules.global_var import *
+from modules.utils import SSHTools, system_echo
 
 
 class Initial(SSHTools):
@@ -26,13 +26,17 @@ class Initial(SSHTools):
         """
         ip = f'node{node}'
         shell_script = f'''
-                    #!/bin/bash
-                    cd /local
-                    rm -rf ccop/
-                    cp -r ~/ccop .
-                    > {ip}
-                    mv {ip} ~/ccop/program/data/
-                    '''
+                        #!/bin/bash
+                        cd /local
+                        rm -rf ccop/
+                        mkdir ccop/
+                        cd ccop/
+                        cp -r ~/ccop/data .
+                        cp -r ~/ccop/libs .
+                        cp -r ~/ccop/src .
+                        > {ip}
+                        mv {ip} ~/ccop/data/
+                        '''
         self.ssh_node(shell_script, ip)
 
     def is_done(self, file_num):

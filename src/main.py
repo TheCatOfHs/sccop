@@ -2,15 +2,15 @@ import os, sys
 import numpy as np
 import time
 
-from ccop.global_var import *
-from ccop.pretrain import Initial
-from ccop.grid_divide import MultiDivide, GridDivide
-from ccop.data_transfer import MultiGridTransfer
-from ccop.sample_select import Select
-from ccop.sub_vasp import SubVASP
-from ccop.workers import MultiWorkers, Search
-from ccop.environment import PPMData, PPModel
-from ccop.utils import ListRWTools
+from modules.global_var import *
+from modules.pretrain import Initial
+from modules.grid_divide import MultiDivide, GridDivide
+from modules.data_transfer import MultiGridTransfer
+from modules.sample_select import Select
+from modules.sub_vasp import SubVASP
+from modules.workers import MultiWorkers, Search
+from modules.predict import PPMData, PPModel
+from modules.utils import ListRWTools
 
 
 def convert():

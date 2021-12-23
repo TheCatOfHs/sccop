@@ -2,8 +2,8 @@ import os, sys
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.utils import ListRWTools
+from modules.global_var import *
+from modules.utils import ListRWTools
 
 
 class Transfer(ListRWTools):

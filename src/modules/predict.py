@@ -11,9 +11,9 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import DataParallel as DataParallel_raw
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.sub_vasp import system_echo
-from ccop.utils import ListRWTools
+from modules.global_var import *
+from modules.sub_vasp import system_echo
+from modules.utils import ListRWTools
 
 
 class DataParallel(DataParallel_raw):
@@ -558,7 +558,7 @@ class AverageMeter():
 
     
 if __name__ == '__main__':
-    from ccop.data_transfer import Transfer
+    from modules.data_transfer import Transfer
     round = 0
     rwtools = ListRWTools()
     pos_buffer, type_buffer, energy_buffer = [], [], []

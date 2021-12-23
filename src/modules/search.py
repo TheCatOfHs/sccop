@@ -2,7 +2,7 @@ import os, sys
 import argparse
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.workers import Search
+from modules.workers import Search
 
 
 parser = argparse.ArgumentParser()

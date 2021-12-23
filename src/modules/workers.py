@@ -4,10 +4,10 @@ import torch
 from functools import reduce
 
 sys.path.append(f'{os.getcwd()}/src')
-from ccop.global_var import *
-from ccop.data_transfer import Transfer
-from ccop.utils import ListRWTools, SSHTools, system_echo
-from ccop.environment import CrystalGraphConvNet, Normalizer
+from modules.global_var import *
+from modules.data_transfer import Transfer
+from modules.utils import ListRWTools, SSHTools, system_echo
+from modules.predict import CrystalGraphConvNet, Normalizer
 
 
 class MultiWorkers(ListRWTools, SSHTools):
@@ -96,12 +96,12 @@ class MultiWorkers(ListRWTools, SSHTools):
         ip = f'node{node}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/program/
+                        cd /local/ccop/
                         mkdir {self.sh_save_dir}
                         cd data/
-                        cp -rf ~/ccop/program/{self.model_save_dir} PPModels/
+                        cp -rf ~/ccop/{self.model_save_dir} ppmodel/
                         > {ip}
-                        mv {ip} ~/ccop/program/{self.sh_save_dir}/
+                        mv {ip} ~/ccop/{self.sh_save_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -199,11 +199,11 @@ class MultiWorkers(ListRWTools, SSHTools):
         pos_dat = f'{self.sh_save_dir}/pos-{postfix}'
         type_dat = f'{self.sh_save_dir}/type-{postfix}'
         energy_dat = f'{self.sh_save_dir}/energy-{postfix}'
-        local_sh_save_dir = f'~/ccop/program/{self.sh_save_dir}'
+        local_sh_save_dir = f'~/ccop/{self.sh_save_dir}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/program/
-                        python ccop/search.py {options}
+                        cd /local/ccop/
+                        python src/modules/search.py {options}
                         mv {pos_dat} {local_sh_save_dir}/
                         mv {type_dat} {local_sh_save_dir}/
                         mv {energy_dat} {local_sh_save_dir}/
