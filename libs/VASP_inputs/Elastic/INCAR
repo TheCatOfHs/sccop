@@ -1,0 +1,10 @@
+SYSTEM   = elastic
+   ENCUT = 500
+   EDIFF = 1E-7
+   PREC  = High
+  IBRION = 6
+  ISMEAR = 0 
+  EDIFFG = -0.005 
+  NFREE  = 4 
+ POTIM   = 0.1
+  ISIF   = 3

@@ -1,0 +1,11 @@
+PREC     = Accurate
+ISTART   = 0
+ICHARG   = 2
+ENCUT    = 500
+EDIFF    = 1.0E-06
+ISMEAR   = 0
+SIGMA    = 0.01
+LEPSILON = .TRUE.
+IBRION   = 8
+LRPA     = .FALSE.
+LPEAD    = .TRUE.
