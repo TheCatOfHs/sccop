@@ -1,7 +1,7 @@
 import os, sys
 import argparse
 
-sys.path.append(os.getcwd())
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.workers import Search
 
 

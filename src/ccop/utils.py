@@ -3,7 +3,7 @@ import time
 import paramiko
 import numpy as np
 
-sys.path.append(os.getcwd())
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 
 
@@ -18,7 +18,7 @@ def system_echo(ct):
     echo_ct = time.strftime("%Y-%m-%d %H:%M:%S",
                             time.localtime()) + ' -- ' + ct
     print(echo_ct)
-    with open('data/system.log', 'a') as obj:
+    with open(log_file, 'a') as obj:
         obj.write(echo_ct + '\n')
 
 

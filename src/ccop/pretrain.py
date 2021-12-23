@@ -1,7 +1,7 @@
 import os, sys
 import time
 
-sys.path.append(os.getcwd())
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 from ccop.utils import SSHTools, system_echo
 

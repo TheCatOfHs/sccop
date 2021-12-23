@@ -82,7 +82,7 @@ if __name__ == '__main__':
             os.mkdir(f'{search_dir}/000')
         select = Select(round)
         select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
-
+        
         #VASP calculate
         sub_vasp.sub_VASP_job(round)
     
@@ -173,7 +173,7 @@ if __name__ == '__main__':
                 init_pos.append(pos_buffer[seed])
                 init_type.append(type_buffer[seed])
                 if round > 0:
-                    p = 0.6
+                    p = 0.8
                 else:
                     p = 1
                 if np.random.rand() > p:
@@ -183,7 +183,7 @@ if __name__ == '__main__':
                     init_grid.append(grid_buffer[seed])
             
             workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
-        
+
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)

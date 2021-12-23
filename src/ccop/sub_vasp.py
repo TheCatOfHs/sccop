@@ -2,7 +2,7 @@ import os, sys
 import shutil, time
 import numpy as np
 
-sys.path.append(os.getcwd()) 
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 from ccop.utils import ListRWTools, SSHTools, system_echo
 

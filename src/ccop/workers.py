@@ -3,7 +3,7 @@ import numpy as np
 import torch
 from functools import reduce
 
-sys.path.append(os.getcwd())
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 from ccop.data_transfer import Transfer
 from ccop.utils import ListRWTools, SSHTools, system_echo
@@ -131,7 +131,7 @@ class MultiWorkers(ListRWTools, SSHTools):
                     pos[fail_path], type[fail_path], job[fail_path]
                 self.sub_job_to_workers(pos_fail, type_fail, job_fail)
                 repeat_counter += 1
-                time_counter = 0
+                time_counter = self.wait_time/2
                 system_echo(f'Failure searching jobs: {num_fail}')
             if repeat_counter == self.repeat:
                 break 

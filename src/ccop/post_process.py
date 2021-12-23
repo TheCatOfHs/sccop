@@ -2,9 +2,8 @@ import os, time
 from ccop.utils import SSHTools, system_echo
 
 class PostProcess(SSHTools):
-    ''' process the crystals by VASP to relax the structures and calculate the properties'''
-    def __init__(self, str_path, run_dir, repeat=2, sleep_time=1):
-        self.repeat = repeat
+    #process the crystals by VASP to relax the structures and calculate the properties
+    def __init__(self, str_path, run_dir, sleep_time=1):
         self.sleep_time = sleep_time
         self.str_path = str_path
         self.run_dir = run_dir # the vasp run dir of the POSCARs
@@ -13,8 +12,6 @@ class PostProcess(SSHTools):
         self.optim_strs_path = './optim_strs'   # save all the optimizated structures
         self.poscars = os.listdir(self.str_path)    # all poscar names
         self.num_poscar = len(self.poscars)
-
-    
     
     def run_optimization(self):
         ''' 
@@ -26,50 +23,49 @@ class PostProcess(SSHTools):
         '''
         cur_run_path, batches, nodes = self.prepare_data('Optimization')
         
-        for i in range(self.repeat):
-            system_echo(f'Start VASP calculation --- Optimization')
-            for j, batch in enumerate(batches):
-                shell_script = f'''
-                    #!/bin/bash
-                    ulimit -s 262140
-                    for p in {batch}
-                    do
-                        if [ ! -d "{cur_run_path}/$p" ]; then
-                            mkdir {cur_run_path}/$p
-                        fi
-                        cd {cur_run_path}/$p
-                        cp {self.vasp_files_path}/Optimization/* .
-                        cp {self.str_path}/$p POSCAR
+        system_echo(f'Start VASP calculation --- Optimization')
+        for j, batch in enumerate(batches):
+            shell_script = f'''
+                #!/bin/bash
+                ulimit -s 262140
+                for p in {batch}
+                do
+                    if [ ! -d "{cur_run_path}/$p" ]; then
+                        mkdir {cur_run_path}/$p
+                    fi
+                    cd {cur_run_path}/$p
+                    cp {self.vasp_files_path}/Optimization/* .
+                    cp {self.str_path}/$p POSCAR
 
-                        cp POSCAR POSCAR_0
-                        rm FINISH
-                        DPT -v potcar
-                        for i in 1 2 3
-                        do
-                            cp INCAR_$i INCAR
-                            cp KPOINTS_$i KPOINTS
-                            date > vasp-$i.vasp
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
-                            date >> vasp-$i.vasp
-                            cp CONTCAR POSCAR
-                            cp CONTCAR POSCAR_$i
-                            cp OUTCAR OUTCAR_$i
-                            rm WAVECAR CHGCAR
-                        done
-                        touch ../FINISH-$p
-                        cd ../
+                    cp POSCAR POSCAR_0
+                    rm FINISH
+                    DPT -v potcar
+                    for i in 1 2 3
+                    do
+                        cp INCAR_$i INCAR
+                        cp KPOINTS_$i KPOINTS
+                        date > vasp-$i.vasp
+                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                        date >> vasp-$i.vasp
+                        cp CONTCAR POSCAR
+                        cp CONTCAR POSCAR_$i
+                        cp OUTCAR OUTCAR_$i
+                        rm WAVECAR CHGCAR
                     done
-                    '''
-                self.sub_jobs_with_ssh(nodes[j], shell_script)
-            while not self.is_VASP_done(cur_run_path):
-                time.sleep(self.sleep_time)
-            system_echo(f'All job are completed --- Optimization')
+                    touch ../FINISH-$p
+                    cd ../
+                done
+                '''
+            self.sub_jobs_with_ssh(nodes[j], shell_script)
+        while not self.is_VASP_done(cur_run_path):
+            time.sleep(self.sleep_time)
+        system_echo(f'All job are completed --- Optimization')
             
             # ***note:*** I donot check if the VASP finish in the good result,
             #             maybe some structures have the bad optimization
             
             # save the optimizated structure into the prepared dir, if all the structures have the good optimization
-            self.save_optimization(cur_run_path)
+        self.save_optimization(cur_run_path)
 
     
     def run_phonon(self):

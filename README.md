@@ -8,6 +8,10 @@ shell版本: bash
 
 python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy库
 
+## 程序启动
+进入ccop，运行python scr/main.py
+
+
 ## 测试样本
 
 test/Optim：POSCAR-015-002-131 

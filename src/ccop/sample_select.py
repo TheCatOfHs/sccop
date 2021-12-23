@@ -6,7 +6,7 @@ from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 
-sys.path.append(os.getcwd()) 
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 from ccop.data_transfer import Transfer
 from ccop.utils import ListRWTools, SSHTools, system_echo

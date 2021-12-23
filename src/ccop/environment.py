@@ -10,7 +10,7 @@ from torch.optim.lr_scheduler import MultiStepLR
 from torch.utils.data import Dataset, DataLoader
 from torch.nn import DataParallel as DataParallel_raw
 
-sys.path.append(os.getcwd()) 
+sys.path.append(f'{os.getcwd()}/src')
 from ccop.global_var import *
 from ccop.sub_vasp import system_echo
 from ccop.utils import ListRWTools

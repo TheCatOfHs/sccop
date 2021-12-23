@@ -10,7 +10,7 @@ num_mutate = 6
 
 
 #Recycling
-num_round = 30
+num_round = 5
 num_poscars = 10
 
 #Training
@@ -40,14 +40,15 @@ nodes = [131, 132, 133, 134, 135, 136]
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 #Save directory
-poscar_dir = 'data/POSCARs' 
-model_dir = 'data/PPModels'
-search_dir = 'data/Search'
-vasp_in_dir = 'data/VASP_inputs'
-vasp_out_dir = 'data/VASP_outs'
-grid_prop_dir = 'data/grid/Property_grid'
-grid_poscar_dir = 'data/grid/POSCAR_grid'
+poscar_dir = 'data/poscar' 
+model_dir = 'data/ppmodel'
+search_dir = 'data/search'
+vasp_in_dir = 'data/vasp_input'
+vasp_out_dir = 'data/vasp_out'
+grid_prop_dir = 'data/grid/property'
+grid_poscar_dir = 'data/grid/poscar'
 
 #File
+log_file = 'data/system.log'
 elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
