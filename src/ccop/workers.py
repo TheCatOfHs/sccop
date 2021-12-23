@@ -78,7 +78,6 @@ class MultiWorkers(ListRWTools, SSHTools):
             os.mkdir(self.sh_save_dir)
         worker_job = []
         model = 'model_best.pth.tar'
-        #use index to find failure jobs
         node_assign = self.assign_node(num_paths)
         for i, node in enumerate(node_assign):
             job = [round, i, node, init_grid[i], model]
@@ -133,11 +132,7 @@ class MultiWorkers(ListRWTools, SSHTools):
                 self.sub_job_to_workers(pos_fail, type_fail, job_fail)
                 repeat_counter += 1
                 time_counter = 0
-                if num_fail < 6:
-                    self.wait_time = 10*num_fail
-                else:
-                    self.wait_time = 60
-                system_echo(f'Failure ssh jobs: {fail_path}')
+                system_echo(f'Failure searching jobs: {num_fail}')
             if repeat_counter == self.repeat:
                 break 
         if repeat_counter == 0:
@@ -158,8 +153,8 @@ class MultiWorkers(ListRWTools, SSHTools):
 
         Returns
         ----------
-        exist_path [int, 1d, np]:
-        fail_path [int, 1d, np]: index of failure job
+        fail_path [int, 1d, np]: index of failure jobs
+        exist_path [int, 1d, np]: index of success jobs
         """
         all_path = [int(i) for i in job[:,1]]
         shell_script = f'ls {self.sh_save_dir} | grep energy'
@@ -176,7 +171,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         ----------
         pos [str, 1d, np]: initial pos
         type [str, 1d, np]: initial type
-        job [str, 2d, np]: jobs
+        job [str, 2d, np]: jobs assgined to nodes
         """
         for atom_pos, atom_type, assign in zip(pos, type, job):
             self.sampling_with_ssh(atom_pos, atom_type, *assign)

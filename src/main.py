@@ -183,7 +183,7 @@ if __name__ == '__main__':
                     init_grid.append(grid_buffer[seed])
             
             workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
-
+        
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
@@ -193,7 +193,7 @@ if __name__ == '__main__':
 
         #VASP calculate
         sub_vasp.sub_VASP_job(round+1)
-    
+
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]

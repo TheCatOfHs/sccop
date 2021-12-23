@@ -25,7 +25,7 @@ decay = .99
 steps = 150
 num_paths = 180
 min_bond = 1.4
-wait_time = 180
+wait_time = 240
 
 #Sample Select
 num_models = 5
