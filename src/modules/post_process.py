@@ -1,126 +1,72 @@
-import os, time
+import os, sys
+import time
+import re
+
+sys.path.append(f'{os.getcwd()}/src')
+from modules.global_var import *
 from modules.utils import SSHTools, system_echo
+
 
 class PostProcess(SSHTools):
     #process the crystals by VASP to relax the structures and calculate the properties
-    def __init__(self, str_path, run_dir, sleep_time=1):
+    def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.str_path = str_path
-        self.run_dir = run_dir # the vasp run dir of the POSCARs
-        self.libs_path = '../libs'  # the absolute path is the best
-        self.vasp_files_path = f'{self.libs_path}/VASP_inputs'
-        self.optim_strs_path = './optim_strs'   # save all the optimizated structures
-        self.poscars = os.listdir(self.str_path)    # all poscar names
+        files = sorted(os.listdir(ccop_out_dir))
+        self.poscars = [i for i in files if re.match(r'POSCAR', i)]
         self.num_poscar = len(self.poscars)
+        self.main_vasp_files_path = f'~/ccop/{vasp_files_path}'
+        self.main_ccop_out_dir = f'~/ccop/{ccop_out_dir}'
+        self.main_optim_strs_path = f'~/ccop/{optim_strs_path}'
     
     def run_optimization(self):
-        ''' 
-        prepare the optimization files and submit the job.
-        in this process, we copy the vasp files from libs/VASP_inputs/Optimization to self.run_dir/optimization/{each poscar}
-        and then perform the calculations in each dir in turn
-        here, we count the FINISH files' number to make sure all the calculations down
-        after the calculations, save the optimized structures into the dir self.optim_strs_path
         '''
-        cur_run_path, batches, nodes = self.prepare_data('Optimization')
-        
+        optimize configurations from low to high level
+        '''
+        batches, nodes = self.assign_job()
         system_echo(f'Start VASP calculation --- Optimization')
         for j, batch in enumerate(batches):
             shell_script = f'''
-                #!/bin/bash
-                ulimit -s 262140
-                for p in {batch}
-                do
-                    if [ ! -d "{cur_run_path}/$p" ]; then
-                        mkdir {cur_run_path}/$p
-                    fi
-                    cd {cur_run_path}/$p
-                    cp {self.vasp_files_path}/Optimization/* .
-                    cp {self.str_path}/$p POSCAR
+                            #!/bin/bash
+                            cd /local/
+                            rm -r VASP_calculations/
+                            mkdir VASP_calculations/
+                            cd VASP_calculations/
+                            for p in {batch}
+                            do
+                                if [ ! -d "$p" ]; then
+                                    mkdir $p
+                                fi
+                                cd $p
+                                cp {self.main_vasp_files_path}/Optimization/* .
+                                cp {self.main_ccop_out_dir}/$p POSCAR
 
-                    cp POSCAR POSCAR_0
-                    rm FINISH
-                    DPT -v potcar
-                    for i in 1 2 3
-                    do
-                        cp INCAR_$i INCAR
-                        cp KPOINTS_$i KPOINTS
-                        date > vasp-$i.vasp
-                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
-                        date >> vasp-$i.vasp
-                        cp CONTCAR POSCAR
-                        cp CONTCAR POSCAR_$i
-                        cp OUTCAR OUTCAR_$i
-                        rm WAVECAR CHGCAR
-                    done
-                    touch ../FINISH-$p
-                    cd ../
-                done
-                '''
+                                cp POSCAR POSCAR_0
+                                rm FINISH
+                                DPT -v potcar
+                                for i in 1 2 3
+                                do
+                                    cp INCAR_$i INCAR
+                                    cp KPOINTS_$i KPOINTS
+                                    date > vasp-$i.vasp
+                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                    date >> vasp-$i.vasp
+                                    cp CONTCAR POSCAR
+                                    cp CONTCAR POSCAR_$i
+                                    cp OUTCAR OUTCAR_$i
+                                    rm WAVECAR CHGCAR
+                                done
+                                cp CONTCAR {self.main_optim_strs_path}/$p
+                                cp vasp
+                                cd ../
+                                touch FINISH-$p
+                                mv FINISH-$p {self.main_ccop_out_dir}
+                            done
+                            '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_VASP_done(cur_run_path):
+        while not self.is_done():
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Optimization')
-            
-            # ***note:*** I donot check if the VASP finish in the good result,
-            #             maybe some structures have the bad optimization
-            
-            # save the optimizated structure into the prepared dir, if all the structures have the good optimization
-        self.save_optimization(cur_run_path)
-
-    
-    def run_phonon(self):
-        ''' 
-        prepare the phonon spectrum files and submit the job
-        same as the run_optimization(), but the phonopy package is used
-        we save each phonon spectrum data into self.run_dir/Phonon/phonon-{poscar}.dat
-        '''
-        cur_run_path, batches, nodes = self.prepare_data('Phonon')
-        for i in range(self.repeat):
-            system_echo(f'Start VASP calculation --- Phonon spectrum')
-            for j, batch in enumerate(batches):
-                shell_script = f'''
-                    #!/bin/bash
-                    ulimit -s 262140
-                    for p in {batch}
-                    do
-                        if [ ! -d "{cur_run_path}/$p" ]; then
-                            mkdir {cur_run_path}/$p
-                        fi
-                        cd {cur_run_path}/$p
-                        cp {self.vasp_files_path}/Phonon/* .
-                        cp {self.optim_strs_path}/$p POSCAR
-                        
-                        phonopy -d --dim="2 2 2"
-                        n=`ls | grep POSCAR- | wc -l`
-                        b=`expr $n + 1000`
-                        c=${"{b:1:3}"}
-
-                        for i in {"{001..$c}"}
-                        do
-                            mkdir disp-$i
-                            cp INCAR KPOINTS POTCAR vdw* disp-$i/
-                            cp POSCAR-$i disp-$i/POSCAR
-
-                            cd disp-$i/
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
-                                rm CHG* WAVECAR
-                                cp vasprun.xml ../vasprun.xml-$i
-                            cd ..
-                        done
-                        phonopy -f vasprun.xml-*
-                        phonopy band.conf
-                        phonopy-bandplot --gnuplot --legacy band.yaml > ../phonon-$p.dat
-                        python {self.libs_path}/scripts/plot-phonon-band.py ../phonon-$p.dat
-                        cp PHON.png ../phonon-$p.png
-                        
-                        touch ../FINISH-$p
-                        cd ../
-                    done
-                    '''
-                self.sub_jobs_with_ssh(nodes[j], shell_script)
-            while not self.is_VASP_done(cur_run_path):
-                time.sleep(self.sleep_time)
-            system_echo(f'All job are completed --- Optimization')
+        self.remove()
     
     def run_pbe_band(self):
         ''' 
@@ -128,66 +74,109 @@ class PostProcess(SSHTools):
         same as the run_phonon()
         the electronic structure data is generated by DPT and save into self.run_dir/ElectronicStructure/band-{poscar}.dat
         '''
-        cur_run_path, batches, nodes = self.prepare_data('ElectronicStructure')
-        for i in range(self.repeat):
-            system_echo(f'Start VASP calculation --- Electronic Structure')
-            for j, batch in enumerate(batches):
-                shell_script = f'''
-                    #!/bin/bash
-                    ulimit -s 262140
-                    for p in {batch}
+        batches, nodes = self.assign_job('ElectronicStructure')
+        system_echo(f'Start VASP calculation --- Electronic Structure')
+        for j, batch in enumerate(batches):
+            shell_script = f'''
+                #!/bin/bash
+                ulimit -s 262140
+                for p in {batch}
+                do
+                    if [ ! -d "/$p" ]; then
+                            mkdir /$p
+                    fi
+                    cd /$p
+                    cp {self.main_vasp_files_path}/ElectronicStructure/* .
+                    cp {self.main_optim_strs_path}/$p POSCAR
+                        
+                    for i in 1 2
                     do
-                        if [ ! -d "{cur_run_path}/$p" ]; then
-                            mkdir {cur_run_path}/$p
-                        fi
-                        cd {cur_run_path}/$p
-                        cp {self.vasp_files_path}/ElectronicStructure/* .
-                        cp {self.optim_strs_path}/$p POSCAR
-                        
-                        for i in 1 2
-                        do
-                            cp INCAR_$i INCAR
-                            cp KPOINTS_$i KPOINTS
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
-                            cp OUTCAR OUTCAR_$i
-                            cp IBZKPT IBZKPT_$i
-                            cp EIGENVAL EIGENVAL_$i
-                        done
-
-                        DPT -b
-                        cp DPT.BAND.dat ../band-$p.dat
-                        python {self.libs_path}/scripts/plot-energy-band.py
-                        cp DPT.band.png ../band-$p.png
-                        
-                        touch ../FINISH-$p
-                        cd ../
+                        cp INCAR_$i INCAR
+                        cp KPOINTS_$i KPOINTS
+                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                        cp OUTCAR OUTCAR_$i
+                        cp IBZKPT IBZKPT_$i
+                        cp EIGENVAL EIGENVAL_$i
                     done
-                    '''
-                self.sub_jobs_with_ssh(nodes[j], shell_script)
-            while not self.is_VASP_done(cur_run_path):
-                time.sleep(self.sleep_time)
-            system_echo(f'All job are completed --- Optimization')
 
-    def prepare_data(self, data_type):
+                    DPT -b
+                    cp DPT.BAND.dat ../band-$p.dat
+                    python libs/scripts/plot-energy-band.py
+                    cp DPT.band.png ../band-$p.png
+                        
+                    touch ../FINISH-$p
+                    cd ../
+                done
+                '''
+            self.sub_jobs_with_ssh(nodes[j], shell_script)
+        while not self.is_done():
+            time.sleep(self.sleep_time)
+        system_echo(f'All job are completed --- PBE band')
+        self.remove()
+    
+    def run_phonon(self):
         '''
-        create the current run dir, assign the poscars and nodes by assign_job() and return
-        data_type: the name of the run dir, such as Optimization, Phonon. It is free to set.
+        prepare the phonon spectrum files and submit the job
+        same as the run_optimization(), but the phonopy package is used
+        we save each phonon spectrum data into self.run_dir/Phonon/phonon-{poscar}.dat
         '''
-        cur_run_path = f'{self.run_dir}/{data_type}'
-        if not os.path.exists(cur_run_path):
-            system_echo(f'Calculation Dir: {cur_run_path} create!')
-            os.makedirs(cur_run_path)
-        batches, nodes = self.assign_job()
-        return cur_run_path, batches, nodes
+        batches, nodes = self.assign_job('Phonon')
+        system_echo(f'Start VASP calculation --- Phonon spectrum')
+        for j, batch in enumerate(batches):
+            shell_script = f'''
+                #!/bin/bash
+                ulimit -s 262140
+                for p in {batch}
+                do
+                    if [ ! -d "/$p" ]; then
+                        mkdir /$p
+                    fi
+                    cd /$p
+                    cp {vasp_files_path}/Phonon/* .
+                    cp {optim_strs_path}/$p POSCAR
+                        
+                    phonopy -d --dim="2 2 2"
+                    n=`ls | grep POSCAR- | wc -l`
+                    b=`expr $n + 1000`
+                    c=${"{b:1:3}"}
+
+                    for i in {"{001..$c}"}
+                    do
+                        mkdir disp-$i
+                        cp INCAR KPOINTS POTCAR vdw* disp-$i/
+                        cp POSCAR-$i disp-$i/POSCAR
+
+                        cd disp-$i/
+                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                            rm CHG* WAVECAR
+                            cp vasprun.xml ../vasprun.xml-$i
+                        cd ..
+                    done
+                    phonopy -f vasprun.xml-*
+                    phonopy band.conf
+                    phonopy-bandplot --gnuplot --legacy band.yaml > ../phonon-$p.dat
+                    python libs/scripts/plot-phonon-band.py ../phonon-$p.dat
+                    cp PHON.png ../phonon-$p.png
+                        
+                    touch ../FINISH-$p
+                    cd ../
+                done
+                '''
+            self.sub_jobs_with_ssh(nodes[j], shell_script)
+        while not self.is_done():
+            time.sleep(self.sleep_time)
+        system_echo(f'All job are completed --- Phonon')
+        self.remove()
+    
     
     def assign_job(self):
         """
         assign jobs, this function is equal to the assign_job() in sub_vasp.py file
         """
         store, batches, nodes = [], [], []
-        last_node = self.poscar[0][-3:]
+        last_node = self.poscars[0][-3:]
         nodes.append(last_node)
-        for item in self.poscar:
+        for item in self.poscars:
             node = item[-3:]
             if node == last_node:
                 store.append(item)
@@ -206,13 +195,13 @@ class PostProcess(SSHTools):
         
         Parameters
         ----------
-        batch [str, 0d]: POSCAR files assigned to this node
-        node [str, 0d]: job assgined node
+        node [int, 1d]: POSCAR files assigned to nodes
+        shell_script [str, 0d]: job assgined to nodes
         """
         ip = f'node{node}'
         self.ssh_node(shell_script, ip)
         
-    def is_VASP_done(self, cur_run_path):
+    def is_done(self):
         """
         if the vasp calculation is completed, return True
         
@@ -224,15 +213,60 @@ class PostProcess(SSHTools):
         ----------
         flag [bool, 0d]: whether all nodes are done
         """
-        command = f'ls -l {cur_run_path} | grep FINISH | wc -l'
+        command = f'ls -l {ccop_out_dir} | grep FINISH | wc -l'
         flag = self.check_num_file(command, self.num_poscar)
         return flag
     
-    def save_optimization(self, cur_run_path):
-        os.system(f'for p in {self.poscars} ; do cp {cur_run_path}/$p/CONTCAR {self.optim_strs_path}/$p ; done')
+    def remove(self):
+        os.system(f'rm {ccop_out_dir}/FINISH*')
+
+    def get_energy(self):
+        """
+        generate energy file of current vasp outputs directory 
+        
+        Returns
+        ----------
+        true_E [bool, 1d]: true vasp file notate as true
+        false_E [bool, 1d]: false vasp file notate as true
+        vasp_out_order [str, 1d]: name of vasp files
+        """
+        true_E, energys = [], []
+        vasp_out = os.listdir(f'{vasp_out_dir}/{round}-{repeat}')
+        vasp_out_order = sorted(vasp_out, key=lambda x: x.split('-')[2])
+        for out in vasp_out_order:
+            VASP_output_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
+            with open(VASP_output_file, 'r') as f:
+                ct = f.readlines()
+            energy_line, state_line = [], []
+            for line in ct:
+                if 'F=' in line:
+                    energy_line.append(line)
+                if 'DAV: ' in line:
+                    state_line.append(line)
+                if 'POSCAR found :' in line:
+                    atom_num = int(line.split()[-2])
+            if len(energy_line) == 0:
+                system_echo(' *WARNING* Relaxation is failed!')
+                cur_E = 1e6
+                true_E.append(False)
+            else:
+                if abs(float(state_line[-1].split()[3])) < self.dE:
+                    true_E.append(True)
+                else:
+                    true_E.append(False)
+                cur_E = float(energy_line[-1].split()[2])/atom_num
+                system_echo(f'{out}, {true_E[-1]}, {cur_E:18.9f}')
+            energys.append([out, true_E[-1], cur_E])
+        self.write_list2d(f'{vasp_out_dir}/Energy-{round}.dat', energys, '{0}')
+        system_echo(f'Energy file generated successfully!')
+        false_E = [not i for i in true_E]
+        return true_E, false_E, vasp_out_order
+    
     
 if __name__ == '__main__':
-    a = PostProcess('../test/Optim', './VASP_calculations')
-    a.run_optimization()
-    #a.run_phonon()
-    #a.run_pbe_band()
+    post = PostProcess()
+    post.run_optimization()
+    #post.get_energy()
+    #post.run_pbe_band()
+    #post.run_phonon()
+    

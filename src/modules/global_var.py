@@ -10,8 +10,8 @@ num_mutate = 6
 
 
 #Recycling
-num_round = 5
-num_poscars = 10
+num_round = 20
+num_poscars = 30
 
 #Training
 
@@ -46,8 +46,11 @@ search_dir = 'data/search'
 vasp_out_dir = 'data/vasp_out'
 grid_prop_dir = 'data/grid/property'
 grid_poscar_dir = 'data/grid/poscar'
+ccop_out_dir = 'data/poscar/CCOP'
+optim_strs_path = 'data/poscar/optim_strs'
 
 #DFT directory
+vasp_files_path = 'libs/VASP_inputs'
 sing_point_energy_dir = 'libs/VASP_inputs/SinglePointEnergy'
 
 #File

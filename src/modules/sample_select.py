@@ -433,7 +433,7 @@ class Select(ListRWTools, SSHTools):
         crys_embedded = self.reduce(crys_mean_all)
         clusters = self.cluster(crys_embedded, num_poscars)
         idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
-        self.round = 'CCOP_POSCARS'
+        self.round = 'CCOP'
         self.poscar_save_dir = f'{poscar_dir}/{self.round}'
         self.sh_save_dir = self.poscar_save_dir
         if not os.path.exists(self.poscar_save_dir):
