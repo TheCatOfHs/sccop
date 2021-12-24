@@ -2,7 +2,7 @@ import os
 
 #Grid
 cutoff = 5
-latt_vec = [[3.24, 0, 0], [0, 5.54, 0], [0, 0, 5.61]]
+latt_vec = [[5., 0, 0], [0, 5., 0], [0, 0, 5.]]
 grain = [.1, .1, .1]
 
 #Mutate
@@ -10,7 +10,7 @@ num_mutate = 6
 mut_ratio = 0.5
 
 #Recycling
-num_round = 20
+num_round = 10
 num_poscars = 30
 
 #Training
@@ -24,7 +24,7 @@ T = .1
 decay = .99
 steps = 150
 num_paths = 180
-min_bond = 1.4
+min_bond = 1.8
 wait_time = 200
 
 #Sample Select

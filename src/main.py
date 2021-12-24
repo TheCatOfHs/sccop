@@ -34,7 +34,7 @@ if __name__ == '__main__':
     sub_vasp = SubVASP()
     
     #Build grid
-    build = False
+    build = True
     if build:
         grid.build_grid(0, latt_vec, grain, cutoff)
     grid_store = [0]
@@ -47,16 +47,16 @@ if __name__ == '__main__':
     grid_origin = [0 for _ in range(num_mutate)]
     grid_mutate = [i for i in range(num_grid, num_grid+num_mutate)]
     grid_store = grid_store + grid_mutate
-    mutate = False
+    mutate = True
     if mutate:
         divide.assign(grid_origin, grid_mutate)
     
     #Initial data
-    initial = False
+    initial = True
     worker = Search(0, 0)
     if initial:
         round = 0
-        num_initial = 9000
+        num_initial = 100000
         grid_point = [i for i in range(1000)]
         atom_pos = [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
         atom_type = [[i for i in [30, 6, 7, 29] for _ in range(2)] for _ in range(num_initial)]
@@ -188,7 +188,7 @@ if __name__ == '__main__':
                     mut_counter += 1
             system_echo(f'Lattice mutate number: {mut_counter}')
             workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
-        
+
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
         #VASP calculate
         sub_vasp.sub_VASP_job(round+1)
-
+    
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]
