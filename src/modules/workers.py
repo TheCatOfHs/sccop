@@ -414,6 +414,11 @@ class Search(ListRWTools):
         """
         advanced geometry constrain
         
+        Parameters
+        ----------
+        pos [int, 1d]: position of atoms
+        num_atom [int, 0d]: number of atoms
+        
         Returns
         ----------
         flag [bool, 0d]: whether atoms are overlay
@@ -428,6 +433,10 @@ class Search(ListRWTools):
     def near_check(self, nbr_dis):
         """
         advanced geometry constrain
+        
+        Parameters
+        ----------
+        nbr_dis [float, 2d, np]: distance of neighbors 
         
         Returns
         ----------

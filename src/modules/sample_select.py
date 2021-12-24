@@ -18,7 +18,7 @@ from modules.predict import PPMData, get_loader
 class Select(ListRWTools, SSHTools):
     #Select training samples by active learning
     def __init__(self, round,
-                 batch_size=256, num_workers=0):
+                 batch_size=1024, num_workers=0):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.round = f'{round:03.0f}'
@@ -84,20 +84,20 @@ class Select(ListRWTools, SSHTools):
         pos_str, type_str, grid_str = \
             reduce[:,0], reduce[:,1], reduce[:,2]
        
-        order  = np.argsort(grid_str)
+        grid = self.str_to_list1d(grid_str, int)
+        order  = np.argsort(grid)
+        grid = np.array(grid)[order]
         pos_str = pos_str[order]
         type_str = type_str[order]
-        grid_str = grid_str[order]
         
         pos = self.str_to_list2d(pos_str, int)
         type = self.str_to_list2d(type_str, int)
-        grid = self.str_to_list1d(grid_str, int)
         num_crys = len(pos)
         num_last_batch = np.mod(num_crys, self.batch_size)
         if num_last_batch < num_gpus:
             for i in (pos, type, grid):
                 del i[-num_last_batch:]
-        return pos, type, np.array(grid)
+        return pos, type, grid
     
     def dataloader(self, atom_pos, atom_type, grid_name):
         """
@@ -470,13 +470,13 @@ class ReadoutNet(CrystalGraphConvNet):
 if __name__ == '__main__':
     #Data import
     matools = ListRWTools()
-    atom_pos = matools.import_list2d(f'{search_dir}/004/atom_pos.dat', int)
-    atom_type = matools.import_list2d(f'{search_dir}/004/atom_type.dat', int)
-    grid_name = matools.import_list2d(f'{search_dir}/004/grid_name.dat', int)
+    atom_pos = matools.import_list2d(f'{search_dir}/001/atom_pos.dat', int)
+    atom_type = matools.import_list2d(f'{search_dir}/001/atom_type.dat', int)
+    grid_name = matools.import_list2d(f'{search_dir}/001/grid_name.dat', int)
     
     #Select samples
     os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-    select = Select(4)
+    select = Select(1)
     start = time.time()
     select.samples(atom_pos, atom_type, grid_name)
     end = time.time()

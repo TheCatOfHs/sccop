@@ -7,7 +7,7 @@ grain = [.1, .1, .1]
 
 #Mutate
 num_mutate = 6
-
+mut_ratio = 0.5
 
 #Recycling
 num_round = 20
@@ -25,7 +25,7 @@ decay = .99
 steps = 150
 num_paths = 180
 min_bond = 1.4
-wait_time = 240
+wait_time = 200
 
 #Sample Select
 num_models = 5
@@ -57,3 +57,11 @@ sing_point_energy_dir = 'libs/VASP_inputs/SinglePointEnergy'
 log_file = 'data/system.log'
 elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
+
+#Property file
+optim_vasp_path = f'{vasp_out_dir}/optim_strs'
+dielectric_path = f'{optim_vasp_path}/dielectric'
+elastic_path = f'{optim_vasp_path}/elastic'
+energy_path = f'{optim_vasp_path}/energy'
+pbe_band_path = f'{optim_vasp_path}/pbe_band'
+phonon_path = f'{optim_vasp_path}/phonon'

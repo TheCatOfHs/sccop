@@ -5,12 +5,13 @@ import time
 from modules.global_var import *
 from modules.pretrain import Initial
 from modules.grid_divide import MultiDivide, GridDivide
-from modules.data_transfer import MultiGridTransfer
+from modules.data_transfer import MultiGridTransfer, Transfer
 from modules.sample_select import Select
 from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
 from modules.predict import PPMData, PPModel
-from modules.utils import ListRWTools
+from modules.utils import ListRWTools, system_echo
+from modules.post_process import PostProcess
 
 
 def convert():
@@ -33,7 +34,7 @@ if __name__ == '__main__':
     sub_vasp = SubVASP()
     
     #Build grid
-    build = True
+    build = False
     if build:
         grid.build_grid(0, latt_vec, grain, cutoff)
     grid_store = [0]
@@ -46,12 +47,13 @@ if __name__ == '__main__':
     grid_origin = [0 for _ in range(num_mutate)]
     grid_mutate = [i for i in range(num_grid, num_grid+num_mutate)]
     grid_store = grid_store + grid_mutate
-    mutate = True
+    mutate = False
     if mutate:
         divide.assign(grid_origin, grid_mutate)
     
     #Initial data
-    initial = True
+    initial = False
+    worker = Search(0, 0)
     if initial:
         round = 0
         num_initial = 9000
@@ -64,7 +66,6 @@ if __name__ == '__main__':
         #Geometry check
         batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
 
-        worker = Search(round, grid_name[0])
         check_near = [worker.near_check(i) for i in batch_nbr_dis]
         check_overlay = [worker.overlay_check(i, len(i)) for i in atom_pos]
         check = [i and j for i, j in zip(check_near, check_overlay)]
@@ -172,18 +173,22 @@ if __name__ == '__main__':
                 seed = np.random.choice(min_idx)
                 init_pos.append(pos_buffer[seed])
                 init_type.append(type_buffer[seed])
-                if round > 0:
-                    p = 0.8
-                else:
-                    p = 1
-                if np.random.rand() > p:
-                    mut = np.random.choice(grid_mutate)
-                    init_grid.append(mut)
-                else:
-                    init_grid.append(grid_buffer[seed])
+                init_grid.append(grid_buffer[seed])
             
+            #Lattice mutate
+            mut_counter = 0
+            mut_num = int(num_paths*mut_ratio)
+            mut_pos = init_pos[:mut_num]
+            mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
+            batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
+            check = [worker.near_check(i) for i in batch_nbr_dis]
+            for i, correct in enumerate(check):
+                if correct:
+                    init_grid[i] = mut_latt[i]
+                    mut_counter += 1
+            system_echo(f'Lattice mutate number: {mut_counter}')
             workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
-
+        
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
@@ -198,3 +203,8 @@ if __name__ == '__main__':
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]
     select.export(pos_buffer, type_buffer, grid_buffer)
+    
+    #Optimization
+    post = PostProcess()
+    post.run_optimization()
+    post.get_energy()

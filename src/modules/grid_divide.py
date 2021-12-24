@@ -140,7 +140,7 @@ class MultiDivide(ListRWTools, SSHTools):
 
 class GridDivide(ListRWTools):
     #Build the grid
-    def __init__(self, mu=0., sigma=.2):
+    def __init__(self, mu=0., sigma=.1):
         self.mu = mu
         self.sigma = sigma
     
