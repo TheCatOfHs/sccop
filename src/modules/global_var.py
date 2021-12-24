@@ -8,14 +8,14 @@ grain = [.1, .1, .1]
 #Mutate
 num_mutate = 6
 mut_ratio = 0.5
+latt_mu=0.
+latt_sigma=.15
 
 #Recycling
-num_round = 10
+num_round = 30
 num_poscars = 30
 
 #Training
-
-
 orig_atom_fea_len = 92
 nbr_bond_fea_len = 41
 

@@ -1,3 +1,4 @@
+ISYM    = 0
 ISTART  = 0 
 ICHARG  = 2
 ENCUT   = 550

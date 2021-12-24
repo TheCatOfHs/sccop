@@ -5,7 +5,7 @@ import time
 from modules.global_var import *
 from modules.pretrain import Initial
 from modules.grid_divide import MultiDivide, GridDivide
-from modules.data_transfer import MultiGridTransfer, Transfer
+from modules.data_transfer import MultiGridTransfer
 from modules.sample_select import Select
 from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
@@ -155,7 +155,7 @@ if __name__ == '__main__':
             min_idx = np.argsort(train_energys)[:num_seed]
             grid_pool = np.array(grid_buffer)[min_idx] 
             
-            #Lattice mutate
+            #Generate mutate lattice grid
             if round > 0:
                 mutate = True
             else:
@@ -198,7 +198,7 @@ if __name__ == '__main__':
 
         #VASP calculate
         sub_vasp.sub_VASP_job(round+1)
-    
+
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]
