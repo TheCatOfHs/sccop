@@ -7,9 +7,9 @@ grain = [.1, .1, .1]
 
 #Mutate
 num_mutate = 6
-mut_ratio = 0.5
+mut_ratio = 0.9
 latt_mu=0.
-latt_sigma=.15
+latt_sigma=.2
 
 #Recycling
 num_round = 30

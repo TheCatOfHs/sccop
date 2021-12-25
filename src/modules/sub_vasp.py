@@ -107,21 +107,16 @@ class SubVASP(ListRWTools, SSHTools):
         shell_script = f'''
                       #!/bin/bash
                       ulimit -s 262140
-                      cd /local
-                      rm -r VASP_calculations
-                      if [ ! -d 'VASP_calculations' ]; then
-                            mkdir VASP_calculations
-                            cd VASP_calculations
-                            mkdir VASP_inputs
-                            cp ~/ccop/{sing_point_energy_dir}/* VASP_inputs/.
-                            cd ..
-                      fi
-                      cd VASP_calculations
+                      cd /local/ccop
+                      rm -r vasp
+                      mkdir vasp
+                      
+                      cd vasp
                       for i in {batch}
                       do
                             mkdir $i
                             cd $i
-                            cp ../VASP_inputs/* . 
+                            cp ../../libs/VASP_inputs/SinglePointEnergy/* .
                             cp ~/ccop/{poscar_dir}/{round}/$i POSCAR
                             DPT -v potcar
                             date > $i.out

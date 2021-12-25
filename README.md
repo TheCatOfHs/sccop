@@ -9,7 +9,7 @@ shell版本: bash
 python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy库
 
 ## 程序启动
-进入ccop，运行python scr/main.py
+进入ccop，运行python src/main.py
 
 
 ## 测试样本
