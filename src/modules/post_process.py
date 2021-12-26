@@ -287,7 +287,7 @@ if __name__ == '__main__':
     kpts = kpath.get_kpoints(line_density=10, coords_are_cartesian=False)
     kpts_list = list(kpts)
     # kpts_list[1] = [item.upper() for item in kpts_list[1]]
-    kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item] for item in kpts_list[1]]
+    kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [f'${item}$'] for item in kpts_list[1]]
     kpts_list.insert(1, [['!'] for _ in kpts_list[0]])
     kpts_list.insert(1, [[1/len(kpts_list[0])] for _ in kpts_list[0]])
     rwtools = ListRWTools()
