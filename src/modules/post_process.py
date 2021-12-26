@@ -18,6 +18,11 @@ class PostProcess(SSHTools, ListRWTools):
         self.energy_path = f'~/ccop/{energy_path}'
         self.pbe_band_path = f'~/ccop/{pbe_band_path}'
         self.phonon_path = f'~/ccop/{phonon_path}'
+        self.calculation_path = '/local/ccop/vasp'
+        if not os.path.exists(f'{self.calculation_path}/KPOINTS'):
+            os.mkdir(f'{self.calculation_path}/KPOINTS')
+        if not os.path.exists(f'{self.calculation_path}/phonon-ks'):
+            os.mkdir(f'{self.calculation_path}/phonon-ks')
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
         if not os.path.exists(optim_vasp_path):
@@ -40,7 +45,7 @@ class PostProcess(SSHTools, ListRWTools):
         for j, batch in enumerate(batches):
             shell_script = f'''
                             #!/bin/bash
-                            cd /local/ccop/vasp
+                            cd {self.calculation_path}
                             for p in {batch}
                             do
                                 mkdir $p
@@ -88,15 +93,17 @@ class PostProcess(SSHTools, ListRWTools):
         batches, nodes = self.assign_job(self.poscars)
         system_echo(f'Start VASP calculation --- Electronic structure')
         for j, batch in enumerate(batches):
+            self.get_k_points(poscars=batch, format='band')
             shell_script = f'''
                             #!/bin/bash
-                            cd /local/ccop/vasp
+                            cd {self.calculation_path}
                             for p in {batch}
                             do
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/ElectronicStructure/* .
                                 cp {self.optim_strs_path}/$p POSCAR
+                                cp ../KPOINTS/KPOINTS-$p KPOINTS_2
 
                                 for i in 1 2
                                 do
@@ -134,9 +141,10 @@ class PostProcess(SSHTools, ListRWTools):
         batches, nodes = self.assign_job(self.poscars)
         system_echo(f'Start VASP calculation --- Phonon spectrum')
         for j, batch in enumerate(batches):
+            self.get_k_points(poscars=batch, format='phonon')
             shell_script = f'''
                             #!/bin/bash
-                            cd /local/ccop/vasp
+                            cd {self.calculation_path}
                             for p in {batch}
                             do
                                 mkdir $p
@@ -240,7 +248,28 @@ class PostProcess(SSHTools, ListRWTools):
             energys.append([out, cur_E])
         self.write_list2d(f'{energy_path}/Energy.dat', energys, '{0}')
         system_echo(f'Energy file generated successfully!')
-        
+
+    def get_k_points(self, poscars, format):
+        from pymatgen.core.structure import Structure
+        from pymatgen.symmetry.kpath import KPathLatimerMunro
+        for poscar in poscars:
+            k_path = KPathLatimerMunro(Structure.from_file(f'{self.optim_strs_path}/{poscar}'))
+            if format == 'band':
+                k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
+                k_points.insert(1, [['!'] for _ in k_points[0]])
+                k_points.insert(1, [[0.0] for _ in k_points[0]])
+                rwtools = ListRWTools()
+                rwtools.write_list2d_columns(f'{self.calculation_path}/KPOINTS/KPOINTS-{poscar}', k_points, \
+                                            ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>4s}'], \
+                                            head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
+            elif format == 'phonon':
+                k_points = list(k_path.get_kpoints(line_density=1, coords_are_cartesian=False))
+                
+            else:
+                system_echo(' Error: illegal parameter')
+                exit(0)
+            
+
     
 if __name__ == '__main__':
     #post = PostProcess()
@@ -260,5 +289,7 @@ if __name__ == '__main__':
     kpts_list.insert(1, [['!'] for _ in kpts_list[0]])
     kpts_list.insert(1, [[0.0] for _ in kpts_list[0]])
     rwtools = ListRWTools()
-    rwtools.write_list2d_columns('test/KPOINTS_2', kpts_list, ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>4s}'], head=['Automatically generated mesh', str(len(kpts_list[0])), 'Reciprocal lattice'])
+    rwtools.write_list2d_columns('test/KPOINTS_2', kpts_list, \
+                                ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>4s}'], \
+                                head = ['Automatically generated mesh', str(len(kpts_list[0])), 'Reciprocal lattice'])
     print(kpts)
