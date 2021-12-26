@@ -1,6 +1,8 @@
 import os, sys
 import time
 import re
+from pymatgen.core.structure import Structure
+from pymatgen.symmetry.kpath import KPathLatimerMunro
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -18,11 +20,13 @@ class PostProcess(SSHTools, ListRWTools):
         self.energy_path = f'~/ccop/{energy_path}'
         self.pbe_band_path = f'~/ccop/{pbe_band_path}'
         self.phonon_path = f'~/ccop/{phonon_path}'
+        self.KPOINTS = '~/ccop/vasp/KPOINTS'
+        self.phonon_ks = '~/ccop/vasp/phonon_ks'
         self.calculation_path = '/local/ccop/vasp'
-        if not os.path.exists(f'{self.calculation_path}/KPOINTS'):
-            os.mkdir(f'{self.calculation_path}/KPOINTS')
-        if not os.path.exists(f'{self.calculation_path}/phonon-ks'):
-            os.mkdir(f'{self.calculation_path}/phonon-ks')
+        if not os.path.exists('vasp'):
+            os.mkdir('vasp')
+            os.mkdir('vasp/KPOINTS')
+            os.mkdir('vasp/phonon-ks')
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
         if not os.path.exists(optim_vasp_path):
@@ -83,7 +87,7 @@ class PostProcess(SSHTools, ListRWTools):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Optimization')
         self.remove()
-    
+
     def run_pbe_band(self):
         '''
         calculate energy band of optimied configurations
@@ -91,9 +95,9 @@ class PostProcess(SSHTools, ListRWTools):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
+        self.get_k_points(self.poscars, format='band')
         system_echo(f'Start VASP calculation --- Electronic structure')
         for j, batch in enumerate(batches):
-            self.get_k_points(poscars=batch, format='band')
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
@@ -103,7 +107,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 cd $p
                                 cp ../../{vasp_files_path}/ElectronicStructure/* .
                                 cp {self.optim_strs_path}/$p POSCAR
-                                cp ../KPOINTS/KPOINTS-$p KPOINTS_2
+                                cp {self.KPOINTS}/KPOINTS-$p KPOINTS_2
 
                                 for i in 1 2
                                 do
@@ -115,7 +119,7 @@ class PostProcess(SSHTools, ListRWTools):
                                     cp IBZKPT IBZKPT_$i
                                     cp EIGENVAL EIGENVAL_$i
                                 done
-
+                            
                                 DPT -b
                                 python ../../libs/scripts/plot-energy-band.py
                                 cp DPT.BAND.dat {self.pbe_band_path}/band-$p.dat
@@ -131,7 +135,7 @@ class PostProcess(SSHTools, ListRWTools):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- PBE band')
         self.remove()
-    
+        
     def run_phonon(self):
         '''
         calculate phonon spectrum of optimized configurations
@@ -139,9 +143,9 @@ class PostProcess(SSHTools, ListRWTools):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
+        self.get_k_points(self.poscars, format='phonon')
         system_echo(f'Start VASP calculation --- Phonon spectrum')
         for j, batch in enumerate(batches):
-            self.get_k_points(poscars=batch, format='phonon')
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
@@ -246,23 +250,23 @@ class PostProcess(SSHTools, ListRWTools):
             cur_E = energy/atom_num
             system_echo(f'{out}, {cur_E:18.9f}')
             energys.append([out, cur_E])
-        self.write_list2d(f'{energy_path}/Energy.dat', energys, '{0}')
+        self.write_list2d(f'{energy_path}/Energy.dat', energys, '{0:18.9f}')
         system_echo(f'Energy file generated successfully!')
 
     def get_k_points(self, poscars, format):
-        from pymatgen.core.structure import Structure
-        from pymatgen.symmetry.kpath import KPathLatimerMunro
         for poscar in poscars:
-            k_path = KPathLatimerMunro(Structure.from_file(f'{self.optim_strs_path}/{poscar}'))
+            k_path = KPathLatimerMunro(Structure.from_file(f'{optim_strs_path}/{poscar}'))
             if format == 'band':
                 k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
-                kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item] for item in kpts_list[1]]
-                k_points.insert(1, [['!'] for _ in k_points[0]])
-                k_points.insert(1, [[1/len(k_points[0])] for _ in k_points[0]])
-                rwtools = ListRWTools()
-                rwtools.write_list2d_columns(f'{self.calculation_path}/KPOINTS/KPOINTS-{poscar}', k_points, \
-                                            ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>12s}'], \
-                                            head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
+                weights = [[1/len(k_points[0])] for _ in k_points[0]]
+                notes = [['!'] for _ in k_points[0]]
+                labels = [['$\Gamma$'] if item == 'Γ' else [item] for item in k_points[1]]
+                k_points.insert(1, labels)
+                k_points.insert(1, notes)
+                k_points.insert(1, weights)
+                self.write_list2d_columns(f'vasp/KPOINTS/KPOINTS-{poscar}', k_points,
+                                          ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>12s}'], 
+                                          head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif format == 'phonon':
                 k_points = list(k_path.get_kpoints(line_density=1, coords_are_cartesian=False))
             else:
@@ -272,10 +276,13 @@ class PostProcess(SSHTools, ListRWTools):
 
     
 if __name__ == '__main__':
-    #post = PostProcess()
+    from modules.pretrain import Initial
+    init = Initial()
+    init.update()
+    post = PostProcess()
     #post.run_optimization()
     #post.get_energy()
-    #post.run_pbe_band()
+    post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
