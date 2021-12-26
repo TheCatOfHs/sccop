@@ -250,9 +250,9 @@ if __name__ == '__main__':
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
-    from pymatgen.core.structure import IStructure
+    from pymatgen.core.structure import Structure
     from pymatgen.symmetry.kpath import KPathLatimerMunro
-    crystal = IStructure.from_file('test/POSCAR_000')
+    crystal = Structure.from_file('test/POSCAR_000')
     print(crystal)
     kpath = KPathLatimerMunro(crystal)
     kpts = kpath.get_kpoints()
