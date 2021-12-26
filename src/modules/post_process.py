@@ -2,7 +2,8 @@ import os, sys
 import time
 import re
 from pymatgen.core.structure import Structure
-from pymatgen.symmetry.kpath import KPathLatimerMunro
+from pymatgen.io.vasp.inputs import Kpoints
+from pymatgen.symmetry.kpath import KPathSetyawanCurtarolo
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -255,25 +256,29 @@ class PostProcess(SSHTools, ListRWTools):
 
     def get_k_points(self, poscars, format):
         for poscar in poscars:
-            k_path = KPathLatimerMunro(Structure.from_file(f'{optim_strs_path}/{poscar}'))
+            k_path = KPathSetyawanCurtarolo(Structure.from_file(f'{optim_strs_path}/{poscar}'))
             if format == 'band':
                 k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
                 weights = [[1/len(k_points[0])] for _ in k_points[0]]
-                notes = [['!'] for _ in k_points[0]]
-                labels = [['$\Gamma$'] if item == 'Γ' else [f'${item}$'] for item in k_points[1]]
+                labels = [f'\Gamma' if item == '\\Gamma' else item for item in k_points[1]]
+                labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
-                k_points.insert(1, notes)
                 k_points.insert(1, weights)
                 self.write_list2d_columns(f'vasp/KPOINTS/KPOINTS-{poscar}', k_points,
-                                          ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>12s}'], 
+                                          ['{0:8.4f}', '{0:8.4f}', '{0:<16s}'], 
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif format == 'phonon':
                 k_points = list(k_path.get_kpoints(line_density=1, coords_are_cartesian=False))
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
-            
 
+    def test(self):
+        self.poscars = sorted(os.listdir(optim_strs_path))
+        self.num_poscar = len(self.poscars)
+        batches, nodes = self.assign_job(self.poscars)
+        self.get_k_points(self.poscars, format='band')
+    
     
 if __name__ == '__main__':
     from modules.pretrain import Initial
@@ -286,19 +291,13 @@ if __name__ == '__main__':
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
+    #post.test()
+    
+    '''
     from pymatgen.core.structure import Structure
-    from pymatgen.symmetry.kpath import KPathLatimerMunro
-    crystal = Structure.from_file('test/POSCAR_000')
-    print(crystal)
-    kpath = KPathLatimerMunro(crystal)
+    from pymatgen.symmetry.kpath import KPathSetyawanCurtarolo
+    crystal = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-001-131')
+    kpath = KPathSetyawanCurtarolo(crystal)
     kpts = kpath.get_kpoints(line_density=10, coords_are_cartesian=False)
-    kpts_list = list(kpts)
-    # kpts_list[1] = [item.upper() for item in kpts_list[1]]
-    kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [f'${item}$'] for item in kpts_list[1]]
-    kpts_list.insert(1, [['!'] for _ in kpts_list[0]])
-    kpts_list.insert(1, [[1/len(kpts_list[0])] for _ in kpts_list[0]])
-    rwtools = ListRWTools()
-    rwtools.write_list2d_columns('test/KPOINTS_2', kpts_list, \
-                                ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>12s}'], \
-                                head = ['Automatically generated mesh', str(len(kpts_list[0])), 'Reciprocal lattice'])
     print(kpts)
+    '''
