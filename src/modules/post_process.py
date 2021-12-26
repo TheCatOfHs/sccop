@@ -69,7 +69,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 fi
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.ccop_out_dir}/
+                                mv FINISH-$p {self.optim_strs_path}/
                                 rm -r $p
                             done
                             '''
@@ -243,10 +243,19 @@ class PostProcess(SSHTools, ListRWTools):
         
     
 if __name__ == '__main__':
-    post = PostProcess()
+    #post = PostProcess()
     #post.run_optimization()
     #post.get_energy()
-    post.run_pbe_band()
+    #post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
+    from pymatgen.core.structure import IStructure
+    from pymatgen.symmetry.kpath import KPathLatimerMunro
+    crystal = IStructure.from_file('test/POSCAR_000')
+    print(crystal)
+    kpath = KPathLatimerMunro(crystal)
+    kpts = kpath.get_kpoints()
+    rwtools = ListRWTools()
+    rwtools.write_list2d('test/kpath.dat', kpts[0], '{0:4.4f}')
+    print(kpts)
