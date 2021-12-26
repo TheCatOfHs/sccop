@@ -100,8 +100,8 @@ class MultiWorkers(ListRWTools, SSHTools):
                         mkdir {self.sh_save_dir}
                         cd data/
                         cp -rf ~/ccop/{self.model_save_dir} ppmodel/
-                        > {ip}
-                        mv {ip} ~/ccop/{self.sh_save_dir}/
+                        touch FINISH-{ip}
+                        mv FINISH-{ip} ~/ccop/{self.sh_save_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -310,10 +310,10 @@ class MultiWorkers(ListRWTools, SSHTools):
     
     def remove(self):
         os.system(f'''
-                  rm {self.sh_save_dir}/node*
                   rm {self.sh_save_dir}/pos*
                   rm {self.sh_save_dir}/type*
                   rm {self.sh_save_dir}/energy*
+                  rm {self.sh_save_dir}/FINISH*
                   ''')
     
     

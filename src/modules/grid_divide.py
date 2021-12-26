@@ -34,16 +34,16 @@ class MultiDivide(ListRWTools, SSHTools):
         node_assign = self.assign_node(num_grid, num_node)
         for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
             self.sub_divide(origin, mutate, node)
-        while not self.is_done(num_grid, 'grid'):
+        while not self.is_done(num_grid):
             time.sleep(self.sleep_time)
         system_echo(f'Lattice mutate: {grid_mutate}')
-        self.remove('grid')
+        self.remove()
         for node in nodes:
             self.update_grid(grid_mutate, node)
-        while not self.is_done(num_node, 'node'):
+        while not self.is_done(num_node):
             time.sleep(self.sleep_time)
         system_echo(f'Update grid of each node!')
-        self.remove('node')
+        self.remove()
     
     def assign_node(self, num_grid, num_node):
         """
@@ -90,8 +90,8 @@ class MultiDivide(ListRWTools, SSHTools):
                         mv {latt_vec} {local_prop_dir}/
                         mv {nbr_dis} {local_prop_dir}/
                         mv {nbr_idx} {local_prop_dir}/
-                        > grid{mutate}
-                        mv grid{mutate} {local_prop_dir}/
+                        touch FINISH-{mutate}
+                        mv FINISH-{mutate} {local_prop_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -114,12 +114,12 @@ class MultiDivide(ListRWTools, SSHTools):
                         do
                             cp ~/ccop/{grid_prop_dir}/$i .
                         done
-                        > {ip}
-                        mv {ip} ~/ccop/{grid_prop_dir}/
+                        touch FINISH-{ip}
+                        mv FINISH-{ip} ~/ccop/{grid_prop_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     
-    def is_done(self, file_num, key):
+    def is_done(self, file_num):
         """
         If shell is completed, return True
         
@@ -127,15 +127,15 @@ class MultiDivide(ListRWTools, SSHTools):
         ----------
         file_num [int, 0d]: number of file
         """
-        command = f'ls -l {grid_prop_dir} | grep {key} | wc -l'
+        command = f'ls -l {grid_prop_dir} | grep FINISH | wc -l'
         flag = self.check_num_file(command, file_num)
         return flag
     
-    def remove(self, key): 
+    def remove(self): 
         """
-        remove key file
+        remove flag file
         """
-        os.system(f'rm {grid_prop_dir}/{key}*')
+        os.system(f'rm {grid_prop_dir}/FINISH*')
         
 
 class GridDivide(ListRWTools):

@@ -65,7 +65,6 @@ if __name__ == '__main__':
         
         #Geometry check
         batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
-
         check_near = [worker.near_check(i) for i in batch_nbr_dis]
         check_overlay = [worker.overlay_check(i, len(i)) for i in atom_pos]
         check = [i and j for i, j in zip(check_near, check_overlay)]
@@ -76,7 +75,9 @@ if __name__ == '__main__':
                 atom_type_right.append(atom_type[i])
                 grid_name_right.append(grid_name[i])
         grid_name_right = np.array(grid_name_right)
-        idx = np.arange(len(grid_name_right))
+        num_sample = len(grid_name_right)
+        idx = np.arange(num_sample)
+        system_echo(f'Random sampling number: {num_sample}')
         
         #Select samples
         if not os.path.exists(f'{search_dir}/000'):
@@ -208,3 +209,9 @@ if __name__ == '__main__':
     post = PostProcess()
     post.run_optimization()
     post.get_energy()
+    
+    #Energy band
+    post.run_pbe_band()
+    
+    #Phonon spectrum
+    post.run_phonon()

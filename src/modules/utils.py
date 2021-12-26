@@ -172,6 +172,35 @@ class SSHTools:
             num_assign = len(node_assign)
         return sorted(node_assign)
     
+    def assign_job(self, poscar):
+        """
+        assign jobs to each node according to notation of POSCAR file
+
+        Parameters
+        ----------
+        poscar [str, 1d]: name of POSCAR files
+        
+        Returns
+        ----------
+        batches [str, 1d]: string of jobs assigned to different nodes
+        nodes [str, 1d]: job assigned nodes
+        """
+        store, batches, nodes = [], [], []
+        last_node = poscar[0][-3:]
+        nodes.append(last_node)
+        for item in poscar:
+            node = item[-3:]
+            if node == last_node:
+                store.append(item)
+            else:
+                batches.append(' '.join(store))
+                last_node = node
+                store = []
+                store.append(item)
+                nodes.append(last_node)
+        batches.append(' '.join(store))
+        return batches, nodes
+    
     def check_num_file(self, command, file_num):
         """
         If shell is completed, return True
@@ -189,6 +218,12 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    a = [1, 2, 3]
-    b = [2, 3]
-    print(np.setdiff1d(a, b))
+    import os
+    a = f'''n=`ls | grep POSCAR- | wc -l`
+            for i in `seq -f%03g 1 $n`
+            do
+                echo $i 
+            done
+        '''
+    os.system(a)
+    

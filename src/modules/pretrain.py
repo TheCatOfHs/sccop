@@ -31,14 +31,15 @@ class Initial(SSHTools):
                         rm -rf ccop/
                         mkdir ccop/
                         cd ccop/
+                        mkdir vasp/
                         cp -r ~/ccop/data .
                         cp -r ~/ccop/libs .
                         cp -r ~/ccop/src .
-                        > {ip}
-                        mv {ip} ~/ccop/data/
+                        touch FINISH-{ip}
+                        mv FINISH-{ip} ~/ccop/data/
                         '''
         self.ssh_node(shell_script, ip)
-
+    
     def is_done(self, file_num):
         """
         If shell is completed, return True
@@ -47,12 +48,12 @@ class Initial(SSHTools):
         ----------
         flag [bool, 0d]: whether job is done
         """
-        command = f'ls -l data/ | grep node | wc -l'
+        command = f'ls -l data/ | grep FINISH | wc -l'
         flag = self.check_num_file(command, file_num)
         return flag
     
     def remove(self): 
-        os.system(f'rm data/node*')
+        os.system(f'rm data/FINISH*')
 
 
 if __name__ == '__main__':

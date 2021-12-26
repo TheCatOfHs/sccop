@@ -1,15 +1,15 @@
 import os
 
 #Grid
-cutoff = 5
+cutoff = 6
 latt_vec = [[5., 0, 0], [0, 5., 0], [0, 0, 5.]]
 grain = [.1, .1, .1]
 
 #Mutate
 num_mutate = 6
 mut_ratio = 0.9
-latt_mu=0.
-latt_sigma=.2
+latt_mu = 0.
+latt_sigma = 0.2
 
 #Recycling
 num_round = 30

@@ -52,35 +52,6 @@ class SubVASP(ListRWTools, SSHTools):
                             f'{round}-{i}, numbers: {num_poscar}')
                 break
     
-    def assign_job(self, poscar):
-        """
-        assign jobs to each node according to notation of POSCAR file
-
-        Parameters
-        ----------
-        poscar [str, 1d]: name of POSCAR files
-        
-        Returns
-        ----------
-        batches [str, 1d]: string of jobs assigned to different nodes
-        nodes [str, 1d]: job assigned nodes
-        """
-        store, batches, nodes = [], [], []
-        last_node = poscar[0][-3:]
-        nodes.append(last_node)
-        for item in poscar:
-            node = item[-3:]
-            if node == last_node:
-                store.append(item)
-            else:
-                batches.append(' '.join(store))
-                last_node = node
-                store = []
-                store.append(item)
-                nodes.append(last_node)
-        batches.append(' '.join(store))
-        return batches, nodes
-    
     def sub_batch_job(self, batches, round, repeat, nodes):
         """
         submit vasp jobs to nodes
@@ -105,30 +76,24 @@ class SubVASP(ListRWTools, SSHTools):
         """
         ip = f'node{node}'
         shell_script = f'''
-                      #!/bin/bash
-                      ulimit -s 262140
-                      cd /local/ccop
-                      rm -r vasp
-                      mkdir vasp
-                      
-                      cd vasp
-                      for i in {batch}
-                      do
-                            mkdir $i
-                            cd $i
-                            cp ../../libs/VASP_inputs/SinglePointEnergy/* .
-                            cp ~/ccop/{poscar_dir}/{round}/$i POSCAR
+                        #!/bin/bash
+                        cd /local/ccop/vasp
+                        for p in {batch}
+                        do
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/SinglePointEnergy/* .
+                            cp ~/ccop/{poscar_dir}/{round}/$p POSCAR
                             DPT -v potcar
-                            date > $i.out
-                            echo 'VASP-JOB-FINISH' >> $i.out
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $i.out
-                            date >> $i.out
-                            cp $i.out ~/ccop/{vasp_out_dir}/{round}-{repeat}/.
-                            rm *
-                            cd ..
-                      done
-                      rm -r POSCAR*
-                      '''
+                            date > $p.out
+                            echo 'VASP-JOB-FINISH' >> $p.out
+                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
+                            date >> $p.out
+                            cp $p.out ~/ccop/{vasp_out_dir}/{round}-{repeat}/.
+                            cd ../
+                            rm -r $p
+                        done
+                        '''
         self.ssh_node(shell_script, ip)
     
     def is_VASP_done(self, round, repeat, num_poscar):
@@ -159,7 +124,7 @@ class SubVASP(ListRWTools, SSHTools):
         """
         true_E, energys = [], []
         vasp_out = os.listdir(f'{vasp_out_dir}/{round}-{repeat}')
-        vasp_out_order = sorted(vasp_out, key=lambda x: x.split('-')[2])
+        vasp_out_order = sorted(vasp_out)
         for out in vasp_out_order:
             VASP_output_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
             with open(VASP_output_file, 'r') as f:
@@ -209,4 +174,4 @@ class SubVASP(ListRWTools, SSHTools):
     
 if __name__ == "__main__":
     sub_vasp = SubVASP()
-    sub_vasp.sub_VASP_job(21)
+    sub_vasp.sub_VASP_job(31)
