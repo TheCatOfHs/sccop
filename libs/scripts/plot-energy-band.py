@@ -12,18 +12,46 @@ def read_band(file_name):
     print('Number of band is {:5.0f}'.format(data.shape[1]-1))
     return data
 
+def get_kpoints():
+    with open('KPOINTS', 'r') as obj:
+        ct = obj.readlines()
+    print(ct[1])
+    num_k = float(ct[1].split()[0])
+    k_points = [[item for item in line.split()] for line in ct[3:]]
+    k_sym = []
+    k_name = []
+    for i, line in enumerate(k_points):
+        if i == 0 or i == num_k-1:
+            k_sym.append(i)
+            k_name.append(line[5])
+        if i < num_k-1 and len(line) == 6 and len(k_points[i+1]) == 6:
+            k_sym.append(i)
+            if line[5] == k_points[i+1][5]:
+                k_name.append(line[5])
+            else:
+                k_name.append('{0}/{1}'.format(line[5], k_points[i+1][5]))
+    return np.array(k_sym), k_name
+    
 def plot_band(band):
+    k_sym, sym_points = get_kpoints()
     font_set = {'family':'Times New Roman', 'weight':'normal', 'size':20}
-    k_sym = np.array([0, 19, 39, 59, 79, 99, 119, 139])
-    sym_points = ['Z', '$\Gamma$', 'Y', 'A', 'B', 'D', 'E', 'C']
+    # k_sym = np.array([0, 19, 39, 59, 79, 99, 119, 139])
+    # sym_points = ['Z', '$\Gamma$', 'Y', 'A', 'B', 'D', 'E', 'C']
+    
+    # move the k gap
+    for i in range(len(k_sym)-1):
+        band[k_sym[i]+1:,0] = band[k_sym[i]+1:,0] - (band[k_sym[i]+1,0] - band[k_sym[i],0])
     
     fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     for i in range(band.shape[1]-1):
         ax.plot(band[:,0], band[:,i+1], color='black', linewidth=0.8)
     k = band[:,0]
-    for i in k_sym:
-        plt.plot([k[i], k[i]], [-100, 100], '--k', lw=0.5)
+    for i in range(1, len(k_sym)-1):
+        if '/' in sym_points[i]:
+            plt.plot([k[k_sym[i]], k[k_sym[i]]], [-100, 100], '-k', lw=0.8)
+        else:
+            plt.plot([k[k_sym[i]], k[k_sym[i]]], [-100, 100], '--k', lw=0.5)
     plt.plot([-10, 10], [0, 0], '--r', lw=0.5)
     ax.set_xlim([np.min(k), np.max(k)])
     if len(sys.argv) == 3:
