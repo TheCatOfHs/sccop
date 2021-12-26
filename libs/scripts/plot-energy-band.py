@@ -29,7 +29,7 @@ def get_kpoints():
             if line[5] == k_points[i+1][5]:
                 k_name.append(line[5])
             else:
-                k_name.append('{0}/{1}'.format(line[5], k_points[i+1][5]))
+                k_name.append('{0}|{1}'.format(line[5], k_points[i+1][5]))
     return np.array(k_sym), k_name
     
 def plot_band(band):
@@ -48,7 +48,7 @@ def plot_band(band):
         ax.plot(band[:,0], band[:,i+1], color='black', linewidth=0.8)
     k = band[:,0]
     for i in range(1, len(k_sym)-1):
-        if '/' in sym_points[i]:
+        if '|' in sym_points[i]:
             plt.plot([k[k_sym[i]], k[k_sym[i]]], [-100, 100], '-k', lw=0.8)
         else:
             plt.plot([k[k_sym[i]], k[k_sym[i]]], [-100, 100], '--k', lw=0.5)

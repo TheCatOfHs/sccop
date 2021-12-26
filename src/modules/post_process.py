@@ -256,7 +256,7 @@ class PostProcess(SSHTools, ListRWTools):
             k_path = KPathLatimerMunro(Structure.from_file(f'{self.optim_strs_path}/{poscar}'))
             if format == 'band':
                 k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
-                kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item.upper()] for item in kpts_list[1]]
+                kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item] for item in kpts_list[1]]
                 k_points.insert(1, [['!'] for _ in k_points[0]])
                 k_points.insert(1, [[1/len(k_points[0])] for _ in k_points[0]])
                 rwtools = ListRWTools()
@@ -287,7 +287,7 @@ if __name__ == '__main__':
     kpts = kpath.get_kpoints(line_density=10, coords_are_cartesian=False)
     kpts_list = list(kpts)
     # kpts_list[1] = [item.upper() for item in kpts_list[1]]
-    kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item.upper()] for item in kpts_list[1]]
+    kpts_list[1] = [['$\Gamma$'] if item == 'Γ' else [item] for item in kpts_list[1]]
     kpts_list.insert(1, [['!'] for _ in kpts_list[0]])
     kpts_list.insert(1, [[1/len(kpts_list[0])] for _ in kpts_list[0]])
     rwtools = ListRWTools()
