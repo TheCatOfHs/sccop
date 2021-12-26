@@ -31,10 +31,10 @@ class Initial(SSHTools):
                         rm -rf ccop/
                         mkdir ccop/
                         cd ccop/
-                        mkdir vasp/
                         cp -r ~/ccop/data .
                         cp -r ~/ccop/libs .
                         cp -r ~/ccop/src .
+                        mkdir vasp/
                         touch FINISH-{ip}
                         mv FINISH-{ip} ~/ccop/data/
                         '''
