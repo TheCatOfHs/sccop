@@ -257,14 +257,13 @@ class PostProcess(SSHTools, ListRWTools):
             if format == 'band':
                 k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
                 k_points.insert(1, [['!'] for _ in k_points[0]])
-                k_points.insert(1, [[0.0] for _ in k_points[0]])
+                k_points.insert(1, [[1/len(k_points[0])] for _ in k_points[0]])
                 rwtools = ListRWTools()
                 rwtools.write_list2d_columns(f'{self.calculation_path}/KPOINTS/KPOINTS-{poscar}', k_points, \
                                             ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>4s}'], \
                                             head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif format == 'phonon':
                 k_points = list(k_path.get_kpoints(line_density=1, coords_are_cartesian=False))
-                
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
@@ -287,7 +286,7 @@ if __name__ == '__main__':
     kpts = kpath.get_kpoints(line_density=10, coords_are_cartesian=False)
     kpts_list = list(kpts)
     kpts_list.insert(1, [['!'] for _ in kpts_list[0]])
-    kpts_list.insert(1, [[0.0] for _ in kpts_list[0]])
+    kpts_list.insert(1, [[1/len(kpts_list[0])] for _ in kpts_list[0]])
     rwtools = ListRWTools()
     rwtools.write_list2d_columns('test/KPOINTS_2', kpts_list, \
                                 ['{0:8.4f}', '{0:8.4f}', '{0:>4s}', '{0:>4s}'], \
