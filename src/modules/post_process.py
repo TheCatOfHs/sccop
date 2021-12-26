@@ -260,7 +260,7 @@ class PostProcess(SSHTools, ListRWTools):
                 k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
                 weights = [[1/len(k_points[0])] for _ in k_points[0]]
                 notes = [['!'] for _ in k_points[0]]
-                labels = [['$\Gamma$'] if item == 'Γ' else [item] for item in k_points[1]]
+                labels = [['$\Gamma$'] if item == 'Γ' else [f'${item}$'] for item in k_points[1]]
                 k_points.insert(1, labels)
                 k_points.insert(1, notes)
                 k_points.insert(1, weights)
