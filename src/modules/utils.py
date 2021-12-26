@@ -93,6 +93,23 @@ class ListRWTools:
         with open(file, 'w') as f:
             f.write(list2d_str)
         
+    def write_list2d_columns(self, file, lists, styles, head=[]):
+        """
+        write 2-dimensional list
+        
+        Parameters
+        ----------
+        file [str, 0d]: file name
+        lists [[num1, 2d], [num2, 2d], ...]: 2-dimensional lists
+        styles [[str1, 0d], [str2, 0d], ...]: styles of number corresponding to each list
+        head [str, 1d]: the head of the output file
+        """
+        list_strs = [self.list2d_to_str(lists[i], styles[i]) for i in range(len(styles))] 
+        list_str = [''.join([list_strs[i][j] for i in range(len(styles))]) for j in range(len(lists[0]))]
+        list2d_str = '\n'.join(list_str) if len(head) == 0 else '\n'.join(head + list_str)
+        with open(file, 'w', encoding='utf-8') as f:
+            f.write(list2d_str)
+        
     def list2d_to_str(self, list, style):
         """
         convert 2-dimensional list to string list
