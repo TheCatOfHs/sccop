@@ -281,23 +281,28 @@ class PostProcess(SSHTools, ListRWTools):
     
     
 if __name__ == '__main__':
-    from modules.pretrain import Initial
-    init = Initial()
-    init.update()
-    post = PostProcess()
+    #from modules.pretrain import Initial
+    #init = Initial()
+    #init.update()
+    #post = PostProcess()
     #post.run_optimization()
     #post.get_energy()
-    post.run_pbe_band()
+    #post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
     #post.test()
     
-    '''
+   
     from pymatgen.core.structure import Structure
-    from pymatgen.symmetry.kpath import KPathSetyawanCurtarolo
-    crystal = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-001-131')
-    kpath = KPathSetyawanCurtarolo(crystal)
-    kpts = kpath.get_kpoints(line_density=10, coords_are_cartesian=False)
+    from pymatgen.symmetry.bandstructure import HighSymmKpath
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+    from pymatgen.electronic_structure.bandstructure import BandStructureSymmLine
+    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
+    spg_analy =SpacegroupAnalyzer(structure)
+    primitive_standard_structure=spg_analy.get_primitive_standard_structure(international_monoclinic=False)
+    kpath = HighSymmKpath(primitive_standard_structure, path_type='latimer_munro')
+    kpts = kpath.get_kpoints(line_density=20, coords_are_cartesian=False)
+    BandStructureSymmLine(kpts)
     print(kpts)
-    '''
+    print(kpath.get_continuous_path)
