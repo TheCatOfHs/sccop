@@ -57,5 +57,35 @@ class Initial(SSHTools):
 
 
 if __name__ == '__main__':
+    from pymatgen.core.structure import Structure
     import pandas as pd
+    df = pd.read_csv('test/test_data.csv')
+    a = [df.iloc[idx] for idx in range(len(df))]
+    cif = [i['cif'] for i in a]
+    formation = [i['formation_energy_per_atom'] for i in a]
     
+    def near_property(poscar, cutoff):
+        """
+        index and distance of near grid points
+        
+        Parameters
+        ----------
+        cutoff [float, 0d]: cutoff distance
+        
+        Returns
+        ----------
+        nbr_idx [int, 2d]: index of near neighbor 
+        nbr_dis [float, 2d]: distance of near neighbor 
+        """
+        crystal = Structure.from_str(poscar, fmt='cif')
+        all_nbrs = crystal.get_all_neighbors(cutoff)
+        all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
+        num_near = min(map(lambda x: len(x), all_nbrs))
+        nbr_idx, nbr_dis = [], []
+        for nbr in all_nbrs:
+            nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
+            nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
+        nbr_idx, nbr_dis = list(nbr_idx), list(nbr_dis)
+        return nbr_idx, nbr_dis
+    
+    print(near_property(cif[0], 8))
