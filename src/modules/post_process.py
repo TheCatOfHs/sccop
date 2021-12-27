@@ -2,8 +2,8 @@ import os, sys
 import time
 import re
 from pymatgen.core.structure import Structure
-from pymatgen.io.vasp.inputs import Kpoints
-from pymatgen.symmetry.kpath import KPathSetyawanCurtarolo
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from pymatgen.symmetry.kpath import KPathSeek
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -256,11 +256,14 @@ class PostProcess(SSHTools, ListRWTools):
 
     def get_k_points(self, poscars, format):
         for poscar in poscars:
-            k_path = KPathSetyawanCurtarolo(Structure.from_file(f'{optim_strs_path}/{poscar}'))
+            structure = Structure.from_file(f'{optim_strs_path}/{poscar}')
+            spg_analy =SpacegroupAnalyzer(structure)
+            primitive_standard_structure=spg_analy.get_primitive_standard_structure(international_monoclinic=False)
+            k_path = KPathSeek(primitive_standard_structure)
             if format == 'band':
-                k_points = list(k_path.get_kpoints(line_density=10, coords_are_cartesian=False))
+                k_points = list(k_path.get_kpoints(line_density=40, coords_are_cartesian=False))
                 weights = [[1/len(k_points[0])] for _ in k_points[0]]
-                labels = [f'\Gamma' if item == '\\Gamma' else item for item in k_points[1]]
+                labels = ['\Gamma' if item == 'GAMMA' else item for item in k_points[1]]
                 labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
                 k_points.insert(1, weights)
@@ -272,37 +275,28 @@ class PostProcess(SSHTools, ListRWTools):
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
-
-    def test(self):
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, format='band')
     
     
 if __name__ == '__main__':
-    #from modules.pretrain import Initial
-    #init = Initial()
-    #init.update()
-    #post = PostProcess()
+    from modules.pretrain import Initial
+    init = Initial()
+    init.update()
+    post = PostProcess()
     #post.run_optimization()
     #post.get_energy()
-    #post.run_pbe_band()
+    post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
     #post.test()
     
-   
+    '''
     from pymatgen.core.structure import Structure
-    from pymatgen.symmetry.bandstructure import HighSymmKpath
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    from pymatgen.electronic_structure.bandstructure import BandStructureSymmLine
     structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
     spg_analy =SpacegroupAnalyzer(structure)
     primitive_standard_structure=spg_analy.get_primitive_standard_structure(international_monoclinic=False)
-    kpath = HighSymmKpath(primitive_standard_structure, path_type='latimer_munro')
+    kpath = KPathSeek(primitive_standard_structure)
     kpts = kpath.get_kpoints(line_density=20, coords_are_cartesian=False)
-    BandStructureSymmLine(kpts)
     print(kpts)
-    print(kpath.get_continuous_path)
+    '''

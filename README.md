@@ -33,3 +33,5 @@ test/Optim：POSCAR-015-002-131
 3. PBE能带(libs/VASP_inputs/ElectronicStructure), 运行完毕后会直接输出能带图(利用libs/scripts/plot-energy-band.py)
 
 注：所有计算的布里渊区路径均由pymatgen生成
+依赖包：pymatgen seekpath
+pip install seekpath
