@@ -57,4 +57,5 @@ class Initial(SSHTools):
 
 
 if __name__ == '__main__':
-    print('ok')
+    import pandas as pd
+    
