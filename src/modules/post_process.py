@@ -271,7 +271,7 @@ class PostProcess(SSHTools, ListRWTools):
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif task == 'phonon':
                 points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
-                labels = self.convert_special_k_labels(k_points[1], ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
+                labels = self.convert_special_k_labels(labels, ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
                 while '' in labels:
                     points.pop(labels.index(''))
                     labels.remove('')
