@@ -21,6 +21,7 @@ class PostProcess(SSHTools, ListRWTools):
         self.pbe_band_path = f'~/ccop/{pbe_band_path}'
         self.phonon_path = f'~/ccop/{phonon_path}'
         self.KPOINTS = '~/ccop/vasp/KPOINTS'
+        self.bandconf = '~/ccop/vasp/bandconf'
         self.phonon_ks = '~/ccop/vasp/phonon_ks'
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists('vasp'):
@@ -95,7 +96,7 @@ class PostProcess(SSHTools, ListRWTools):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, format='band')
+        self.get_k_points(self.poscars, task='band')
         system_echo(f'Start VASP calculation --- Electronic structure')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -143,7 +144,7 @@ class PostProcess(SSHTools, ListRWTools):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, format='phonon')
+        self.get_k_points(self.poscars, task='phonon')
         system_echo(f'Start VASP calculation --- Phonon spectrum')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -155,6 +156,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 cd $p
                                 cp ../../{vasp_files_path}/Phonon/* .
                                 cp {self.optim_strs_path}/$p POSCAR
+                                cp {self.bandconf}/band.conf-$p band.conf
 
                                 phonopy -d --dim="2 2 2"
                                 n=`ls | grep POSCAR- | wc -l`
@@ -264,7 +266,7 @@ class PostProcess(SSHTools, ListRWTools):
                 labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
                 k_points.insert(1, weights)
-                self.write_list2d_columns(f'vasp/KPOINTS/KPOINTS-{poscar}', k_points,
+                self.write_list2d_columns(f'{self.KPOINTS}/KPOINTS-{poscar}', k_points,
                                           ['{0:8.4f}', '{0:8.4f}', '{0:<16s}'], 
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif task == 'phonon':
@@ -273,15 +275,25 @@ class PostProcess(SSHTools, ListRWTools):
                     points.pop(labels.index(''))
                     labels.remove('')
                     phonon_points = [[[points[0], labels[0]]]]
-                    for i in range(1, len(labels)-2, 2):    # find the continue bands
+                    for i in range(1, len(labels)-2, 2):    # find the continuous bands
                         phonon_points[-1].append([points[i], labels[i]])
                         if labels[i] != labels[i+1]:
                             phonon_points.append([[points[i+1], labels[i+1]]])
                     phonon_points[-1].append([points[-1], labels[-1]])
+                    band, band_label = '', ''
+                    for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
+                        for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
+                            band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
+                            band_label = band_label + ' ${0}$'.format(point[1])
+                        band = band if i == len(phonon_points)-1 else band + ','
+                    band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], \ 
+                                 [[' = '] for i in range(5)]
+                                 [['XXX'], ['2 2 2'], [band], [band_label], ['write']]] # output the file by columns
+                    self.write_list2d_columns(f'{self.bandconf}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
-    
+                    
     def test(self):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
@@ -293,10 +305,7 @@ class PostProcess(SSHTools, ListRWTools):
             labels = [std[i] if item == sp[i] else item for item in labels]
         return labels
         
-        
-        
-        
-    
+ 
 def phonon_test():
     from pymatgen.core.structure import Structure
     from pymatgen.symmetry.kpath import KPathSeek
@@ -312,9 +321,19 @@ def phonon_test():
         if labels[i] != labels[i+1]:
             phonon_points.append([[points[i+1], labels[i+1]]])
     phonon_points[-1].append([points[-1], labels[-1]])
-    print(phonon_points)
+    band, band_label = '', ''
+    for i, continuous_path in enumerate(phonon_points):
+        for point in continuous_path:
+            band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
+            band_label = band_label + ' ${0}$'.format(point[1])
+        band = band if i == len(phonon_points)-1 else band + ','
+    print(band)
+    print(band_label)
+            
+    
+    # print(phonon_points)
 
-    print(labels)
+    # print(labels)
     
 if __name__ == '__main__':
     # post = PostProcess()
