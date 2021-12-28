@@ -253,26 +253,31 @@ class PostProcess(SSHTools, ListRWTools):
         self.write_list2d(f'{energy_path}/Energy.dat', energys, '{0}')
         system_echo(f'Energy file generated successfully!')
 
-    def get_k_points(self, poscars, format):
+    def get_k_points(self, poscars, task):
         for poscar in poscars:
             structure = Structure.from_file(f'{optim_strs_path}/{poscar}')
             k_path = KPathSeek(structure)
-            if format == 'band':
+            if task == 'band':
                 k_points = list(k_path.get_kpoints(line_density=40, coords_are_cartesian=False))
                 weights = [[1/len(k_points[0])] for _ in k_points[0]]
-                labels = ['\Gamma' if item == 'GAMMA' else item for item in k_points[1]]
-                labels = ['\Sigmma' if item == 'SIGMA_0' else item for item in labels]
+                labels = self.convert_special_k_labels(k_points[1], ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
                 labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
                 k_points.insert(1, weights)
                 self.write_list2d_columns(f'vasp/KPOINTS/KPOINTS-{poscar}', k_points,
                                           ['{0:8.4f}', '{0:8.4f}', '{0:<16s}'], 
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
-            elif format == 'phonon':
+            elif task == 'phonon':
                 points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
                 while '' in labels:
                     points.pop(labels.index(''))
                     labels.remove('')
+                    phonon_points = [[[points[0], labels[0]]]]
+                    for i in range(1, len(labels)-2, 2):    # find the continue bands
+                        phonon_points[-1].append([points[i], labels[i]])
+                        if labels[i] != labels[i+1]:
+                            phonon_points.append([[points[i+1], labels[i+1]]])
+                    phonon_points[-1].append([points[-1], labels[-1]])
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
@@ -282,16 +287,33 @@ class PostProcess(SSHTools, ListRWTools):
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
         self.get_k_points(self.poscars, format='band')
+        
+    def convert_special_k_labels(self, labels, sp, std):
+        for i in range(len(std)):
+            labels = [std[i] if item == sp[i] else item for item in labels]
+        return labels
+        
+        
+        
+        
     
 def phonon_test():
     from pymatgen.core.structure import Structure
     from pymatgen.symmetry.kpath import KPathSeek
-    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
+    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-003-131')
     kpath = KPathSeek(structure)
     points, labels = kpath.get_kpoints(line_density=1, coords_are_cartesian=False)
     while '' in labels:
         points.pop(labels.index(''))
         labels.remove('')
+    phonon_points = [[[points[0], labels[0]]]]
+    for i in range(1, len(labels)-2, 2):
+        phonon_points[-1].append([points[i], labels[i]])
+        if labels[i] != labels[i+1]:
+            phonon_points.append([[points[i+1], labels[i+1]]])
+    phonon_points[-1].append([points[-1], labels[-1]])
+    print(phonon_points)
+
     print(labels)
     
 if __name__ == '__main__':
