@@ -287,8 +287,8 @@ class PostProcess(SSHTools, ListRWTools):
                         band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
                         band_label = band_label + ' ${0}$'.format(point[1])
                     band = band if i == len(phonon_points)-1 else band + ','
-                band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], \ 
-                                [[' = '] for i in range(5)]
+                band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
+                                [[' = '] for i in range(5)], 
                                 [['XXX'], ['2 2 2'], [band], [band_label], ['write']]] # output the file by columns
                 self.write_list2d_columns(f'{self.bandconf}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
@@ -331,10 +331,7 @@ def phonon_test():
     print(band)
     print(band_label)
             
-    
-    # print(phonon_points)
 
-    # print(labels)
     
 if __name__ == '__main__':
     # post = PostProcess()
