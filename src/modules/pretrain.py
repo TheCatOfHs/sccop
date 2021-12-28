@@ -74,10 +74,49 @@ class FineTuneNet(CrystalGraphConvNet):
     
 
 if __name__ == '__main__':
+    chemical_symbols = [
+    #0
+    'X',  
+    # 1
+    'H', 'He',
+    # 2
+    'Li', 'Be', 'B', 'C', 'N', 'O', 'F', 'Ne',
+    # 3
+    'Na', 'Mg', 'Al', 'Si', 'P', 'S', 'Cl', 'Ar',
+    # 4
+    'K', 'Ca', 'Sc', 'Ti', 'V', 'Cr', 'Mn', 'Fe', 'Co', 'Ni', 'Cu', 'Zn',
+    'Ga', 'Ge', 'As', 'Se', 'Br', 'Kr',
+    # 5
+    'Rb', 'Sr', 'Y', 'Zr', 'Nb', 'Mo', 'Tc', 'Ru', 'Rh', 'Pd', 'Ag', 'Cd',
+    'In', 'Sn', 'Sb', 'Te', 'I', 'Xe',
+    # 6
+    'Cs', 'Ba', 'La', 'Ce', 'Pr', 'Nd', 'Pm', 'Sm', 'Eu', 'Gd', 'Tb', 'Dy',
+    'Ho', 'Er', 'Tm', 'Yb', 'Lu',
+    'Hf', 'Ta', 'W', 'Re', 'Os', 'Ir', 'Pt', 'Au', 'Hg', 'Tl', 'Pb', 'Bi',
+    'Po', 'At', 'Rn',
+    # 7
+    'Fr', 'Ra', 'Ac', 'Th', 'Pa', 'U', 'Np', 'Pu', 'Am', 'Cm', 'Bk',
+    'Cf', 'Es', 'Fm', 'Md', 'No', 'Lr',
+    'Rf', 'Db', 'Sg', 'Bh', 'Hs', 'Mt', 'Ds', 'Rg', 'Cn', 'Nh', 'Fl', 'Mc',
+    'Lv', 'Ts', 'Og']
+    elements_dict = dict(zip(chemical_symbols, range(len(chemical_symbols))))
+    
+    def atom_transfer(atoms, elements_dict):
+        return [elements_dict[i] for i in atoms]
+    
+    def atom_transfer_batch(atoms, elements_dict):
+        list = []
+        for i in atoms:
+            list += atom_transfer(i, elements_dict)
+        return list
+        
     df = pd.read_csv('test/test_data.csv')
     store = [df.iloc[idx] for idx in range(len(df))]
     cif = [i['cif'] for i in store]
     formation = [i['formation_energy_per_atom'] for i in store]
+    atoms = [eval(i['elements']) for i in store]
+    print(atom_transfer_batch(atoms, elements_dict))
+    print(Structure.from_str(cif[0], fmt='cif').atomic_numbers)
     
     def near_property(poscar, cutoff):
         """
@@ -106,6 +145,4 @@ if __name__ == '__main__':
     checkpoint = torch.load('test/model_best.pth.tar', map_location='cpu')
     model = FineTuneNet(orig_atom_fea_len, nbr_bond_fea_len)
     model.load_state_dict(checkpoint['state_dict'])
-    for name, module in model._modules.items():
-        for p in module.parameters():
-            print(p.requires_grad)
+    

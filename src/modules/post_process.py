@@ -133,7 +133,7 @@ class PostProcess(SSHTools, ListRWTools):
             self.sub_jobs_with_ssh(nodes[j], shell_script)
         while not self.is_done():
             time.sleep(self.sleep_time)
-        system_echo(f'All job are completed --- PBE band')
+        system_echo(f'All job are completed --- Electronic structure')
         self.remove()
         
     def run_phonon(self):
@@ -187,7 +187,7 @@ class PostProcess(SSHTools, ListRWTools):
             self.sub_jobs_with_ssh(nodes[j], shell_script)
         while not self.is_done():
             time.sleep(self.sleep_time)
-        system_echo(f'All job are completed --- Phonon')
+        system_echo(f'All job are completed --- Phonon spectrum')
         self.remove()
     
     def run_elastic(self):
