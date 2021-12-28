@@ -269,7 +269,10 @@ class PostProcess(SSHTools, ListRWTools):
                                           ['{0:8.4f}', '{0:8.4f}', '{0:<16s}'], 
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif format == 'phonon':
-                k_points = list(k_path.get_kpoints(line_density=1, coords_are_cartesian=False))
+                points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
+                while '' in labels:
+                    points.pop(labels.index(''))
+                    labels.remove('')
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
@@ -280,20 +283,29 @@ class PostProcess(SSHTools, ListRWTools):
         batches, nodes = self.assign_job(self.poscars)
         self.get_k_points(self.poscars, format='band')
     
+def phonon_test():
+    from pymatgen.core.structure import Structure
+    from pymatgen.symmetry.kpath import KPathSeek
+    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
+    kpath = KPathSeek(structure)
+    points, labels = kpath.get_kpoints(line_density=1, coords_are_cartesian=False)
+    while '' in labels:
+        points.pop(labels.index(''))
+        labels.remove('')
+    print(labels)
     
 if __name__ == '__main__':
-    post = PostProcess()
+    # post = PostProcess()
     #post.run_optimization()
-    post.get_energy()
-    post.run_pbe_band()
+    # post.get_energy()
+    # post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
     #post.test()
     
-    
-    
-    
+    phonon_test()
+   
     '''
     from pymatgen.core.structure import Structure
     structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
