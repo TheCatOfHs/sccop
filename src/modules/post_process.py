@@ -271,25 +271,26 @@ class PostProcess(SSHTools, ListRWTools):
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif task == 'phonon':
                 points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
+                labels = self.convert_special_k_labels(k_points[1], ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
                 while '' in labels:
                     points.pop(labels.index(''))
                     labels.remove('')
-                    phonon_points = [[[points[0], labels[0]]]]
-                    for i in range(1, len(labels)-2, 2):    # find the continuous bands
-                        phonon_points[-1].append([points[i], labels[i]])
-                        if labels[i] != labels[i+1]:
-                            phonon_points.append([[points[i+1], labels[i+1]]])
-                    phonon_points[-1].append([points[-1], labels[-1]])
-                    band, band_label = '', ''
-                    for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
-                        for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
-                            band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
-                            band_label = band_label + ' ${0}$'.format(point[1])
-                        band = band if i == len(phonon_points)-1 else band + ','
-                    band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], \ 
-                                 [[' = '] for i in range(5)]
-                                 [['XXX'], ['2 2 2'], [band], [band_label], ['write']]] # output the file by columns
-                    self.write_list2d_columns(f'{self.bandconf}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
+                phonon_points = [[[points[0], labels[0]]]]
+                for i in range(1, len(labels)-2, 2):    # find the continuous bands
+                    phonon_points[-1].append([points[i], labels[i]])
+                    if labels[i] != labels[i+1]:
+                        phonon_points.append([[points[i+1], labels[i+1]]])
+                phonon_points[-1].append([points[-1], labels[-1]])
+                band, band_label = '', ''
+                for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
+                    for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
+                        band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
+                        band_label = band_label + ' ${0}$'.format(point[1])
+                    band = band if i == len(phonon_points)-1 else band + ','
+                band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], \ 
+                                [[' = '] for i in range(5)]
+                                [['XXX'], ['2 2 2'], [band], [band_label], ['write']]] # output the file by columns
+                self.write_list2d_columns(f'{self.bandconf}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
