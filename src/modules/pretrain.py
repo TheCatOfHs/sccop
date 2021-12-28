@@ -1,9 +1,16 @@
 import os, sys
 import time
+from monty.dev import requires
+import pandas as pd
+from pymatgen.core.structure import Structure
+
+import torch
+import torch.nn as nn
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
 from modules.utils import SSHTools, system_echo
+from modules.predict import CrystalGraphConvNet, ConvLayer
 
 
 class Initial(SSHTools):
@@ -56,13 +63,21 @@ class Initial(SSHTools):
         os.system(f'rm data/FINISH*')
 
 
+class FineTuneNet(CrystalGraphConvNet):
+    #Calculate crys_fea
+    def __init__(self, orig_atom_fea_len, nbr_fea_len, 
+                 h_fea_len=128):
+        super(FineTuneNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
+        for p in self.parameters():
+            p.requires_grad = False
+        self.fc_out = nn.Linear(h_fea_len, 1)
+    
+
 if __name__ == '__main__':
-    from pymatgen.core.structure import Structure
-    import pandas as pd
     df = pd.read_csv('test/test_data.csv')
-    a = [df.iloc[idx] for idx in range(len(df))]
-    cif = [i['cif'] for i in a]
-    formation = [i['formation_energy_per_atom'] for i in a]
+    store = [df.iloc[idx] for idx in range(len(df))]
+    cif = [i['cif'] for i in store]
+    formation = [i['formation_energy_per_atom'] for i in store]
     
     def near_property(poscar, cutoff):
         """
@@ -88,4 +103,9 @@ if __name__ == '__main__':
         nbr_idx, nbr_dis = list(nbr_idx), list(nbr_dis)
         return nbr_idx, nbr_dis
     
-    print(near_property(cif[0], 8))
+    checkpoint = torch.load('test/model_best.pth.tar', map_location='cpu')
+    model = FineTuneNet(orig_atom_fea_len, nbr_bond_fea_len)
+    model.load_state_dict(checkpoint['state_dict'])
+    for name, module in model._modules.items():
+        for p in module.parameters():
+            print(p.requires_grad)
