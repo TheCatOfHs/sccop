@@ -1,5 +1,9 @@
+import os, sys
 import numpy as np
 import matplotlib.pyplot as plt
+
+sys.path.append(f'{os.getcwd()}/src')
+from modules.utils import ListRWTools
 
 
 class VisualizeGrid():
@@ -189,21 +193,39 @@ class VisualizeGrid():
         return test_in_grid_idx
     
 if __name__ == '__main__':
+    rwtools = ListRWTools()
+    if True:
+        mae = rwtools.import_list2d('test/GaN_ZnO_3/100/validation.dat', float)
+        x = np.arange(len(mae))
+        y = [min(mae) for i in range(len(mae))]
+        plt.rc('font', family='Times New Roman')
+        figure_1 = plt.figure(figsize=(8, 6))
+        ax_1 = figure_1.add_subplot(1, 1, 1)
+        ax_1.scatter(x, mae)
+        ax_1.tick_params(labelsize=16)
+        ax_1.set_xlabel('Training Round', fontsize=24)
+        ax_1.set_ylabel('Mean Absolute Error / eV', fontsize=24)
+        plt.savefig('mp_mae.png', dpi=600)
     
-    '''
-    #84-bulk
-    grid_name = '84-bulk'
-    cutoff = 3
-    latt_vec = [[3.23, 0, 0], [0, 5.54, 0], [0, 0, 5.61]]
-    frac_coor = grid.fraction_coor([.1, .1, .1])
-    grid.build_grid(grid_name, latt_vec, frac_coor, cutoff)
-    
-    #Visualize neighboring points of one point
-    num_near = 30
-    point_list = np.random.randint(0, len(frac_coor)-1, 6)
-    grid.show_neighboring_points(num_near, point_list, grid_name)
-    
-    #Put POSCAR in grid
-    test_file = os.listdir('data/grid/check/POSCAR_test')[3]
-    grid.test_in_grid(test_file, grid_name)
-    '''
+    energy_buffer = []
+    if True:
+        for i in range(0, 31):
+            dir = f'test/GaN_ZnO_3'
+            with open(f'{dir}/Energy-{i:03.0f}.dat', 'r') as f:
+                ct = f.readlines()
+            energy_file = np.array(rwtools.str_to_list2d(ct, str))
+            true_E = energy_file[:,1]
+            true_E = [bool(i) for i in true_E]
+            energys = energy_file[:,2][true_E]
+            energys = [float(i) for i in energys]
+            average = np.mean(energys)
+            energy_buffer.append(average)
+        x = np.arange(0, 31)
+        plt.rc('font', family='Times New Roman')
+        figure_1 = plt.figure(figsize=(8, 6))
+        ax_1 = figure_1.add_subplot(1, 1, 1)
+        ax_1.scatter(x, energy_buffer)
+        ax_1.tick_params(labelsize=16)
+        ax_1.set_xlabel('Recycling Round', fontsize=24)
+        ax_1.set_ylabel('Energy / eV', fontsize=24)
+        plt.savefig('energy.png', dpi=600)

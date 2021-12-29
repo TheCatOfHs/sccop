@@ -235,12 +235,5 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    import os
-    a = f'''n=`ls | grep POSCAR- | wc -l`
-            for i in `seq -f%03g 1 $n`
-            do
-                echo $i 
-            done
-        '''
-    os.system(a)
-    
+    a = [1, 2, 3]
+    print(a[:12])

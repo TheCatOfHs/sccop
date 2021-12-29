@@ -139,7 +139,7 @@ if __name__ == '__main__':
             valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
             ppm = PPModel(round+1, train_data, valid_data, valid_data)
             ppm.train_epochs()
-
+        
         #Train data added
         train_atom_fea += atom_fea[a:]
         train_nbr_fea += nbr_fea[a:]
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
         #VASP calculate
         sub_vasp.sub_VASP_job(round+1)
-    
+
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]
