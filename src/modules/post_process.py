@@ -177,7 +177,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 phonopy -f vasprun.xml-*
                                 phonopy band.conf
                                 phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
-                                python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat
+                                python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
                                 cp phonon-$p.dat {self.phonon_path}/phonon-$p.dat
                                 cp PHON.png {self.phonon_path}/phonon-$p.png
                                 cd ../

@@ -32,24 +32,44 @@ def read_phonopy(file_name):
         obj.write(phonon_str)
     return (phonon, k_sym)
 
-def plot_phonon(phonon, k_sym):
+def plot_phonon(phonon, k_sym, k_labels):
     font_set = {'family':'Times New Roman', 'weight':'normal', 'size':20}
-    sym_points = ['Z', '$\Gamma$', 'Y', 'A', 'B', 'D', 'E', 'C']
-    fig = plt.figure(figsize=(4,5))
+    # sym_points = ['Z', '$\Gamma$', 'Y', 'A', 'B', 'D', 'E', 'C']
+    fig = plt.figure()
     ax = fig.add_subplot(1, 1, 1)
     for i in range(phonon.shape[1]-1):
         ax.plot(phonon[:,0], phonon[:,i+1], color='black', linewidth=0.8)
     k = phonon[:,0]
     for i in k_sym:
         plt.plot([i, i], [-100, 100], '-', color='#c2ccd0', lw=0.9)
+    plt.plot([np.min(k), np.max(k)], [0, 0], '-', color='#c2ccd0', lw=0.9)
     ax.set_xlim([np.min(k), np.max(k)])
     ax.set_ylim([np.min(phonon[:,1:]), np.max(phonon[:,1:])+1])
     ax.set_ylabel('Frequency (THz)', font_set, fontsize=15)
     ax.set_xticks(k_sym)
     plt.xticks(fontsize=15)
     plt.yticks(fontsize=15)
-    ax.set_xticklabels(sym_points, fontsize=15)
+    ax.set_xticklabels(k_labels, fontsize=15)
     fig.subplots_adjust(left=0.18, right=0.95, top=0.95)
+
+def get_k_labels(band_conf):
+    with open(band_conf, 'r') as obj:
+        ct = obj.readlines()
+    all_labels = ct[3].split()[2:]
+    all_k = [path.split(' ') for path in ct[2][7:].split(',')]
+    k_num = []
+    for path in all_k:
+        while '' in path:
+            path.remove((''))
+        k_num.append(len(path)/3)
+    k_num = [int(i) for i in k_num]
+    for i in range(0, len(k_num)-1):
+        cur_ind = sum(k_num[0:i+1])-1
+        be_comb_ind = cur_ind + 1
+        all_labels[cur_ind] = f'{all_labels[cur_ind]}|{all_labels[be_comb_ind]}'
+        all_labels.pop(be_comb_ind)
+        k_num[i] -= 1
+    return all_labels
 
 def Open_screen():
     now_time = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -87,9 +107,11 @@ if __name__ == '__main__':
     if len(sys.argv) == 1:
         systemError('Please Input the Parameter: file name')
     file_name = sys.argv[1]
+    band_conf = sys.argv[2]
     if not os.path.exists(file_name):
         systemError('File {0} not found!'.format(file_name))
     phonon, k_sym = read_phonopy(file_name)
-    plot_phonon(phonon, k_sym)
+    k_labels = get_k_labels(band_conf)
+    plot_phonon(phonon, k_sym, k_labels)
     plt.savefig('PHON.png', dpi=500)
     plt.show()
