@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
         #VASP calculate
         sub_vasp.sub_VASP_job(round+1)
-
+    
     #Export searched POSCARS
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]

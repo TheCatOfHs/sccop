@@ -232,8 +232,9 @@ class SSHTools:
         if finish == file_num:
             flag = True
         return flag
-
+    
 
 if __name__ == '__main__':
-    a = [1, 2, 3]
-    print(a[:12])
+    from pymatgen.core.structure import Structure
+    a = Structure.from_file('test/GaN_ZnO_3/optim_strs/POSCAR-CCOP-019-134')
+    a.to(fmt='cif', filename='test.cif')
