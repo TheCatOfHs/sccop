@@ -144,7 +144,7 @@ if __name__ == '__main__':
     train_df = pd.read_csv('database/mp_20/train.csv')
     valid_df = pd.read_csv('database/mp_20/val.csv')
     test_df = pd.read_csv('database/mp_20/test.csv')
-
+    
     train_store = [train_df.iloc[idx] for idx in range(len(train_df))]
     train_cifs = [i['cif'] for i in train_store]
     train_energys = [i['formation_energy_per_atom'] for i in train_store]

@@ -10,7 +10,7 @@ from modules.utils import ListRWTools, SSHTools, system_echo
 
 
 class PostProcess(SSHTools, ListRWTools):
-    #process the crystals by VASP to relax the structures and calculate the properties
+    #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
         self.ccop_out_dir = f'~/ccop/{ccop_out_dir}'
@@ -20,14 +20,13 @@ class PostProcess(SSHTools, ListRWTools):
         self.energy_path = f'~/ccop/{energy_path}'
         self.pbe_band_path = f'~/ccop/{pbe_band_path}'
         self.phonon_path = f'~/ccop/{phonon_path}'
-        self.KPOINTS = '~/ccop/vasp/KPOINTS'
-        self.bandconf = '~/ccop/vasp/bandconf'
-        self.phonon_ks = '~/ccop/vasp/phonon_ks'
+        self.KPOINTS = f'~/ccop/{KPOINTS_file}'
+        self.bandconf = f'~/ccop/{bandconf_file}'
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists('vasp'):
             os.mkdir('vasp')
-            os.mkdir('vasp/KPOINTS')
-            os.mkdir('vasp/phonon-ks')
+            os.mkdir(KPOINTS_file)
+            os.mkdir(bandconf_file)
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
         if not os.path.exists(optim_vasp_path):
@@ -157,7 +156,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 cp ../../{vasp_files_path}/Phonon/* .
                                 cp {self.optim_strs_path}/$p POSCAR
                                 cp {self.bandconf}/band.conf-$p band.conf
-
+                                
                                 phonopy -d --dim="2 2 2"
                                 n=`ls | grep POSCAR- | wc -l`
                                 for i in `seq -f%03g 1 $n`
@@ -193,10 +192,76 @@ class PostProcess(SSHTools, ListRWTools):
         self.remove()
     
     def run_elastic(self):
-        pass
+        self.poscars = sorted(os.listdir(optim_strs_path))
+        self.num_poscar = len(self.poscars)
+        batches, nodes = self.assign_job(self.poscars)
+        system_echo(f'Start VASP calculation --- Elastic modulous')
+        for j, batch in enumerate(batches):
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            for p in {batch}
+                            do
+                                mkdir $p
+                                cd $p
+                                cp ../../{vasp_files_path}/Elastic/* .
+                                cp {self.optim_strs_path}/$p POSCAR
+                                
+                                DPT -v potcar
+                                cp INCAR_$i INCAR
+                                cp KPOINTS_$i KPOINTS
+                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                            
+                                DPT -elastic
+                                cp DPT.elastic_constant.dat {self.elastic_path}/elastic_constant-$p.dat
+                                cp DPT.modulous.dat {self.elastic_path}/modulous-$p.dat
+                                cd ../
+                                touch FINISH-$p
+                                mv FINISH-$p {self.optim_strs_path}/
+                                rm -r $p
+                            done
+                            '''
+            self.sub_jobs_with_ssh(nodes[j], shell_script)
+        while not self.is_done():
+            time.sleep(self.sleep_time)
+        system_echo(f'All job are completed --- Elastic modulous')
+        self.remove()
     
     def run_dielectric(self):
-        pass
+        self.poscars = sorted(os.listdir(optim_strs_path))
+        self.num_poscar = len(self.poscars)
+        batches, nodes = self.assign_job(self.poscars)
+        system_echo(f'Start VASP calculation --- Dielectric tensor')
+        for j, batch in enumerate(batches):
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            for p in {batch}
+                            do
+                                mkdir $p
+                                cd $p
+                                cp ../../{vasp_files_path}/Dielectric/* .
+                                cp {self.optim_strs_path}/$p POSCAR
+                                
+                                DPT -v potcar
+                                cp INCAR_$i INCAR
+                                cp KPOINTS_$i KPOINTS
+                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                                
+                                DPT -diele
+                                cp dielectric.dat {self.dielectric_path}/dielectric-$p.dat
+                                cp born_charges.dat {self.dielectric_path}/born_charges-$p.dat
+                                cd ../
+                                touch FINISH-$p
+                                mv FINISH-$p {self.optim_strs_path}/
+                                rm -r $p
+                            done
+                            '''
+            self.sub_jobs_with_ssh(nodes[j], shell_script)
+        while not self.is_done():
+            time.sleep(self.sleep_time)
+        system_echo(f'All job are completed --- Dielectric tensor')
+        self.remove()
     
     def sub_jobs_with_ssh(self, node, shell_script):
         """
@@ -266,7 +331,7 @@ class PostProcess(SSHTools, ListRWTools):
                 labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
                 k_points.insert(1, weights)
-                self.write_list2d_columns(f'{self.KPOINTS}/KPOINTS-{poscar}', k_points,
+                self.write_list2d_columns(f'{KPOINTS_file}/KPOINTS-{poscar}', k_points,
                                           ['{0:8.4f}', '{0:8.4f}', '{0:<16s}'], 
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif task == 'phonon':
@@ -290,16 +355,16 @@ class PostProcess(SSHTools, ListRWTools):
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
                                 [[' = '] for i in range(5)], 
                                 [['XXX'], ['2 2 2'], [band], [band_label], ['write']]] # output the file by columns
-                self.write_list2d_columns(f'{self.bandconf}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
+                self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
-                    
+    
     def test(self):
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, format='band')
+        self.get_k_points(self.poscars, task='band')
         
     def convert_special_k_labels(self, labels, sp, std):
         for i in range(len(std)):
@@ -310,7 +375,7 @@ class PostProcess(SSHTools, ListRWTools):
 def phonon_test():
     from pymatgen.core.structure import Structure
     from pymatgen.symmetry.kpath import KPathSeek
-    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-003-131')
+    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-005-131')
     kpath = KPathSeek(structure)
     points, labels = kpath.get_kpoints(line_density=1, coords_are_cartesian=False)
     while '' in labels:
@@ -330,25 +395,22 @@ def phonon_test():
         band = band if i == len(phonon_points)-1 else band + ','
     print(band)
     print(band_label)
-            
+    print(points)
+    print(labels)
+    
 
     
 if __name__ == '__main__':
-    # post = PostProcess()
+    from modules.pretrain import Initial
+    init = Initial()
+    init.update()
+    post = PostProcess()
     #post.run_optimization()
-    # post.get_energy()
-    # post.run_pbe_band()
-    #post.run_phonon()
+    #post.get_energy()
+    post.run_pbe_band()
+    post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
     #post.test()
     
-    phonon_test()
-   
-    '''
-    from pymatgen.core.structure import Structure
-    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-002-131')
-    kpath = KPathSeek(structure)
-    kpts = kpath.get_kpoints(line_density=1, coords_are_cartesian=False)
-    print(kpts)
-    '''
+    #phonon_test()

@@ -57,6 +57,8 @@ sing_point_energy_dir = 'libs/VASP_inputs/SinglePointEnergy'
 log_file = 'data/system.log'
 elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
+KPOINTS_file = 'vasp/KPOINTS'
+bandconf_file = 'vasp/bandconf'
 
 #Property file
 optim_vasp_path = f'{vasp_out_dir}/optim_strs'
