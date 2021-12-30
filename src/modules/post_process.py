@@ -192,6 +192,9 @@ class PostProcess(SSHTools, ListRWTools):
         self.remove()
     
     def run_elastic(self):
+        """
+        calculate elastic matrix
+        """
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
@@ -230,6 +233,9 @@ class PostProcess(SSHTools, ListRWTools):
         self.remove()
     
     def run_dielectric(self):
+        """
+        calculate dielectric matrix
+        """
         self.poscars = sorted(os.listdir(optim_strs_path))
         self.num_poscar = len(self.poscars)
         batches, nodes = self.assign_job(self.poscars)
@@ -323,6 +329,14 @@ class PostProcess(SSHTools, ListRWTools):
         system_echo(f'Energy file generated successfully!')
 
     def get_k_points(self, poscars, task):
+        """
+        search k path by Hinuma, Y., Pizzi, G., Kumagai, Y., Oba, F., & Tanaka, I. (2017)
+        
+        Parameters
+        ----------
+        poscars [str, 1d]: string list of poscars
+        task [str, 0d]: task name
+        """
         for poscar in poscars:
             structure = Structure.from_file(f'{optim_strs_path}/{poscar}')
             k_path = KPathSeek(structure)
@@ -351,8 +365,8 @@ class PostProcess(SSHTools, ListRWTools):
                 band, band_label = '', ''
                 for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
                     for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
-                        band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
-                        band_label = band_label + ' ${0}$'.format(point[1])
+                        band += '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
+                        band_label += ' ${0}$'.format(point[1])
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
                                 [[' = '] for i in range(5)], 
@@ -361,46 +375,25 @@ class PostProcess(SSHTools, ListRWTools):
             else:
                 system_echo(' Error: illegal parameter')
                 exit(0)
-    
-    def test(self):
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, task='band')
         
     def convert_special_k_labels(self, labels, sp, std):
+        """
+        convert special labels to LaTeX style
+        
+        Parameters
+        ----------
+        labels [str, 1d]: list of labels
+        sp [str, 1d]: special characters
+        std [str, 1d]: LaTeX characters
+
+        Returns
+        ----------
+        labels [str, 1d]: LaTeX labels
+        """
         for i in range(len(std)):
             labels = [std[i] if item == sp[i] else item for item in labels]
         return labels
-        
- 
-def phonon_test():
-    from pymatgen.core.structure import Structure
-    from pymatgen.symmetry.kpath import KPathSeek
-    structure = Structure.from_file('test/GaN_ZnO_2/optim_strs/POSCAR-CCOP-005-131')
-    kpath = KPathSeek(structure)
-    points, labels = kpath.get_kpoints(line_density=1, coords_are_cartesian=False)
-    while '' in labels:
-        points.pop(labels.index(''))
-        labels.remove('')
-    phonon_points = [[[points[0], labels[0]]]]
-    for i in range(1, len(labels)-2, 2):
-        phonon_points[-1].append([points[i], labels[i]])
-        if labels[i] != labels[i+1]:
-            phonon_points.append([[points[i+1], labels[i+1]]])
-    phonon_points[-1].append([points[-1], labels[-1]])
-    band, band_label = '', ''
-    for i, continuous_path in enumerate(phonon_points):
-        for point in continuous_path:
-            band = band + '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
-            band_label = band_label + ' ${0}$'.format(point[1])
-        band = band if i == len(phonon_points)-1 else band + ','
-    print(band)
-    print(band_label)
-    print(points)
-    print(labels)
     
-
     
 if __name__ == '__main__':
     from modules.pretrain import Initial
@@ -411,8 +404,5 @@ if __name__ == '__main__':
     #post.get_energy()
     post.run_pbe_band()
     post.run_phonon()
-    #post.run_elastic()
-    #post.run_dielectric()
-    #post.test()
-    
-    #phonon_test()
+    post.run_elastic()
+    post.run_dielectric()
