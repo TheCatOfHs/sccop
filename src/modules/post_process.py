@@ -212,7 +212,9 @@ class PostProcess(SSHTools, ListRWTools):
                                 cp KPOINTS_$i KPOINTS
                                 /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
                             
-                                DPT -elastic
+                                DPT --elastic
+                                python ../../libs/scripts/plot-poisson-ratio.py
+                                cp DPT.poisson.png {self.elastic_path}/poisson-$p.png
                                 cp DPT.elastic_constant.dat {self.elastic_path}/elastic_constant-$p.dat
                                 cp DPT.modulous.dat {self.elastic_path}/modulous-$p.dat
                                 cd ../
@@ -248,7 +250,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 cp KPOINTS_$i KPOINTS
                                 /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
                                 
-                                DPT -diele
+                                DPT --diele
                                 cp dielectric.dat {self.dielectric_path}/dielectric-$p.dat
                                 cp born_charges.dat {self.dielectric_path}/born_charges-$p.dat
                                 cd ../
