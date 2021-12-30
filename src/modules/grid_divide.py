@@ -19,6 +19,7 @@ class MultiDivide(ListRWTools, SSHTools):
     #divide grid by each node
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
+        self.prop_dir = f'~/ccop/{grid_prop_dir}'
     
     def assign(self, grid_origin, grid_mutate):
         """
@@ -38,13 +39,20 @@ class MultiDivide(ListRWTools, SSHTools):
             time.sleep(self.sleep_time)
         system_echo(f'Lattice mutate: {grid_mutate}')
         self.remove()
+        
+        self.unzip(grid_mutate)
+        while not self.is_done(1):
+            time.sleep(self.sleep_time)
+        self.remove()
+        system_echo(f'Unzip grid file')
+        
         for node in nodes:
             self.update_grid(grid_mutate, node)
         while not self.is_done(num_node):
             time.sleep(self.sleep_time)
         system_echo(f'Update grid of each node!')
         self.remove()
-    
+        
     def assign_node(self, num_grid, num_node):
         """
         assign divide jobs to nodes
@@ -75,23 +83,25 @@ class MultiDivide(ListRWTools, SSHTools):
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        frac_coor = f'{mutate:03.0f}_frac_coor.dat'
-        latt_vec = f'{mutate:03.0f}_latt_vec.dat'
-        nbr_dis = f'{mutate:03.0f}_nbr_dis.dat'
-        nbr_idx = f'{mutate:03.0f}_nbr_idx.dat'
-        local_prop_dir = f'~/ccop/{grid_prop_dir}'
+        file = [f'{mutate:03.0f}_frac_coor',
+                f'{mutate:03.0f}_latt_vec',
+                f'{mutate:03.0f}_nbr_dis',
+                f'{mutate:03.0f}_nbr_idx']
+        file = ' '.join(file)
         options = f'--origin {origin} --mutate {mutate}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
                         python src/modules/grid_divide.py {options}
                         cd {grid_prop_dir}
-                        mv {frac_coor} {local_prop_dir}/
-                        mv {latt_vec} {local_prop_dir}/
-                        mv {nbr_dis} {local_prop_dir}/
-                        mv {nbr_idx} {local_prop_dir}/
+                        for i in {file}
+                        do
+                            tar -zcf $i.tar.gz $i.dat
+                            mv $i.tar.gz {self.prop_dir}/
+                            rm $i.dat
+                        done
                         touch FINISH-{mutate}
-                        mv FINISH-{mutate} {local_prop_dir}/
+                        mv FINISH-{mutate} {self.prop_dir}/
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -102,20 +112,49 @@ class MultiDivide(ListRWTools, SSHTools):
         ip = f'node{node}'
         file = []
         for grid in grid_name:
-            file.append(f'{grid:03.0f}_frac_coor.dat '
-                        f'{grid:03.0f}_latt_vec.dat '
-                        f'{grid:03.0f}_nbr_dis.dat '
-                        f'{grid:03.0f}_nbr_idx.dat')
+            file.append(f'{grid:03.0f}_frac_coor.tar.gz '
+                        f'{grid:03.0f}_latt_vec.tar.gz '
+                        f'{grid:03.0f}_nbr_dis.tar.gz '
+                        f'{grid:03.0f}_nbr_idx.tar.gz')
         file = ' '.join(file)
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/{grid_prop_dir}
                         for i in {file}
                         do
-                            cp ~/ccop/{grid_prop_dir}/$i .
+                            cp {self.prop_dir}/$i .
+                            tar -zxf $i
+                            rm $i
                         done
                         touch FINISH-{ip}
-                        mv FINISH-{ip} ~/ccop/{grid_prop_dir}/
+                        mv FINISH-{ip} {self.prop_dir}/
+                        '''
+        self.ssh_node(shell_script, ip)
+    
+    def unzip(self, grid_name):
+        """
+        unzip grid property files on sfront
+        
+        Parameters
+        ----------
+        grid [int, 0d]: name of grid
+        """
+        ip = 'sfront'
+        file = []
+        for grid in grid_name:
+            file.append(f'{grid:03.0f}_frac_coor.tar.gz '
+                        f'{grid:03.0f}_latt_vec.tar.gz '
+                        f'{grid:03.0f}_nbr_dis.tar.gz '
+                        f'{grid:03.0f}_nbr_idx.tar.gz')
+        file = ' '.join(file)
+        shell_script = f'''
+                        #!/bin/bash
+                        cd {self.prop_dir}
+                        for i in {file}
+                        do
+                            tar -zxf $i
+                        done
+                        touch FINISH
                         '''
         self.ssh_node(shell_script, ip)
     
