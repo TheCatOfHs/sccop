@@ -277,6 +277,16 @@ class CrystalGraphConvNet(nn.Module):
         return torch.cat(summed_fea, dim=0)
 
 
+class FineTuneNet(CrystalGraphConvNet):
+    #Fine tune model
+    def __init__(self, orig_atom_fea_len, nbr_fea_len, 
+                 h_fea_len=128):
+        super(FineTuneNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
+        for para in self.parameters():
+            para.requires_grad = False
+        self.fc_out = nn.Linear(h_fea_len, 1)
+
+
 class PPModel(ListRWTools):
     #Train property predict model
     def __init__(self, round, train_data, valid_data, test_data, 
@@ -308,7 +318,7 @@ class PPModel(ListRWTools):
                                   self.batch_size, self.num_workers)
         sample_target = self.sample_data_list(self.train_data)
         normalizer = Normalizer(sample_target)
-        model = self.model_initial(self.train_data)
+        model = self.model_initial()
         model = DataParallel(model)
         model.to(self.device)
         criterion = nn.MSELoss()
@@ -329,7 +339,7 @@ class PPModel(ListRWTools):
             mae_buffer.append([mae_error])
         system_echo('-----------------Evaluate Model on Test Set-----------------')
         best_checkpoint = torch.load(f'{self.model_save_dir}/model_best.pth.tar')
-        model = self.model_initial(self.train_data)
+        model = self.model_initial()
         model.load_state_dict(best_checkpoint['state_dict'])
         model = DataParallel(model)
         model.to(self.device)
@@ -422,7 +432,7 @@ class PPModel(ListRWTools):
                               target, '{0:4.4f}')
         return mae_errors.avg
     
-    def model_initial(self, dataset):
+    def model_initial(self):
         """
         Initialize model by input len_atom_fea and nbr_fea_len
         
@@ -430,10 +440,9 @@ class PPModel(ListRWTools):
         ----------
         model [obj]: 
         """
-        structures, _ = dataset[0]
-        orig_atom_fea_len = structures[0].shape[-1]
-        nbr_fea_len = structures[1].shape[-1]
-        model = CrystalGraphConvNet(orig_atom_fea_len, nbr_fea_len)
+        checkpoint = torch.load(pretrain_model)
+        model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
+        model.load_state_dict(checkpoint['state_dict'])
         return model
     
     def sample_data_list(self, dataset):
@@ -555,65 +564,3 @@ class AverageMeter():
         self.sum += val*n
         self.count += n
         self.avg = self.sum/self.count
-
-    
-if __name__ == '__main__':
-    from modules.data_transfer import Transfer
-    round = 0
-    rwtools = ListRWTools()
-    pos_buffer, type_buffer, energy_buffer = [], [], []
-    train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
-    valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys = [], [], [], []
-    test_atom_fea, test_nbr_fea, test_nbr_fea_idx, test_energys = [], [], [], []
-    
-    #Data import
-    energy_file = rwtools.import_list2d(f'{vasp_out_dir}/Energy-{round:03.0f}.dat', str, numpy=True)
-    true_E = np.array(energy_file)[:,1]
-    true_E = [bool(i) for i in true_E]
-    energys = energy_file[:,2][true_E]
-    energys = [float(i) for i in energys]
-
-    atom_pos = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_pos_select.dat', int)
-    atom_type = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_type_select.dat', int)
-    atom_pos_right, atom_type_right = [], []
-    for i, correct in enumerate(true_E):
-        if correct:
-            atom_pos_right.append(atom_pos[i])
-            atom_type_right.append(atom_type[i])
-    grid_name = 1
-    transfer = Transfer(grid_name)
-    atom_fea, nbr_fea, nbr_fea_idx = transfer.batch(atom_pos_right, atom_type_right)
-
-    num_poscars = len(energys)
-    a = int(num_poscars*0.6)
-    b = int(num_poscars*0.8)
-
-    #Train data
-    train_atom_fea += atom_fea[0:a]
-    train_nbr_fea += nbr_fea[0:a]
-    train_nbr_fea_idx += nbr_fea_idx[0:a]
-    train_energys += energys[0:a]
-    energy_buffer += energys[0:a]
-    pos_buffer += atom_pos_right[0:a]
-    type_buffer += atom_type_right[0:a]
-        
-    #Validation data
-    valid_atom_fea += atom_fea[a:b]
-    valid_nbr_fea += nbr_fea[a:b]
-    valid_nbr_fea_idx += nbr_fea_idx[a:b]
-    valid_energys += energys[a:b]
-        
-    #Test data
-    test_atom_fea += atom_fea[b:]
-    test_nbr_fea += nbr_fea[b:]
-    test_nbr_fea_idx += nbr_fea_idx[b:]
-    test_energys += energys[b:]
-    
-    #Training
-    train = True
-    if train:
-        train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys)
-        valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
-        test_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
-        ppm = PPModel(round+1, train_data, valid_data, test_data)
-        ppm.train_epochs()
