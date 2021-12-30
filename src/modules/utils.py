@@ -232,9 +232,9 @@ class SSHTools:
         if finish == file_num:
             flag = True
         return flag
-    
+
 
 if __name__ == '__main__':
-    from pymatgen.core.structure import Structure
-    a = Structure.from_file('test/GaN_ZnO_3/optim_strs/POSCAR-CCOP-019-134')
-    a.to(fmt='cif', filename='test.cif')
+    from modules.grid_divide import MultiDivide
+    w = MultiDivide()
+    w.unzip([0])

@@ -4,13 +4,10 @@ import numpy as np
 import pandas as pd
 from pymatgen.core.structure import Structure
 
-import torch
-import torch.nn as nn
-
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
 from modules.utils import SSHTools, system_echo
-from modules.predict import PPMData, PPModel, CrystalGraphConvNet
+from modules.predict import PPMData, PPModel
 from modules.data_transfer import Transfer
 
 
@@ -27,7 +24,7 @@ class Initial(SSHTools):
             time.sleep(self.sleep_time)
         self.remove()
         system_echo('Each node consistent with main node')
-        
+    
     def update_with_ssh(self, node):
         """
         SSH to target node and update ccop
@@ -64,16 +61,6 @@ class Initial(SSHTools):
         os.system(f'rm data/FINISH*')
 
 
-class FineTuneNet(CrystalGraphConvNet):
-    #Fine tune model
-    def __init__(self, orig_atom_fea_len, nbr_fea_len, 
-                 h_fea_len=128):
-        super(FineTuneNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
-        for p in self.parameters():
-            p.requires_grad = False
-        self.fc_out = nn.Linear(h_fea_len, 1)
-
-
 class CIFTransfer(Transfer):
     #
     def __init__(self, 
@@ -94,7 +81,7 @@ class CIFTransfer(Transfer):
         
         Returns
         ----------
-        atom_fea [int, 2d, np]: 
+        atom_fea [int, 2d, np]: feature of atoms
         nbr_fea [float, 2d, np]: distance of near neighbor 
         nbr_idx [int, 2d, np]: index of near neighbor 
         """
@@ -120,7 +107,7 @@ class CIFTransfer(Transfer):
         
         Parameters
         ----------
-        cifs [str, 1d]: 
+        cifs [str, 1d]: string of structure in cif form
 
         Returns
         ----------
@@ -144,7 +131,7 @@ if __name__ == '__main__':
     train_df = pd.read_csv('database/mp_20/train.csv')
     valid_df = pd.read_csv('database/mp_20/val.csv')
     test_df = pd.read_csv('database/mp_20/test.csv')
-    
+
     train_store = [train_df.iloc[idx] for idx in range(len(train_df))]
     train_cifs = [i['cif'] for i in train_store]
     train_energys = [i['formation_energy_per_atom'] for i in train_store]
