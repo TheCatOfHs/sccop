@@ -296,7 +296,7 @@ class PostProcess(SSHTools, ListRWTools):
         remove FINISH flags
         """
         os.system(f'rm {optim_strs_path}/FINISH*')
-
+    
     def get_energy(self):
         """
         generate energy file of vasp outputs directory
