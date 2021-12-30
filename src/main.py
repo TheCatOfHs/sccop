@@ -214,4 +214,10 @@ if __name__ == '__main__':
     post.run_pbe_band()
     
     #Phonon spectrum
-    #post.run_phonon()
+    post.run_phonon()
+    
+    #Elastic matrix
+    post.run_elastic()
+    
+    #Dielectric matrix
+    post.run_dielectric()
