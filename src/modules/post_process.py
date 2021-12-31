@@ -13,15 +13,15 @@ class PostProcess(SSHTools, ListRWTools):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'~/ccop/{ccop_out_dir}'
-        self.optim_strs_path = f'~/ccop/{optim_strs_path}'
-        self.dielectric_path = f'~/ccop/{dielectric_path}'
-        self.elastic_path = f'~/ccop/{elastic_path}'
-        self.energy_path = f'~/ccop/{energy_path}'
-        self.pbe_band_path = f'~/ccop/{pbe_band_path}'
-        self.phonon_path = f'~/ccop/{phonon_path}'
-        self.KPOINTS = f'~/ccop/{KPOINTS_file}'
-        self.bandconf = f'~/ccop/{bandconf_file}'
+        self.ccop_out_dir = f'/local/ccop/{ccop_out_dir}'
+        self.optim_strs_path = f'/local/ccop/{optim_strs_path}'
+        self.dielectric_path = f'/local/ccop/{dielectric_path}'
+        self.elastic_path = f'/local/ccop/{elastic_path}'
+        self.energy_path = f'/local/ccop/{energy_path}'
+        self.pbe_band_path = f'/local/ccop/{pbe_band_path}'
+        self.phonon_path = f'/local/ccop/{phonon_path}'
+        self.KPOINTS = f'/local/ccop/{KPOINTS_file}'
+        self.bandconf = f'/local/ccop/{bandconf_file}'
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists('vasp'):
             os.mkdir('vasp')
@@ -55,7 +55,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/Optimization/* .
-                                cp {self.ccop_out_dir}/$p POSCAR
+                                scp {gpu_node}:{self.ccop_out_dir}/$p POSCAR
                                 
                                 cp POSCAR POSCAR_0
                                 rm FINISH
@@ -73,13 +73,13 @@ class PostProcess(SSHTools, ListRWTools):
                                     rm WAVECAR CHGCAR
                                 done
                                 if [ `cat CONTCAR|wc -l` -ne 0 ]; then
-                                    cp CONTCAR {self.optim_strs_path}/$p
-                                    cp vasp-3.vasp {self.energy_path}/out-$p
+                                    scp CONTCAR {gpu_node}:{self.optim_strs_path}/$p
+                                    scp vasp-3.vasp {gpu_node}:{self.energy_path}/out-$p
                                 fi
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.optim_strs_path}/
-                                rm -r $p
+                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                                rm -rf $p FINISH-$p
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
@@ -106,8 +106,8 @@ class PostProcess(SSHTools, ListRWTools):
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/ElectronicStructure/* .
-                                cp {self.optim_strs_path}/$p POSCAR
-                                cp {self.KPOINTS}/KPOINTS-$p KPOINTS_2
+                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                                scp {gpu_node}:{self.KPOINTS}/KPOINTS-$p KPOINTS_2
 
                                 for i in 1 2
                                 do
@@ -122,12 +122,12 @@ class PostProcess(SSHTools, ListRWTools):
                             
                                 DPT -b
                                 python ../../libs/scripts/plot-energy-band.py
-                                cp DPT.BAND.dat {self.pbe_band_path}/band-$p.dat
-                                cp DPT.band.png {self.pbe_band_path}/band-$p.png
+                                scp DPT.BAND.dat {gpu_node}:{self.pbe_band_path}/band-$p.dat
+                                scp DPT.band.png {gpu_node}:{self.pbe_band_path}/band-$p.png
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.optim_strs_path}/
-                                rm -r $p
+                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                                rm -rf $p FINISH-$p
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
@@ -154,8 +154,8 @@ class PostProcess(SSHTools, ListRWTools):
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/Phonon/* .
-                                cp {self.optim_strs_path}/$p POSCAR
-                                cp {self.bandconf}/band.conf-$p band.conf
+                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                                scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
                                 
                                 phonopy -d --dim="2 2 2"
                                 n=`ls | grep POSCAR- | wc -l`
@@ -177,12 +177,12 @@ class PostProcess(SSHTools, ListRWTools):
                                 phonopy band.conf
                                 phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
                                 python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
-                                cp phonon-$p.dat {self.phonon_path}/phonon-$p.dat
-                                cp PHON.png {self.phonon_path}/phonon-$p.png
+                                scp phonon-$p.dat {gpu_node}:{self.phonon_path}/phonon-$p.dat
+                                scp PHON.png {gpu_node}:{self.phonon_path}/phonon-$p.png
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.optim_strs_path}/
-                                rm -r $p
+                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                                rm -rf $p FINISH-$p
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
@@ -208,22 +208,22 @@ class PostProcess(SSHTools, ListRWTools):
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/Elastic/* .
-                                cp {self.optim_strs_path}/$p POSCAR
+                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                                 
                                 DPT -v potcar
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
-                            
+                                
                                 DPT --elastic
                                 python ../../libs/scripts/plot-poisson-ratio.py
-                                cp DPT.poisson.png {self.elastic_path}/poisson-$p.png
-                                cp DPT.elastic_constant.dat {self.elastic_path}/elastic_constant-$p.dat
-                                cp DPT.modulous.dat {self.elastic_path}/modulous-$p.dat
+                                scp DPT.poisson.png {gpu_node}:{self.elastic_path}/poisson-$p.png
+                                scp DPT.elastic_constant.dat {gpu_node}:{self.elastic_path}/elastic_constant-$p.dat
+                                scp DPT.modulous.dat {gpu_node}:{self.elastic_path}/modulous-$p.dat
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.optim_strs_path}/
-                                rm -r $p
+                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                                rm -rf $p FINISH-$p
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
@@ -249,7 +249,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 mkdir $p
                                 cd $p
                                 cp ../../{vasp_files_path}/Dielectric/* .
-                                cp {self.optim_strs_path}/$p POSCAR
+                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                                 
                                 DPT -v potcar
                                 cp INCAR_$i INCAR
@@ -257,12 +257,12 @@ class PostProcess(SSHTools, ListRWTools):
                                 /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
                                 
                                 DPT --diele
-                                cp dielectric.dat {self.dielectric_path}/dielectric-$p.dat
-                                cp born_charges.dat {self.dielectric_path}/born_charges-$p.dat
+                                scp dielectric.dat {gpu_node}:{self.dielectric_path}/dielectric-$p.dat
+                                scp born_charges.dat {gpu_node}:{self.dielectric_path}/born_charges-$p.dat
                                 cd ../
                                 touch FINISH-$p
-                                mv FINISH-$p {self.optim_strs_path}/
-                                rm -r $p
+                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                                rm -rf $p FINISH-$p
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)

@@ -235,6 +235,6 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    from modules.grid_divide import MultiDivide
-    w = MultiDivide()
-    w.unzip([0])
+    print(np.mod(0, 2))
+    print(np.mod(3, 2))
+    print(np.mod(4, 2))

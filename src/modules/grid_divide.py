@@ -19,7 +19,7 @@ class MultiDivide(ListRWTools, SSHTools):
     #divide grid by each node
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.prop_dir = f'~/ccop/{grid_prop_dir}'
+        self.prop_dir = f'/local/ccop/{grid_prop_dir}'
     
     def assign(self, grid_origin, grid_mutate):
         """
@@ -33,26 +33,28 @@ class MultiDivide(ListRWTools, SSHTools):
         num_node = len(nodes)
         num_grid = len(grid_mutate)
         node_assign = self.assign_node(num_grid, num_node)
+        
         for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
             self.sub_divide(origin, mutate, node)
         while not self.is_done(num_grid):
             time.sleep(self.sleep_time)
+        self.zip_file_name(grid_mutate)
         system_echo(f'Lattice mutate: {grid_mutate}')
         self.remove()
         
-        self.unzip(grid_mutate)
-        while not self.is_done(1):
-            time.sleep(self.sleep_time)
-        self.remove()
-        system_echo(f'Unzip grid file')
+        self.send_grid_to_cpu()
+        system_echo(f'Update grid of each node')
         
         for node in nodes:
-            self.update_grid(grid_mutate, node)
+            self.unzip_grid_on_cpu(node)
         while not self.is_done(num_node):
             time.sleep(self.sleep_time)
-        system_echo(f'Update grid of each node!')
+        system_echo(f'Unzip grid file on CPUs')
         self.remove()
         
+        self.unzip_grid_on_gpu()
+        system_echo(f'Unzip grid file on GPU')
+
     def assign_node(self, num_grid, num_node):
         """
         assign divide jobs to nodes
@@ -83,10 +85,10 @@ class MultiDivide(ListRWTools, SSHTools):
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        file = [f'{mutate:03.0f}_frac_coor',
-                f'{mutate:03.0f}_latt_vec',
-                f'{mutate:03.0f}_nbr_dis',
-                f'{mutate:03.0f}_nbr_idx']
+        file = [f'{mutate:03.0f}_frac_coor.dat',
+                f'{mutate:03.0f}_latt_vec.dat',
+                f'{mutate:03.0f}_nbr_dis.dat',
+                f'{mutate:03.0f}_nbr_idx.dat']
         file = ' '.join(file)
         options = f'--origin {origin} --mutate {mutate}'
         shell_script = f'''
@@ -94,67 +96,85 @@ class MultiDivide(ListRWTools, SSHTools):
                         cd /local/ccop/
                         python src/modules/grid_divide.py {options}
                         cd {grid_prop_dir}
-                        for i in {file}
-                        do
-                            tar -zcf $i.tar.gz $i.dat
-                            mv $i.tar.gz {self.prop_dir}/
-                            rm $i.dat
-                        done
+                        
+                        tar -zcf {mutate}.tar.gz {file}
+                        scp {mutate}.tar.gz {gpu_node}:{self.prop_dir}/
+                        rm {file} {mutate}.tar.gz
+
                         touch FINISH-{mutate}
-                        mv FINISH-{mutate} {self.prop_dir}/
+                        scp FINISH-{mutate} {gpu_node}:{self.prop_dir}/
+                        rm FINISH-{mutate}
                         '''
         self.ssh_node(shell_script, ip)
     
-    def update_grid(self, grid_name, node):
+    def zip_file_name(self, grid_name):
         """
-        SSH to target node and update grid
+        zip file is used to transport between nodes
+        
+        Parameters
+        ----------
+        grid_name [int, 1d]: name of new grid 
         """
-        ip = f'node{node}'
         file = []
         for grid in grid_name:
-            file.append(f'{grid:03.0f}_frac_coor.tar.gz '
-                        f'{grid:03.0f}_latt_vec.tar.gz '
-                        f'{grid:03.0f}_nbr_dis.tar.gz '
-                        f'{grid:03.0f}_nbr_idx.tar.gz')
-        file = ' '.join(file)
+            file.append(f'{grid}.tar.gz')
+        self.zip_file = ' '.join(file)
+    
+    def send_grid_to_cpu(self):
+        """
+        update grid of each node
+        """
+        cpu_nodes = [f'node{i}' for i in nodes]
+        cpu_nodes = ' '.join(cpu_nodes)
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/{grid_prop_dir}
-                        for i in {file}
+                        cd {grid_prop_dir}/
+                        for i in {cpu_nodes}
                         do
-                            cp {self.prop_dir}/$i .
+                            for j in {self.zip_file}
+                            do
+                                scp $j $i:{self.prop_dir}/
+                            done
+                        done
+                        '''
+        os.system(shell_script)
+    
+    def unzip_grid_on_gpu(self):
+        """
+        unzip grid property on gpu node
+        """
+        shell_script = f'''
+                        #!/bin/bash
+                        cd {grid_prop_dir}/
+                        for i in {self.zip_file}
+                        do
                             tar -zxf $i
                             rm $i
                         done
-                        touch FINISH-{ip}
-                        mv FINISH-{ip} {self.prop_dir}/
                         '''
-        self.ssh_node(shell_script, ip)
+        os.system(shell_script)
     
-    def unzip(self, grid_name):
+    def unzip_grid_on_cpu(self, node):
         """
-        unzip grid property files on sfront
+        unzip grid property files of each node
         
         Parameters
         ----------
         grid [int, 0d]: name of grid
         """
-        ip = 'sfront'
-        file = []
-        for grid in grid_name:
-            file.append(f'{grid:03.0f}_frac_coor.tar.gz '
-                        f'{grid:03.0f}_latt_vec.tar.gz '
-                        f'{grid:03.0f}_nbr_dis.tar.gz '
-                        f'{grid:03.0f}_nbr_idx.tar.gz')
-        file = ' '.join(file)
+        ip = f'node{node}'
         shell_script = f'''
                         #!/bin/bash
                         cd {self.prop_dir}
-                        for i in {file}
+                        for i in {self.zip_file}
                         do
                             tar -zxf $i
+                            rm $i
                         done
-                        touch FINISH
+                        
+                        touch FINISH-{node}
+                        scp FINISH-{node} {gpu_node}:{self.prop_dir}/
+                        rm FINISH-{node}
                         '''
         self.ssh_node(shell_script, ip)
     

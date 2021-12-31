@@ -83,13 +83,13 @@ class SubVASP(ListRWTools, SSHTools):
                             mkdir $p
                             cd $p
                             cp ../../{vasp_files_path}/SinglePointEnergy/* .
-                            cp ~/ccop/{poscar_dir}/{round}/$p POSCAR
+                            scp {gpu_node}:/local/ccop/{poscar_dir}/{round}/$p POSCAR
                             DPT -v potcar
                             date > $p.out
                             echo 'VASP-JOB-FINISH' >> $p.out
                             /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
                             date >> $p.out
-                            cp $p.out ~/ccop/{vasp_out_dir}/{round}-{repeat}/.
+                            scp $p.out {gpu_node}:/local/ccop/{vasp_out_dir}/{round}-{repeat}/
                             cd ../
                             rm -r $p
                         done
@@ -174,4 +174,4 @@ class SubVASP(ListRWTools, SSHTools):
     
 if __name__ == "__main__":
     sub_vasp = SubVASP()
-    sub_vasp.sub_VASP_job(31)
+    sub_vasp.sub_VASP_job(0)

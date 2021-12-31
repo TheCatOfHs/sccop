@@ -12,18 +12,6 @@ python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy, pymatgen
 
 进入ccop，运行python src/main.py
 
-## 测试样本
-
-test/Optim：POSCAR-015-002-131 
-            POSCAR-022-001-131
-            POSCAR-024-002-131
-
-需求：
-
-1. Optim文件夹中的POSCAR做结构优化
-2. 计算声子谱，能带等性质
-3. 通过ssh连接到指定节点调用程序计算，ssh工具在utils.py，节点信息在global_var.py
-
 ## VASP计算
 
 目前可计算
@@ -35,3 +23,13 @@ test/Optim：POSCAR-015-002-131
 注：所有计算的布里渊区路径均由pymatgen生成
 依赖包：pymatgen seekpath
 pip install seekpath
+
+
+## 节点通信
+节点之间需要ssh免密连接
+配置方法：
+主节点：cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+更新密钥：
+scp ~/.ssh/authorized_keys root@ip1:~/.ssh/
+scp ~/.ssh/authorized_keys root@ip2:~/.ssh/
+...

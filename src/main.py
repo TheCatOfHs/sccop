@@ -32,12 +32,14 @@ if __name__ == '__main__':
     mul_transfer = MultiGridTransfer()
     workers = MultiWorkers()
     sub_vasp = SubVASP()
+    system_echo('### Begin Crystal Combinatorial Optimization Program ###')
     
     #Build grid
     build = True
     if build:
         grid.build_grid(0, latt_vec, grain, cutoff)
     grid_store = [0]
+    system_echo('Initial grid build')
     
     #Update each node
     init.update()
@@ -84,7 +86,8 @@ if __name__ == '__main__':
             os.mkdir(f'{search_dir}/000')
         select = Select(round)
         select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
-        
+    
+
         #VASP calculate
         sub_vasp.sub_VASP_job(round)
     
@@ -157,10 +160,13 @@ if __name__ == '__main__':
             grid_pool = np.array(grid_buffer)[min_idx] 
             
             #Generate mutate lattice grid
-            if round > 0:
-                mutate = True
-            else:
+            if round == 0:
                 mutate = False
+            else:
+                if np.mod(round, 2) == 0:
+                    mutate = True
+                else:
+                    mutate = False
             if mutate:
                 num_grid = len(grid_store)
                 grid_origin = np.random.choice(grid_pool, num_mutate)
@@ -204,6 +210,7 @@ if __name__ == '__main__':
     select = Select(num_round)
     grid_buffer = [[i] for i in grid_buffer]
     select.export(pos_buffer, type_buffer, grid_buffer)
+    system_echo('### End Crystal Combinatorial Optimization Program ###')
     
     #Optimization
     post = PostProcess()

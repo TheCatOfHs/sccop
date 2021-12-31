@@ -36,6 +36,7 @@ ratio_max_std = 0.2
 
 #Server
 num_gpus = 2
+gpu_node = 'node151'
 nodes = [131, 132, 133, 134, 135, 136]
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 

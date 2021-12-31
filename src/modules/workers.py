@@ -99,9 +99,11 @@ class MultiWorkers(ListRWTools, SSHTools):
                         cd /local/ccop/
                         mkdir {self.sh_save_dir}
                         cd data/
-                        cp -rf ~/ccop/{self.model_save_dir} ppmodel/
+                        scp -r {gpu_node}:/local/ccop/{self.model_save_dir} ppmodel/
+                        
                         touch FINISH-{ip}
-                        mv FINISH-{ip} ~/ccop/{self.sh_save_dir}/
+                        scp FINISH-{ip} {gpu_node}:/local/ccop/{self.sh_save_dir}/
+                        rm FINISH-{ip}
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -199,14 +201,15 @@ class MultiWorkers(ListRWTools, SSHTools):
         pos_dat = f'{self.sh_save_dir}/pos-{postfix}'
         type_dat = f'{self.sh_save_dir}/type-{postfix}'
         energy_dat = f'{self.sh_save_dir}/energy-{postfix}'
-        local_sh_save_dir = f'~/ccop/{self.sh_save_dir}'
+        local_sh_save_dir = f'/local/ccop/{self.sh_save_dir}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
                         python src/modules/search.py {options}
-                        mv {pos_dat} {local_sh_save_dir}/
-                        mv {type_dat} {local_sh_save_dir}/
-                        mv {energy_dat} {local_sh_save_dir}/
+                        scp {pos_dat} {gpu_node}:{local_sh_save_dir}/
+                        scp {type_dat} {gpu_node}:{local_sh_save_dir}/
+                        scp {energy_dat} {gpu_node}:{local_sh_save_dir}/
+                        rm {pos_dat} {type_dat} {energy_dat}
                         '''
         self.ssh_node(shell_script, ip)
         

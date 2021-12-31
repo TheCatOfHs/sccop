@@ -17,15 +17,20 @@ class Initial(SSHTools):
         self.sleep_time = sleep_time
     
     def update(self):
+        """
+        update cpu nodes
+        """
         num_node = len(nodes)
         for node in nodes:
-            self.update_with_ssh(node)
+            self.create_work_dir(node)
         while not self.is_done(num_node):
             time.sleep(self.sleep_time)
         self.remove()
+        
+        self.copy_file_to_nodes()
         system_echo('Each node consistent with main node')
     
-    def update_with_ssh(self, node):
+    def create_work_dir(self, node):
         """
         SSH to target node and update ccop
         """
@@ -36,14 +41,26 @@ class Initial(SSHTools):
                         rm -rf ccop/
                         mkdir ccop/
                         cd ccop/
-                        cp -r ~/ccop/data .
-                        cp -r ~/ccop/libs .
-                        cp -r ~/ccop/src .
                         mkdir vasp/
                         touch FINISH-{ip}
-                        mv FINISH-{ip} ~/ccop/data/
+                        scp FINISH-{ip} {gpu_node}:/local/ccop/data/
+                        rm FINISH-{ip}
                         '''
         self.ssh_node(shell_script, ip)
+    
+    def copy_file_to_nodes(self):
+        cpu_nodes = [f'node{i}' for i in nodes]
+        cpu_nodes = ' '.join(cpu_nodes)
+        shell_script = f'''
+                        #!/bin/bash
+                        for i in {cpu_nodes}
+                        do
+                            scp -r data $i:/local/ccop/
+                            scp -r libs $i:/local/ccop/
+                            scp -r src $i:/local/ccop/
+                        done
+                        '''
+        os.system(shell_script)
     
     def is_done(self, file_num):
         """
@@ -107,7 +124,7 @@ class CIFTransfer(Transfer):
         
         Parameters
         ----------
-        cifs [str, 1d]: string of structure in cif form
+        cifs [str, 1d]: string of structure in cif
 
         Returns
         ----------
