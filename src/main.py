@@ -87,7 +87,6 @@ if __name__ == '__main__':
         select = Select(round)
         select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
     
-
         #VASP calculate
         sub_vasp.sub_VASP_job(round)
     

@@ -305,7 +305,7 @@ class PPModel(ListRWTools):
         self.model_save_dir = f'{model_dir}/{round:03.0f}'
         if not os.path.exists(self.model_save_dir):
             os.mkdir(self.model_save_dir)
-        
+    
     def train_epochs(self):
         """
         Train model by epochs
@@ -316,9 +316,11 @@ class PPModel(ListRWTools):
                                   self.batch_size, self.num_workers)
         test_loader = get_loader(self.test_data, 
                                   self.batch_size, self.num_workers)
+        checkpoint = torch.load(pretrain_model)
         sample_target = self.sample_data_list(self.train_data)
         normalizer = Normalizer(sample_target)
-        model = self.model_initial()
+        normalizer.load_state_dict(checkpoint['normalizer'])
+        model = self.model_initial(checkpoint)
         model = DataParallel(model)
         model.to(self.device)
         criterion = nn.MSELoss()
@@ -339,8 +341,7 @@ class PPModel(ListRWTools):
             mae_buffer.append([mae_error])
         system_echo('-----------------Evaluate Model on Test Set-----------------')
         best_checkpoint = torch.load(f'{self.model_save_dir}/model_best.pth.tar')
-        model = self.model_initial()
-        model.load_state_dict(best_checkpoint['state_dict'])
+        model = self.model_initial(best_checkpoint)
         model = DataParallel(model)
         model.to(self.device)
         self.validate(test_loader, model, criterion, epoch, normalizer, best_model_test=True)
@@ -432,15 +433,18 @@ class PPModel(ListRWTools):
                               target, '{0:4.4f}')
         return mae_errors.avg
     
-    def model_initial(self):
+    def model_initial(self, checkpoint):
         """
         Initialize model by input len_atom_fea and nbr_fea_len
+        
+        Parameters
+        ----------
+        checkpoint []:
         
         Returns
         ----------
         model [obj]: 
         """
-        checkpoint = torch.load(pretrain_model)
         model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model.load_state_dict(checkpoint['state_dict'])
         return model

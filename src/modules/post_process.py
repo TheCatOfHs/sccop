@@ -1,8 +1,10 @@
 import os, sys
 import time
 import re
+
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.kpath import KPathSeek
+from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -41,10 +43,11 @@ class PostProcess(SSHTools, ListRWTools):
         '''
         optimize configurations from low to high level
         '''
+        self.find_symmetry_structure(ccop_out_dir)
         files = sorted(os.listdir(ccop_out_dir))
-        self.poscars = [i for i in files if re.match(r'POSCAR', i)]
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        num_poscar = len(poscars)
+        batches, nodes = self.assign_job(poscars)
         system_echo(f'Start VASP calculation --- Optimization')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -83,19 +86,20 @@ class PostProcess(SSHTools, ListRWTools):
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done():
+        while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
+        self.find_symmetry_structure(optim_strs_path)
         system_echo(f'All job are completed --- Optimization')
-        self.remove()
+        self.remove(optim_strs_path)
 
     def run_pbe_band(self):
         '''
         calculate energy band of optimied configurations
         '''
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, task='band')
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        batches, nodes = self.assign_job(poscars)
+        self.get_k_points(poscars, task='band')
         system_echo(f'Start VASP calculation --- Electronic structure')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -119,7 +123,7 @@ class PostProcess(SSHTools, ListRWTools):
                                     cp IBZKPT IBZKPT_$i
                                     cp EIGENVAL EIGENVAL_$i
                                 done
-                            
+
                                 DPT -b
                                 python ../../libs/scripts/plot-energy-band.py
                                 scp DPT.BAND.dat {gpu_node}:{self.pbe_band_path}/band-$p.dat
@@ -131,19 +135,19 @@ class PostProcess(SSHTools, ListRWTools):
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done():
+        while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Electronic structure')
-        self.remove()
+        self.remove(optim_strs_path)
         
     def run_phonon(self):
         '''
         calculate phonon spectrum of optimized configurations
         '''
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
-        self.get_k_points(self.poscars, task='phonon')
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        batches, nodes = self.assign_job(poscars)
+        self.get_k_points(poscars, task='phonon')
         system_echo(f'Start VASP calculation --- Phonon spectrum')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -186,18 +190,18 @@ class PostProcess(SSHTools, ListRWTools):
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done():
+        while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Phonon spectrum')
-        self.remove()
+        self.remove(optim_strs_path)
     
     def run_elastic(self):
         """
         calculate elastic matrix
         """
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        batches, nodes = self.assign_job(poscars)
         system_echo(f'Start VASP calculation --- Elastic modulous')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -214,7 +218,7 @@ class PostProcess(SSHTools, ListRWTools):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
-                                
+
                                 DPT --elastic
                                 python ../../libs/scripts/plot-poisson-ratio.py
                                 scp DPT.poisson.png {gpu_node}:{self.elastic_path}/poisson-$p.png
@@ -227,18 +231,18 @@ class PostProcess(SSHTools, ListRWTools):
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done():
+        while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Elastic modulous')
-        self.remove()
+        self.remove(optim_strs_path)
     
     def run_dielectric(self):
         """
         calculate dielectric matrix
         """
-        self.poscars = sorted(os.listdir(optim_strs_path))
-        self.num_poscar = len(self.poscars)
-        batches, nodes = self.assign_job(self.poscars)
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        batches, nodes = self.assign_job(poscars)
         system_echo(f'Start VASP calculation --- Dielectric tensor')
         for j, batch in enumerate(batches):
             shell_script = f'''
@@ -266,10 +270,10 @@ class PostProcess(SSHTools, ListRWTools):
                             done
                             '''
             self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done():
+        while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Dielectric tensor')
-        self.remove()
+        self.remove(optim_strs_path)
     
     def sub_jobs_with_ssh(self, node, shell_script):
         """
@@ -283,28 +287,6 @@ class PostProcess(SSHTools, ListRWTools):
         ip = f'node{node}'
         self.ssh_node(shell_script, ip)
         
-    def is_done(self):
-        """
-        if the vasp calculation is completed, return True
-        
-        Parameters
-        ----------
-        num_poscars [int, 0d]: number of POSCARs
-        
-        Returns
-        ----------
-        flag [bool, 0d]: whether all nodes are done
-        """
-        command = f'ls -l {optim_strs_path} | grep FINISH | wc -l'
-        flag = self.check_num_file(command, self.num_poscar)
-        return flag
-    
-    def remove(self):
-        """
-        remove FINISH flags
-        """
-        os.system(f'rm {optim_strs_path}/FINISH*')
-    
     def get_energy(self):
         """
         generate energy file of vasp outputs directory
@@ -394,6 +376,22 @@ class PostProcess(SSHTools, ListRWTools):
             labels = [std[i] if item == sp[i] else item for item in labels]
         return labels
     
+    def find_symmetry_structure(self, dir):
+        """
+        find symmetry unit of structure
+
+        Parameters
+        ----------
+        dir [str, 0d]: structure directory 
+        """
+        files = sorted(os.listdir(dir))
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        for i in poscars:
+            str = Structure.from_file(f'{dir}/{i}')
+            anal_str = SpacegroupAnalyzer(str)
+            sym_str = anal_str.get_refined_structure()
+            sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
+        
     
 if __name__ == '__main__':
     from modules.pretrain import Initial
@@ -404,5 +402,5 @@ if __name__ == '__main__':
     #post.get_energy()
     post.run_pbe_band()
     post.run_phonon()
-    post.run_elastic()
-    post.run_dielectric()
+    #post.run_elastic()
+    #post.run_dielectric()

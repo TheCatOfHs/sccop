@@ -78,6 +78,10 @@ class Initial(SSHTools):
         os.system(f'rm data/FINISH*')
 
 
+def put_into_grid():
+    pass
+
+
 class CIFTransfer(Transfer):
     #
     def __init__(self, 

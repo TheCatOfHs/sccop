@@ -6,7 +6,8 @@ plt.rc('font', family='Times New Roman')
 plt.rcParams['xtick.direction'] = 'in'
 plt.rcParams['ytick.direction'] = 'in'
 # 使用tex字符
-plt.rc('text', usetex=True)
+#plt.rc('text', usetex=True)
+
 def read_phonopy(file_name):
     with open(file_name, 'r') as obj:
         file_content = obj.readlines()

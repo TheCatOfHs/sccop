@@ -218,6 +218,33 @@ class SSHTools:
         batches.append(' '.join(store))
         return batches, nodes
     
+    def is_done(self, dir, file_num):
+        """
+        if the vasp calculation is completed, return True
+        
+        Parameters
+        ----------
+        dir [str, 0d]: directory used to store flags
+        file_num [int, 0d]: number of file
+        
+        Returns
+        ----------
+        flag [bool, 0d]: whether all nodes are done
+        """
+        command = f'ls -l {dir} | grep FINISH | wc -l'
+        flag = self.check_num_file(command, file_num)
+        return flag
+    
+    def remove(self, dir):
+        """
+        remove FINISH flags
+        
+        Parameters
+        ----------
+        dir [str, 0d]: directory used to store flags
+        """
+        os.system(f'rm {dir}/FINISH*')
+    
     def check_num_file(self, command, file_num):
         """
         If shell is completed, return True
@@ -235,6 +262,8 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    print(np.mod(0, 2))
-    print(np.mod(3, 2))
-    print(np.mod(4, 2))
+    from pymatgen.core.structure import Structure
+    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+    a = Structure.from_file('POSCAR-CCOP-001-131')
+    b = SpacegroupAnalyzer(a)
+    b.get_refined_structure().to(fmt='poscar', filename='POSCAR')
