@@ -17,7 +17,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         self.wait_time = wait_time
         self.sleep_time = sleep_time
     
-    def assign_job(self, round, repeat, init_pos, init_type, init_grid):
+    def search(self, round, num_paths, init_pos, init_type, init_grid):
         """
         Assign jobs by the following files
         initial_pos_XXX.dat: initial position by line
@@ -29,7 +29,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         Parameters
         ----------
         round [int, 0d]: searching round
-        repeat [int, 0d]: repeat times of each node
+        num_paths [int, 0d]: number of search path
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
         init_grid [int, 2d]: initial grid name
@@ -37,29 +37,31 @@ class MultiWorkers(ListRWTools, SSHTools):
         self.round = f'{round:03.0f}'
         self.sh_save_dir = f'{search_dir}/{self.round}'
         self.model_save_dir = f'{model_dir}/{self.round}'
-        self.generate_job(round, repeat, init_pos,
+        self.generate_job(round, num_paths, init_pos,
                           init_type, init_grid)
         pos, type, job = self.read_job()
-        update_flag = len(nodes) + 3
-        worker_flag = len(nodes) + 3*len(job) + 3
         system_echo('Get the job node!')
         for node in nodes:
             self.update_with_ssh(node)
-        while not self.is_done(update_flag):
+        while not self.is_done(self.sh_save_dir, len(nodes)):
             time.sleep(self.sleep_time)
+        self.remove(self.sh_save_dir)
         system_echo('Successful update each node!')
+        
         self.sub_job_to_workers(pos, type, job)
         system_echo('Successful assign works to workers!')
-        job_finish = self.woker_monitor(pos, type, job, worker_flag)
+        job_finish = self.worker_monitor(pos, type, job, num_paths)
+        
         atom_pos, atom_type, grid_name = self.collect(job_finish)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
+        
         self.write_list2d(f'{self.sh_save_dir}/atom_pos.dat', 
                           atom_pos, '{0:3.0f}')
         self.write_list2d(f'{self.sh_save_dir}/atom_type.dat',
                           atom_type, '{0:3.0f}')
         self.write_list2d(f'{self.sh_save_dir}/grid_name.dat',
                           grid_name, '{0:3.0f}')
-        self.remove()
+        self.remove_all_path()
     
     def generate_job(self, round, num_paths, init_pos, 
                      init_type, init_grid):
@@ -69,7 +71,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         Parameters
         ----------
         round [int, 0d]: searching round
-        num_paths [int, 0d]: number of searching path
+        num_paths [int, 0d]: number of search path
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
         init_grid [int, 2d]: initial grid name
@@ -107,77 +109,6 @@ class MultiWorkers(ListRWTools, SSHTools):
                         '''
         self.ssh_node(shell_script, ip)
     
-    def woker_monitor(self, pos, type, job, worker_flag):
-        """
-        monitor workers whether have done
-        
-        Parameters
-        ----------
-        pos [str, 1d, np]: initial pos
-        type [str, 1d, np]: initial type
-        job [str, 2d, np]: jobs assigned to nodes
-        worker_flag [int, 0d]: number of file if finish
-
-        Returns
-        ----------
-        job_finish [str, 2d, np]: finished jobs
-        """
-        time_counter, repeat_counter = 0, 0
-        while not self.is_done(worker_flag):
-            time.sleep(self.sleep_time)
-            time_counter += 1
-            if time_counter > self.wait_time:
-                fail_path, exist_path = self.find_fail_jobs(job)
-                num_fail = len(fail_path)
-                pos_fail, type_fail, job_fail = \
-                    pos[fail_path], type[fail_path], job[fail_path]
-                self.sub_job_to_workers(pos_fail, type_fail, job_fail)
-                repeat_counter += 1
-                time_counter = self.wait_time/2
-                system_echo(f'Failure searching jobs: {num_fail}')
-            if repeat_counter == self.repeat:
-                break 
-        if repeat_counter == 0:
-            job_finish = job
-        else:
-            job_finish = job[exist_path]
-        return job_finish
-    
-    def find_fail_jobs(self, job):
-        """
-        find ssh failure jobs
-        
-        Parameters
-        ----------
-        pos [str, 1d, np]: all initial pos
-        type [str, 1d, np]: all initial type
-        job [str, 2d, np]: all jobs
-
-        Returns
-        ----------
-        fail_path [int, 1d, np]: index of failure jobs
-        exist_path [int, 1d, np]: index of success jobs
-        """
-        all_path = [int(i) for i in job[:,1]]
-        shell_script = f'ls {self.sh_save_dir} | grep energy'
-        ct = os.popen(shell_script).read()
-        exist_path = [int(i.split('-')[2]) for i in ct.split()]
-        fail_path = np.setdiff1d(all_path, exist_path)
-        return fail_path, sorted(exist_path)
-    
-    def sub_job_to_workers(self, pos, type, job):
-        """
-        sub searching jobs to nodes
-
-        Parameters
-        ----------
-        pos [str, 1d, np]: initial pos
-        type [str, 1d, np]: initial type
-        job [str, 2d, np]: jobs assgined to nodes
-        """
-        for atom_pos, atom_type, assign in zip(pos, type, job):
-            self.sampling_with_ssh(atom_pos, atom_type, *assign)
-    
     def sampling_with_ssh(self, atom_pos, atom_type,
                           round, path, node, grid_name, model_name):
         """
@@ -198,21 +129,112 @@ class MultiWorkers(ListRWTools, SSHTools):
                   f'--round {round} --path {path} --node {node} ' \
                   f'--grid_name {grid_name} --model_name {model_name}'
         postfix = f'{self.round}-{path.zfill(3)}-{node}.dat'
-        pos_dat = f'{self.sh_save_dir}/pos-{postfix}'
-        type_dat = f'{self.sh_save_dir}/type-{postfix}'
-        energy_dat = f'{self.sh_save_dir}/energy-{postfix}'
+        search_dat = f'pos-{postfix} type-{postfix} energy-{postfix}'
         local_sh_save_dir = f'/local/ccop/{self.sh_save_dir}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
                         python src/modules/search.py {options}
-                        scp {pos_dat} {gpu_node}:{local_sh_save_dir}/
-                        scp {type_dat} {gpu_node}:{local_sh_save_dir}/
-                        scp {energy_dat} {gpu_node}:{local_sh_save_dir}/
-                        rm {pos_dat} {type_dat} {energy_dat}
+                        
+                        cd {self.sh_save_dir}
+                        tar -zcf {path}.tar.gz {search_dat}
+                        scp {path}.tar.gz {gpu_node}:{local_sh_save_dir}
+                        
+                        touch FINISH-{path}
+                        scp FINISH-{path} {gpu_node}:{local_sh_save_dir}
+                        rm FINISH-{path} {search_dat}
                         '''
         self.ssh_node(shell_script, ip)
+    
+    def worker_monitor(self, pos, type, job, num_paths):
+        """
+        monitor workers whether have done
         
+        Parameters
+        ----------
+        pos [str, 1d, np]: initial pos
+        type [str, 1d, np]: initial type
+        job [str, 2d, np]: jobs assigned to nodes
+        num_paths [int, 0d]: number of search path
+        
+        Returns
+        ----------
+        job_finish [str, 2d, np]: finished jobs
+        """
+        exist_path = np.arange(num_paths)
+        time_counter, repeat_counter = 0, 0
+        while not self.is_done(self.sh_save_dir, num_paths):
+            time.sleep(self.sleep_time)
+            time_counter += 1
+            if time_counter > self.wait_time:
+                fail_path, exist_path = self.find_fail_jobs(job)
+                num_fail = len(fail_path)
+                pos_fail, type_fail, job_fail = \
+                    pos[fail_path], type[fail_path], job[fail_path]
+                self.sub_job_to_workers(pos_fail, type_fail, job_fail)
+                repeat_counter += 1
+                time_counter = self.wait_time/2
+                system_echo(f'Failure searching jobs: {num_fail}')
+            if repeat_counter == self.repeat:
+                break 
+        self.unzip(exist_path)
+        job_finish = job[exist_path]
+        return job_finish
+    
+    def find_fail_jobs(self, job):
+        """
+        find ssh failure jobs
+        
+        Parameters
+        ----------
+        job [str, 2d, np]: all jobs
+
+        Returns
+        ----------
+        fail_path [int, 1d, np]: index of failure jobs
+        exist_path [int, 1d, np]: index of success jobs
+        """
+        all_path = [int(i) for i in job[:,1]]
+        shell_script = f'ls {self.sh_save_dir} | grep tar.gz'
+        ct = os.popen(shell_script).read().split()
+        exist_path = [int(i.split('.')[0]) for i in ct]
+        fail_path = np.setdiff1d(all_path, exist_path)
+        return fail_path, sorted(exist_path)
+    
+    def sub_job_to_workers(self, pos, type, job):
+        """
+        sub searching jobs to nodes
+
+        Parameters
+        ----------
+        pos [str, 1d, np]: initial pos
+        type [str, 1d, np]: initial type
+        job [str, 2d, np]: jobs assgined to nodes
+        """
+        for atom_pos, atom_type, assign in zip(pos, type, job):
+            self.sampling_with_ssh(atom_pos, atom_type, *assign)
+    
+    def unzip(self, exist_path):
+        """
+        unzip files of finish path
+        
+        Parameters
+        ----------
+        exist_path [int, 1d, np]: successful searching path
+        """
+        zip_file = [f'{i}.tar.gz' for i in exist_path]
+        zip_file = ' '.join(zip_file)
+        shell_script = f'''
+                        #!/bin/bash
+                        cd {self.sh_save_dir}
+                        for i in {zip_file}
+                        do
+                            tar -zxf $i
+                            rm $i
+                        done
+                        '''
+        os.system(shell_script)
+    
     def collect(self, job):
         """
         collect searching results of each worker
@@ -299,25 +321,16 @@ class MultiWorkers(ListRWTools, SSHTools):
             list = [item.replace('\n','') for item in ct]
         return np.array(list)
     
-    def is_done(self, file_num):
+    def remove_all_path(self):
         """
-        If shell is completed, return True
-        
-        Returns
-        ----------
-        file_num [int, 0d]: number of file
+        remove file of each path
         """
-        command = f'ls -l {self.sh_save_dir} | grep ^- | wc -l'
-        flag = self.check_num_file(command, file_num)
-        return flag
-    
-    def remove(self):
-        os.system(f'''
-                  rm {self.sh_save_dir}/pos*
-                  rm {self.sh_save_dir}/type*
-                  rm {self.sh_save_dir}/energy*
-                  rm {self.sh_save_dir}/FINISH*
-                  ''')
+        shell_script = f'''
+                        cd {self.sh_save_dir}
+                        rm FINISH*
+                        rm pos* type* energy*
+                        '''
+        os.system(shell_script)
     
     
 class Search(ListRWTools):
@@ -540,6 +553,6 @@ if __name__ == '__main__':
     atom_type = [[i for i in [30, 6, 7, 29] for _ in range(2)] for _ in range(num_initial)]
     grid_name = np.ones(num_initial, int)
     
-    repeat = 1
+    num_paths = 6
     workers = MultiWorkers()
-    workers.assign_job(1, repeat, atom_pos, atom_type, grid_name)
+    workers.search(28, num_paths, atom_pos, atom_type, grid_name)

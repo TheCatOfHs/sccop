@@ -218,21 +218,21 @@ class SSHTools:
         batches.append(' '.join(store))
         return batches, nodes
     
-    def is_done(self, dir, file_num):
+    def is_done(self, dir, num_file):
         """
         if the vasp calculation is completed, return True
         
         Parameters
         ----------
         dir [str, 0d]: directory used to store flags
-        file_num [int, 0d]: number of file
+        num_file [int, 0d]: number of file
         
         Returns
         ----------
         flag [bool, 0d]: whether all nodes are done
         """
         command = f'ls -l {dir} | grep FINISH | wc -l'
-        flag = self.check_num_file(command, file_num)
+        flag = self.check_num_file(command, num_file)
         return flag
     
     def remove(self, dir):

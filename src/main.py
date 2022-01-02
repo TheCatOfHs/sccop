@@ -193,8 +193,8 @@ if __name__ == '__main__':
                     init_grid[i] = mut_latt[i]
                     mut_counter += 1
             system_echo(f'Lattice mutate number: {mut_counter}')
-            workers.assign_job(round+1, num_paths, init_pos, init_type, init_grid)
-
+            workers.search(round+1, num_paths, init_pos, init_type, init_grid)
+        
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
