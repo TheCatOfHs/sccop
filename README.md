@@ -10,7 +10,7 @@ python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy, pymatgen
 
 ## 程序启动
 
-进入ccop，运行python src/main.py
+连接GPU节点ssh node151，进入/local/ccop，挂起nohup python src/main.py >& log&
 
 ## VASP计算
 
@@ -34,6 +34,6 @@ pip install seekpath
 
 更新密钥：
 
-1. scp ~/.ssh/authorized_keys root@ip1:~/.ssh/
-2. scp ~/.ssh/authorized_keys root@ip2:~/.ssh/
+1. scp \~/.ssh/authorized_keys root@ip1:~/.ssh/
+2. scp \~/.ssh/authorized_keys root@ip2:~/.ssh/
 3. ...
