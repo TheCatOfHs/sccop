@@ -27,9 +27,13 @@ pip install seekpath
 
 ## 节点通信
 节点之间需要ssh免密连接
+
 配置方法：
-主节点：cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+
+1. 主节点：cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+
 更新密钥：
-scp ~/.ssh/authorized_keys root@ip1:~/.ssh/
-scp ~/.ssh/authorized_keys root@ip2:~/.ssh/
-...
+
+1. scp ~/.ssh/authorized_keys root@ip1:~/.ssh/
+2. scp ~/.ssh/authorized_keys root@ip2:~/.ssh/
+3. ...

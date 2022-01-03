@@ -153,6 +153,21 @@ def batch_divide(dataset_list):
             assign_plan.append(counter)
     return assign_plan
 
+def batch_balance(num, batch_size, tuple):
+    """
+    assure that data can assign to gpus
+    
+    Parameters
+    ----------
+    num_crys []: 
+    batch_size []: 
+    tuple []:
+    """
+    num_last_batch = np.mod(num, batch_size)
+    if num_last_batch < num_gpus:
+        for i in tuple:
+            del i[-num_last_batch:]
+
 def get_loader(dataset, batch_size, num_workers, shuffle=False):
     """
     Returen data loader
@@ -217,7 +232,7 @@ class ConvLayer(nn.Module):
         
 
 class CrystalGraphConvNet(nn.Module):
-    #
+    #Crystal Graph Convolutional Neural Network
     def __init__(self, orig_atom_fea_len, nbr_fea_len,
                  atom_fea_len=64, n_conv=3, h_fea_len=128, n_h=1):
         super(CrystalGraphConvNet, self).__init__()
@@ -239,14 +254,14 @@ class CrystalGraphConvNet(nn.Module):
 
         Parameters
         ----------
-        atom_fea [float, , tensor]: 
-        nbr_fea [float, , tensor]: 
-        nbr_fea_idx [int, , tensor]: 
-        crystal_atom_idx [int, , tensor]: 
+        atom_fea [float, 2d, tensor]: 
+        nbr_fea [float, 3d, tensor]: 
+        nbr_fea_idx [int, 2d, tensor]: 
+        crystal_atom_idx [int, 3d, tensor]: 
 
         Returns
         ----------
-        out [float, , tensor]: 
+        out [float, 2d, tensor]: 
         """
         atom_fea = self.embedding(atom_fea)
         for conv_func in self.convs:
@@ -265,8 +280,8 @@ class CrystalGraphConvNet(nn.Module):
 
         Parameters
         ----------
-        atom_fea [float, , tensor]: 
-        crystal_atom_idx [int, , tensor]: 
+        atom_fea [float, 2d, tensor]: 
+        crystal_atom_idx [int, 2d, tensor]: 
 
         Returns
         ----------
@@ -280,25 +295,29 @@ class CrystalGraphConvNet(nn.Module):
 class FineTuneNet(CrystalGraphConvNet):
     #Fine tune model
     def __init__(self, orig_atom_fea_len, nbr_fea_len, 
-                 h_fea_len=128):
+                 h_fea_len=128, n_h=1):
         super(FineTuneNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
         for para in self.parameters():
             para.requires_grad = False
+        if n_h > 1:
+            self.fcs = nn.ModuleList([nn.Linear(h_fea_len, h_fea_len)
+                                      for _ in range(n_h-1)])
+            self.softpluses = nn.ModuleList([nn.Softplus()
+                                             for _ in range(n_h-1)])
         self.fc_out = nn.Linear(h_fea_len, 1)
 
 
 class PPModel(ListRWTools):
     #Train property predict model
     def __init__(self, round, train_data, valid_data, test_data, 
-                 lr=1e-2, batch_size=128, epochs=120, num_workers=0, 
-                 num_gpus=2, print_feq=10):
+                 lr=1e-2, num_workers=0, num_gpus=2, print_feq=10):
         self.device = torch.device('cuda')
         self.train_data = train_data
         self.valid_data = valid_data
         self.test_data = test_data
         self.lr = lr
-        self.batch_size = batch_size
-        self.epochs = epochs
+        self.batch_size = train_batchsize
+        self.epochs = train_epochs
         self.num_workers = num_workers
         self.num_gpus = num_gpus
         self.print_feq = print_feq
@@ -321,6 +340,7 @@ class PPModel(ListRWTools):
         normalizer = Normalizer(sample_target)
         normalizer.load_state_dict(checkpoint['normalizer'])
         model = self.model_initial(checkpoint)
+        #model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model = DataParallel(model)
         model.to(self.device)
         criterion = nn.MSELoss()
@@ -498,10 +518,16 @@ class PPModel(ListRWTools):
 
 class Normalizer():
     #Normalize a Tensor and restore it later
-    def __init__(self, tensor):
-        self.mean = torch.mean(tensor)
-        self.std = torch.std(tensor)
-
+    def __init__(self, tensor, num_database=500):
+        self.num_old = num_database
+        self.num_add = len(tensor)
+        if self.num_add == 0:
+            self.mean = torch.tensor(0)
+            self.std = torch.tensor(0)
+        else:
+            self.mean = torch.mean(tensor)
+            self.std = torch.std(tensor)
+        
     def norm(self, tensor):
         """
         Normalize target tensor
@@ -512,7 +538,7 @@ class Normalizer():
         
         Returns
         ----------
-        []: 
+        normalized tensor [tensor, 2d] 
         """
         return (tensor - self.mean) / self.std
 
@@ -522,11 +548,11 @@ class Normalizer():
         
         Parameters
         ----------
-        normed_tensor [tensor]: normalized target tensor
+        normed_tensor [tensor, 2d]: normalized target tensor
         
         Returns
         ----------
-        []: 
+        denormed tensor [tensor, 2d]
         """
         return normed_tensor * self.std + self.mean
 
@@ -536,7 +562,7 @@ class Normalizer():
         
         Returns
         ----------
-        []: 
+        mean and std [dict]
         """
         return {'mean': self.mean, 'std': self.std}
 
@@ -548,10 +574,19 @@ class Normalizer():
         ----------
         state_dict [dict]: mean and std in dictionary
         """
-        self.mean = state_dict['mean']
-        self.std = state_dict['std']
-            
-            
+        mean = state_dict['mean']
+        std = state_dict['std']
+        num_total = self.num_old + self.num_add
+        w1 = self.num_old/num_total
+        w2 = self.num_add/num_total
+        new_mean = w1*mean + w2*self.mean
+        
+        var1 = std**2 + (new_mean-mean)**2
+        var2 = self.std**2 + (new_mean-self.mean)**2
+        self.std = torch.sqrt(w1*var1 + w2*var2)
+        self.mean = new_mean
+        
+        
 class AverageMeter():
     #Computes and stores the average and current value
     def __init__(self):
@@ -568,3 +603,16 @@ class AverageMeter():
         self.sum += val*n
         self.count += n
         self.avg = self.sum/self.count
+        
+
+if __name__ == '__main__':
+    checkpoint = torch.load('test/model_best.pth.tar', map_location='cpu')
+    model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
+    model.load_state_dict(checkpoint['state_dict'])
+    
+    normalizer = Normalizer(torch.tensor([]))
+    print(normalizer.std)
+    print(normalizer.mean)
+    normalizer.load_state_dict(checkpoint['normalizer'])
+    print(checkpoint['normalizer'])
+    print(normalizer.std)

@@ -78,10 +78,6 @@ class Initial(SSHTools):
         os.system(f'rm data/FINISH*')
 
 
-def put_into_grid():
-    pass
-
-
 class CIFTransfer(Transfer):
     #
     def __init__(self, 
@@ -174,7 +170,7 @@ if __name__ == '__main__':
     valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
     test_data = PPMData(test_atom_fea, test_nbr_fea, test_nbr_fea_idx, test_energys)
     
-    ppm = PPModel(100, train_data, valid_data, test_data)
+    ppm = PPModel(100, train_data, valid_data, test_data, batch_size=128)
     ppm.train_epochs()
     
     

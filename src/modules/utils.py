@@ -262,8 +262,19 @@ class SSHTools:
 
 
 if __name__ == '__main__':
+    from collections import Counter
     from pymatgen.core.structure import Structure
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    a = Structure.from_file('POSCAR-CCOP-001-131')
-    b = SpacegroupAnalyzer(a)
-    b.get_refined_structure().to(fmt='poscar', filename='POSCAR')
+    file = os.listdir('test/000')
+    sym = []
+    for i in file:
+        a = Structure.from_file(f'test/000/{i}')
+        b = SpacegroupAnalyzer(a)
+        n = len(b.get_symmetry_operations())
+        sym.append(n)
+        print(b.get_symmetry_operations())
+        break
+    print(sym)
+    print(Counter(sym))
+    
+    print(128//2)

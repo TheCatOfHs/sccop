@@ -12,20 +12,22 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_round = 30
+num_round = 20
 num_poscars = 30
 
 #Training
+train_batchsize = 128
+train_epochs = 120
 orig_atom_fea_len = 92
 nbr_bond_fea_len = 41
 
 #Searching
 T = .1
 decay = .99
-steps = 150
+steps = 300
 num_paths = 180
 min_bond = 1.8
-wait_time = 300
+wait_time = 240
 
 #Sample Select
 num_models = 5

@@ -10,7 +10,7 @@ sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
 from modules.data_transfer import Transfer
 from modules.utils import ListRWTools, SSHTools, system_echo
-from modules.predict import CrystalGraphConvNet
+from modules.predict import CrystalGraphConvNet, batch_balance
 from modules.predict import DataParallel, Normalizer
 from modules.predict import PPMData, get_loader
 
@@ -26,7 +26,7 @@ class Select(ListRWTools, SSHTools):
         self.poscar_save_dir = f'{poscar_dir}/{self.round}'
         self.sh_save_dir = f'{search_dir}/{self.round}'
         self.device = torch.device('cuda')
-        self.normalizer = Normalizer(torch.tensor([[0.]]))
+        self.normalizer = Normalizer(torch.tensor([]))
         if not os.path.exists(self.poscar_save_dir):
             os.mkdir(self.poscar_save_dir)
         
@@ -93,10 +93,8 @@ class Select(ListRWTools, SSHTools):
         pos = self.str_to_list2d(pos_str, int)
         type = self.str_to_list2d(type_str, int)
         num_crys = len(pos)
-        num_last_batch = np.mod(num_crys, self.batch_size)
-        if num_last_batch < num_gpus:
-            for i in (pos, type, grid):
-                del i[-num_last_batch:]
+        tuple = (pos, type, grid)
+        batch_balance(num_crys, self.batch_size, tuple)
         return pos, type, grid
     
     def dataloader(self, atom_pos, atom_type, grid_name):
@@ -403,7 +401,7 @@ class Select(ListRWTools, SSHTools):
                      'Direct']
         frac_coor = transfer.frac_coor[pos]
         frac_coor_str = self.list2d_to_str(frac_coor, '{0:4.6f}')
-        file = f'{self.poscar_save_dir}/POSCAR-{self.round}-{num:03.0f}-{node}'
+        file = f'{self.poscar_save_dir}/POSCAR-{self.round}-{num:04.0f}-{node}'
         POSCAR = head_str + latt_str + compn_str + frac_coor_str
         with open(file, 'w') as f:
             f.write('\n'.join(POSCAR))

@@ -129,7 +129,7 @@ class MultiWorkers(ListRWTools, SSHTools):
                   f'--round {round} --path {path} --node {node} ' \
                   f'--grid_name {grid_name} --model_name {model_name}'
         postfix = f'{self.round}-{path.zfill(3)}-{node}.dat'
-        search_dat = f'pos-{postfix} type-{postfix} energy-{postfix}'
+        pos, type, energy = f'pos-{postfix}', f'type-{postfix}', f'energy-{postfix}'
         local_sh_save_dir = f'/local/ccop/{self.sh_save_dir}'
         shell_script = f'''
                         #!/bin/bash
@@ -137,12 +137,13 @@ class MultiWorkers(ListRWTools, SSHTools):
                         python src/modules/search.py {options}
                         
                         cd {self.sh_save_dir}
-                        tar -zcf {path}.tar.gz {search_dat}
-                        scp {path}.tar.gz {gpu_node}:{local_sh_save_dir}
-                        
-                        touch FINISH-{path}
-                        scp FINISH-{path} {gpu_node}:{local_sh_save_dir}
-                        rm FINISH-{path} {search_dat}
+                        if [ -f {pos} -a -f {type} -a -f {energy} ]; then
+                            tar -zcf {path}.tar.gz {pos} {type} {energy}
+                            scp {path}.tar.gz {gpu_node}:{local_sh_save_dir}
+                            touch FINISH-{path}
+                            scp FINISH-{path} {gpu_node}:{local_sh_save_dir}
+                            rm FINISH-{path} {pos} {type} {energy} {path}.tar.gz
+                        fi
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -338,11 +339,11 @@ class Search(ListRWTools):
     def __init__(self, round, grid_name):
         self.transfer = Transfer(grid_name)
         self.device = torch.device('cpu')
-        self.normalizer = Normalizer(torch.tensor([[0.]]))
+        self.normalizer = Normalizer(torch.tensor([]))
         self.round = f'{round:03.0f}'
         self.model_save_dir = f'{model_dir}/{self.round}'
         self.sh_save_dir = f'{search_dir}/{self.round}'
-        
+    
     def explore(self, pos, type, model_name, path, node):
         """
         simulated annealing

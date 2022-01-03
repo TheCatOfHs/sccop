@@ -9,7 +9,7 @@ from modules.data_transfer import MultiGridTransfer
 from modules.sample_select import Select
 from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
-from modules.predict import PPMData, PPModel
+from modules.predict import PPMData, PPModel, batch_balance
 from modules.utils import ListRWTools, system_echo
 from modules.post_process import PostProcess
 
@@ -81,6 +81,9 @@ if __name__ == '__main__':
         idx = np.arange(num_sample)
         system_echo(f'Random sampling number: {num_sample}')
         
+        #Symmetry check
+        
+        
         #Select samples
         if not os.path.exists(f'{search_dir}/000'):
             os.mkdir(f'{search_dir}/000')
@@ -116,7 +119,10 @@ if __name__ == '__main__':
         #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
         
         num_poscars = len(energys)
-        a = int(num_poscars*0.6)        
+        a = int(num_poscars*0.6)
+        num_crys = a + len(train_energys)
+        tuple = (atom_pos_right, atom_type_right, grid_name_right, energys)
+        batch_balance(num_crys, train_batchsize, tuple)       
         atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
 
         #Training data
@@ -194,7 +200,7 @@ if __name__ == '__main__':
                     mut_counter += 1
             system_echo(f'Lattice mutate number: {mut_counter}')
             workers.search(round+1, num_paths, init_pos, init_type, init_grid)
-        
+
         #Sample
         atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
         atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
