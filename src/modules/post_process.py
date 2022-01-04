@@ -347,7 +347,7 @@ class PostProcess(SSHTools, ListRWTools):
                 band, band_label = '', ''
                 for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
                     for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
-                        band += '  {0}'.format(' '.join([f'{item:6.3f}' for item in point[0]]))
+                        band += '  {0}'.format(' '.join([f'{item:.3f}' for item in point[0]]))
                         band_label += ' ${0}$'.format(point[1])
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
@@ -391,7 +391,7 @@ class PostProcess(SSHTools, ListRWTools):
             anal_str = SpacegroupAnalyzer(str)
             sym_str = anal_str.get_refined_structure()
             sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
-        
+    
     
 if __name__ == '__main__':
     from modules.pretrain import Initial
