@@ -32,7 +32,7 @@ class MultiDivide(ListRWTools, SSHTools):
         """
         num_node = len(nodes)
         num_grid = len(grid_mutate)
-        node_assign = self.assign_node(num_grid, num_node)
+        node_assign = self.assign_node(num_grid)
         
         for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
             self.sub_divide(origin, mutate, node)
@@ -54,25 +54,6 @@ class MultiDivide(ListRWTools, SSHTools):
         
         self.unzip_grid_on_gpu()
         system_echo(f'Unzip grid file on GPU')
-
-    def assign_node(self, num_grid, num_node):
-        """
-        assign divide jobs to nodes
-
-        Returns
-        ----------
-        node_assign [int, 1d]: vasp job list of nodes
-        """
-        num_assign, node_assign = 0, []
-        while not num_assign == num_grid:
-            left = num_grid - num_assign
-            assign = left//num_node
-            if assign == 0:
-                node_assign = node_assign + nodes[:left]
-            else:
-                node_assign = [i for i in nodes for _ in range(assign)]
-            num_assign = len(node_assign)
-        return sorted(node_assign)
     
     def sub_divide(self, origin, mutate, node):
         """
@@ -300,13 +281,13 @@ class GridDivide(ListRWTools):
         frac_coor [float, 2d]: fraction coordinate of grid
         """
         head = ['E = -1', '1']
-        latt_vec_str = self.list2d_to_str(latt_vec, '{0:4.4f}')
+        latt_vec_str = self.list2d_to_str(latt_vec, '{0:8.4f}')
         compn = ['H', f'{len(frac_coor)}', 'Direct']
-        frac_coor_str = self.list2d_to_str(frac_coor, '{0:4.4f}')
+        frac_coor_str = self.list2d_to_str(frac_coor, '{0:8.4f}')
         POSCAR = head + latt_vec_str + compn + frac_coor_str
         with open(self.poscar, 'w') as f:
             f.write('\n'.join(POSCAR))
-    
+        
 
 if __name__ == '__main__':
     grid_origin = args.origin
@@ -317,4 +298,8 @@ if __name__ == '__main__':
     rwtools = ListRWTools()
     latt_file = f'{grid_prop_dir}/{grid_origin:03.0f}_latt_vec.dat'
     latt_vec = rwtools.import_list2d(latt_file, float, numpy=True)
-    grid.build_grid(grid_mutate, latt_vec, grain, cutoff, mutate=True)
+    if grid_origin == grid_mutate:
+        mutate = False
+    else:
+        mutate = True
+    grid.build_grid(grid_mutate, latt_vec, grain, cutoff, mutate=mutate)

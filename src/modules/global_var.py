@@ -2,7 +2,6 @@ import os
 
 #Grid
 cutoff = 6
-latt_vec = [[5., 0, 0], [0, 5., 0], [0, 0, 5.]]
 grain = [.1, .1, .1]
 
 #Mutate

@@ -1,5 +1,6 @@
 import os, sys
 import time
+from typing import List
 import paramiko
 import numpy as np
 
@@ -180,10 +181,10 @@ class SSHTools:
         num_nodes = len(nodes)
         num_assign, node_assign = 0, []
         while not num_assign == num_jobs:
-            jobs = num_jobs - num_assign
-            assign = jobs//num_nodes
+            left = num_jobs - num_assign
+            assign = left//num_nodes
             if assign == 0:
-                node_assign = node_assign + nodes[:jobs]
+                node_assign = node_assign + nodes[:left]
             else:
                 node_assign = [i for i in nodes for _ in range(assign)]
             num_assign = len(node_assign)
@@ -262,19 +263,4 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    from collections import Counter
-    from pymatgen.core.structure import Structure
-    from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-    file = os.listdir('test/000')
-    sym = []
-    for i in file:
-        a = Structure.from_file(f'test/000/{i}')
-        b = SpacegroupAnalyzer(a)
-        n = len(b.get_symmetry_operations())
-        sym.append(n)
-        print(b.get_symmetry_operations())
-        break
-    print(sym)
-    print(Counter(sym))
-    
-    print(128//2)
+    print('ok')

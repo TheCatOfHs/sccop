@@ -61,7 +61,6 @@ class PostProcess(SSHTools, ListRWTools):
                                 scp {gpu_node}:{self.ccop_out_dir}/$p POSCAR
                                 
                                 cp POSCAR POSCAR_0
-                                rm FINISH
                                 DPT -v potcar
                                 for i in 1 2 3
                                 do
@@ -392,9 +391,8 @@ class PostProcess(SSHTools, ListRWTools):
             sym_str = anal_str.get_refined_structure()
             sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
     
-    
 if __name__ == '__main__':
-    from modules.pretrain import Initial
+    from modules.initial import Initial
     init = Initial()
     init.update()
     post = PostProcess()

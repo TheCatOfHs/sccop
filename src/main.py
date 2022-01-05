@@ -3,7 +3,7 @@ import numpy as np
 import time
 
 from modules.global_var import *
-from modules.pretrain import Initial
+from modules.initial import Initial, UpdateNodes
 from modules.grid_divide import MultiDivide, GridDivide
 from modules.data_transfer import MultiGridTransfer
 from modules.sample_select import Select
@@ -25,6 +25,7 @@ def delete_duplicates():
 
 
 if __name__ == '__main__':
+    update = UpdateNodes()
     init = Initial()
     grid = GridDivide()
     divide = MultiDivide()
@@ -37,12 +38,13 @@ if __name__ == '__main__':
     #Build grid
     build = True
     if build:
-        grid.build_grid(0, latt_vec, grain, cutoff)
+        grid_origin = np.arange(len(file))
+        divide.assign(grid_origin, grid_origin)
     grid_store = [0]
     system_echo('Initial grid build')
     
     #Update each node
-    init.update()
+    update.update()
     
     #Lattice mutate
     num_grid = len(grid_store)
