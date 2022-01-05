@@ -12,7 +12,7 @@ def read_phonopy(file_name):
     with open(file_name, 'r') as obj:
         file_content = obj.readlines()
     
-    k_sym = np.array([float(item) for item in file_content[1].split()[2:]])
+    k_sym = np.array([float(item) for item in file_content[1].split()[1:]])
     data = [[float(item) for item in line.split()] for line in file_content[2:]]
     data_new = []
     for line in data:
@@ -74,6 +74,7 @@ def get_k_labels(band_conf):
         all_labels[cur_ind] = f'{all_labels[cur_ind]}|{all_labels[be_comb_ind]}'
         all_labels.pop(be_comb_ind)
         k_num[i] -= 1
+    print(all_labels)
     return all_labels
 
 def Open_screen():
@@ -117,6 +118,7 @@ if __name__ == '__main__':
         systemError('File {0} not found!'.format(file_name))
     phonon, k_sym = read_phonopy(file_name)
     k_labels = get_k_labels(band_conf)
+    print(k_sym)
     plot_phonon(phonon, k_sym, k_labels)
     plt.savefig('PHON.png', dpi=500)
-    plt.show()
+    # plt.show()
