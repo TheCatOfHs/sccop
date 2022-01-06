@@ -306,7 +306,7 @@ class PostProcess(SSHTools, ListRWTools):
             cur_E = energy/atom_num
             system_echo(f'{out}, {cur_E:18.9f}')
             energys.append([out, cur_E])
-        self.write_list2d(f'{energy_path}/Energy.dat', energys, '{0}')
+        self.write_list2d(f'{energy_path}/Energy.dat', energys)
         system_echo(f'Energy file generated successfully!')
 
     def get_k_points(self, poscars, task):

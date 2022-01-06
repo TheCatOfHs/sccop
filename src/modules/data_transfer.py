@@ -21,13 +21,13 @@ class Transfer(ListRWTools):
         self.elem_embed = self.import_list2d(
             atom_init_file, int, numpy=True)
         self.latt_vec = self.import_list2d(
-            f'{file_prefix}_latt_vec.dat', float, numpy=True)
+            f'{file_prefix}_latt_vec.bin', float, binary=True)
         self.frac_coor = self.import_list2d(
-            f'{file_prefix}_frac_coor.dat', float, numpy=True)
+            f'{file_prefix}_frac_coor.bin', float, binary=True)
         self.grid_nbr_idx = self.import_list2d(
-            f'{file_prefix}_nbr_idx.dat', int, numpy=True)
+            f'{file_prefix}_nbr_idx.bin', int, binary=True)
         self.grid_nbr_dis = self.import_list2d(
-            f'{file_prefix}_nbr_dis.dat', float, numpy=True)
+            f'{file_prefix}_nbr_dis.bin', float, binary=True)
         self.filter = np.arange(dmin, dmax+step, step)
         self.grid_point_num = len(self.grid_nbr_dis)
         self.grid_point_array = np.arange(self.grid_point_num)

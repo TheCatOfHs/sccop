@@ -18,6 +18,7 @@ args = parser.parse_args()
 class MultiDivide(ListRWTools, SSHTools):
     #divide grid by each node
     def __init__(self, sleep_time=1):
+        self.num_node = len(nodes)
         self.sleep_time = sleep_time
         self.prop_dir = f'/local/ccop/{grid_prop_dir}'
     
@@ -30,7 +31,6 @@ class MultiDivide(ListRWTools, SSHTools):
         grid_origin [int, 1d]: name of origin grid 
         grid_mutate [int, 1d]: name of mutate grid 
         """
-        num_node = len(nodes)
         num_grid = len(grid_mutate)
         node_assign = self.assign_node(num_grid)
         
@@ -39,18 +39,15 @@ class MultiDivide(ListRWTools, SSHTools):
         while not self.is_done(num_grid):
             time.sleep(self.sleep_time)
         self.zip_file_name(grid_mutate)
-        system_echo(f'Lattice mutate: {grid_mutate}')
+        system_echo(f'Lattice generate: {grid_mutate}')
         self.remove()
-        
-        self.send_grid_to_cpu()
-        system_echo(f'Update grid of each node')
         
         for node in nodes:
-            self.unzip_grid_on_cpu(node)
-        while not self.is_done(num_node):
+            self.send_grid_to_cpu(node)
+        while not self.is_done(self.num_node*num_grid):
             time.sleep(self.sleep_time)
-        system_echo(f'Unzip grid file on CPUs')
         self.remove()
+        system_echo(f'Unzip grid file on CPUs')
         
         self.unzip_grid_on_gpu()
         system_echo(f'Unzip grid file on GPU')
@@ -66,10 +63,10 @@ class MultiDivide(ListRWTools, SSHTools):
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        file = [f'{mutate:03.0f}_frac_coor.dat',
-                f'{mutate:03.0f}_latt_vec.dat',
-                f'{mutate:03.0f}_nbr_dis.dat',
-                f'{mutate:03.0f}_nbr_idx.dat']
+        file = [f'{mutate:03.0f}_frac_coor.bin',
+                f'{mutate:03.0f}_latt_vec.bin',
+                f'{mutate:03.0f}_nbr_dis.bin',
+                f'{mutate:03.0f}_nbr_idx.bin']
         file = ' '.join(file)
         options = f'--origin {origin} --mutate {mutate}'
         shell_script = f'''
@@ -99,65 +96,42 @@ class MultiDivide(ListRWTools, SSHTools):
         file = []
         for grid in grid_name:
             file.append(f'{grid}.tar.gz')
-        self.zip_file = ' '.join(file)
+        self.zip_file = file
     
-    def send_grid_to_cpu(self):
+    def send_grid_to_cpu(self, node):
         """
         update grid of each node
         """
-        cpu_nodes = [f'node{i}' for i in nodes]
-        cpu_nodes = ' '.join(cpu_nodes)
-        shell_script = f'''
-                        #!/bin/bash
-                        cd {grid_prop_dir}/
-                        for i in {cpu_nodes}
-                        do
-                            for j in {self.zip_file}
-                            do
-                                scp $j $i:{self.prop_dir}/
-                            done
-                        done
-                        '''
-        os.system(shell_script)
+        for i, file in enumerate(self.zip_file):
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd /local/ccop/{grid_prop_dir}
+                            scp {gpu_node}:{self.prop_dir}/{file} .
+                            tar -zxf {file}
+                            rm {file}
+                            
+                            touch FINISH-{node}-{i}
+                            scp FINISH-{node}-{i} {gpu_node}:{self.prop_dir}/
+                            rm FINISH-{node}-{i}
+                            '''
+            self.ssh_node(shell_script, ip)
     
     def unzip_grid_on_gpu(self):
         """
         unzip grid property on gpu node
         """
+        zip_file = ' '.join(self.zip_file)
         shell_script = f'''
                         #!/bin/bash
                         cd {grid_prop_dir}/
-                        for i in {self.zip_file}
+                        for i in {zip_file}
                         do
                             tar -zxf $i
                             rm $i
                         done
                         '''
         os.system(shell_script)
-    
-    def unzip_grid_on_cpu(self, node):
-        """
-        unzip grid property files of each node
-        
-        Parameters
-        ----------
-        grid [int, 0d]: name of grid
-        """
-        ip = f'node{node}'
-        shell_script = f'''
-                        #!/bin/bash
-                        cd {self.prop_dir}
-                        for i in {self.zip_file}
-                        do
-                            tar -zxf $i
-                            rm $i
-                        done
-                        
-                        touch FINISH-{node}
-                        scp FINISH-{node} {gpu_node}:{self.prop_dir}/
-                        rm FINISH-{node}
-                        '''
-        self.ssh_node(shell_script, ip)
     
     def is_done(self, file_num):
         """
@@ -191,7 +165,7 @@ class GridDivide(ListRWTools):
         Parameters
         ----------
         grid_name [str, 0d]: name of grid
-        latt_vec [float, 2d]: lattice vector of grid
+        latt_vec [float, 2d, np]: lattice vector of grid
         grain [float, 1d]: fraction coordinate of grid points
         cutoff [float, 0d]: cutoff distance
         mutate [bool, 0d]: whether mutate lattice vector
@@ -206,14 +180,14 @@ class GridDivide(ListRWTools):
         frac_coor = self.fraction_coor(grain)
         self.write_grid_POSCAR(latt_vec, frac_coor)
         nbr_idx, nbr_dis = self.near_property(cutoff)
-        self.write_list2d(f'{self.prop_dir}_latt_vec.dat', 
-                          latt_vec, '{0:4.4f}')
-        self.write_list2d(f'{self.prop_dir}_frac_coor.dat',
-                          frac_coor, '{0:4.4f}')
-        self.write_list2d(f'{self.prop_dir}_nbr_idx.dat',
-                          nbr_idx, '{0:4.0f}')
-        self.write_list2d(f'{self.prop_dir}_nbr_dis.dat',
-                          nbr_dis, '{0:8.6f}')
+        self.write_list2d(f'{self.prop_dir}_latt_vec.bin', 
+                          latt_vec, binary=True)
+        self.write_list2d(f'{self.prop_dir}_frac_coor.bin',
+                          frac_coor, binary=True)
+        self.write_list2d(f'{self.prop_dir}_nbr_idx.bin',
+                          nbr_idx, binary=True)
+        self.write_list2d(f'{self.prop_dir}_nbr_dis.bin',
+                          nbr_dis, binary=True)
 
     def strain_mat(self):
         """
@@ -245,7 +219,7 @@ class GridDivide(ListRWTools):
         coor = [[i, j, k] for i in np.arange(0, 1, grain_a)
                 for j in np.arange(0, 1, grain_b)
                 for k in np.arange(0, 1, grain_c)]
-        return coor
+        return np.array(coor)
     
     def near_property(self, cutoff):
         """
@@ -268,8 +242,7 @@ class GridDivide(ListRWTools):
         for nbr in all_nbrs:
             nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
             nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
-        nbr_idx, nbr_dis = list(nbr_idx), list(nbr_dis)
-        return nbr_idx, nbr_dis
+        return np.array(nbr_idx), np.array(nbr_dis)
     
     def write_grid_POSCAR(self, latt_vec, frac_coor):
         """
@@ -296,8 +269,8 @@ if __name__ == '__main__':
     #Build grid
     grid = GridDivide()
     rwtools = ListRWTools()
-    latt_file = f'{grid_prop_dir}/{grid_origin:03.0f}_latt_vec.dat'
-    latt_vec = rwtools.import_list2d(latt_file, float, numpy=True)
+    latt_file = f'{grid_prop_dir}/{grid_origin:03.0f}_latt_vec.bin'
+    latt_vec = rwtools.import_list2d(latt_file, float, binary=True)
     if grid_origin == grid_mutate:
         mutate = False
     else:

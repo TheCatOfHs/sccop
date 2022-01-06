@@ -119,21 +119,18 @@ class Select(ListRWTools, SSHTools):
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
                 atom_fea, nbr_fea, nbr_fea_idx = \
-                    transfer.batch(atom_pos[i:j], atom_type[i:j])
-                atom_feas.append(atom_fea)
-                nbr_feas.append(nbr_fea)
-                nbr_fea_idxes.append(nbr_fea_idx)
+                    transfer.batch(atom_pos[i:j], atom_type[i:j])    
+                atom_feas += atom_fea
+                nbr_feas += nbr_fea
+                nbr_fea_idxes += nbr_fea_idx
                 transfer = Transfer(grid)
                 last_grid = grid
                 i = j
         atom_fea, nbr_fea, nbr_fea_idx = \
             transfer.batch(atom_pos[i:], atom_type[i:])
-        atom_feas.append(atom_fea)
-        nbr_feas.append(nbr_fea)
-        nbr_fea_idxes.append(nbr_fea_idx)
-        atom_feas = np.vstack(atom_feas)
-        nbr_feas = np.vstack(nbr_feas)
-        nbr_fea_idxes = np.vstack(nbr_fea_idxes)
+        atom_feas += atom_fea
+        nbr_feas += nbr_fea
+        nbr_fea_idxes += nbr_fea_idx
         targets = np.zeros(self.num_crys)
         dataset = PPMData(atom_feas, nbr_feas, 
                           nbr_fea_idxes, targets)
@@ -374,11 +371,11 @@ class Select(ListRWTools, SSHTools):
                                   i+1, node_assign[i], 
                                   transfer, elements)
         self.write_list2d(f'{self.sh_save_dir}/atom_pos_select.dat',
-                          pos_order, '{0}')
+                          pos_order)
         self.write_list2d(f'{self.sh_save_dir}/atom_type_select.dat', 
-                          type_order, '{0}')
+                          type_order)
         self.write_list2d(f'{self.sh_save_dir}/grid_name_select.dat', 
-                          np.transpose([grid_order]), '{0}')
+                          np.transpose([grid_order]))
     
     def write_POSCAR(self, pos, type, num, node, transfer, elements):
         """

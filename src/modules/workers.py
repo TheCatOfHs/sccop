@@ -56,11 +56,11 @@ class MultiWorkers(ListRWTools, SSHTools):
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
         
         self.write_list2d(f'{self.sh_save_dir}/atom_pos.dat', 
-                          atom_pos, '{0:3.0f}')
+                          atom_pos, style='{0:3.0f}')
         self.write_list2d(f'{self.sh_save_dir}/atom_type.dat',
-                          atom_type, '{0:3.0f}')
+                          atom_type, style='{0:3.0f}')
         self.write_list2d(f'{self.sh_save_dir}/grid_name.dat',
-                          grid_name, '{0:3.0f}')
+                          grid_name, style='{0:3.0f}')
         self.remove_all_path()
     
     def generate_job(self, round, num_paths, init_pos, 
@@ -87,9 +87,9 @@ class MultiWorkers(ListRWTools, SSHTools):
         worker_file = f'{self.sh_save_dir}/worker_job_{self.round}.dat'
         pos_file = f'{self.sh_save_dir}/initial_pos_{self.round}.dat'
         type_file = f'{self.sh_save_dir}/initial_type_{self.round}.dat'
-        self.write_list2d(worker_file, worker_job, '{0}')
-        self.write_list2d(pos_file, init_pos, '{0}')
-        self.write_list2d(type_file, init_type, '{0}')
+        self.write_list2d(worker_file, worker_job)
+        self.write_list2d(pos_file, init_pos)
+        self.write_list2d(type_file, init_type)
     
     def update_with_ssh(self, node):
         """
@@ -539,13 +539,13 @@ class Search(ListRWTools):
         """
         self.write_list2d(f'{self.sh_save_dir}/'
                           f'pos-{self.round}-{path:03.0f}-{node}.dat', 
-                          pos_buffer, '{0:4.0f}')
+                          pos_buffer, style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_dir}/'
                           f'type-{self.round}-{path:03.0f}-{node}.dat', 
-                          type_buffer, '{0:4.0f}')
+                          type_buffer, style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_dir}/'
                           f'energy-{self.round}-{path:03.0f}-{node}.dat', 
-                          energy_buffer, '{0:4.4f}')
+                          energy_buffer, style='{0:8.4f}')
 
 if __name__ == '__main__':
     num_initial = 1*len(nodes)

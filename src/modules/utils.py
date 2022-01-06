@@ -1,7 +1,7 @@
 import os, sys
 import time
-from typing import List
 import paramiko
+import pickle
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
@@ -25,7 +25,7 @@ def system_echo(ct):
 
 class ListRWTools:
     #Save and import list
-    def import_list2d(self, file, dtype, numpy=False):
+    def import_list2d(self, file, dtype, numpy=False, binary=False):
         """
         import 2-dimensional list
         
@@ -33,18 +33,24 @@ class ListRWTools:
         ----------
         file [str, 0d]: file name
         dtype [int float str]: data type
+        binary [bool, 0d]: whether write in binary
         
         Returns
         ----------
         list [dtype, 2d]: 2-dimensional list
         """
-        with open(file, 'r') as f:
-            ct = f.readlines()
-        list = self.str_to_list2d(ct, dtype)
-        if numpy:
-            return np.array(list)
-        else:
+        if binary:
+            with open(file, 'rb') as f:
+                list = pickle.load(f)
             return list
+        else:
+            with open(file, 'r') as f:
+                ct = f.readlines()
+            list = self.str_to_list2d(ct, dtype)
+            if numpy:
+                return np.array(list)
+            else:
+                return list
 
     def str_to_list2d(self, string, dtype):
         """
@@ -79,7 +85,7 @@ class ListRWTools:
         list = [dtype(i) for i in string]
         return list
     
-    def write_list2d(self, file, list, style):
+    def write_list2d(self, file, list, style='{0}', binary=False):
         """
         write 2-dimensional list
         
@@ -88,12 +94,17 @@ class ListRWTools:
         file [str, 0d]: file name
         list [num, 2d]: 2-dimensional list
         style [str, 0d]: style of number
+        binary [bool, 0d]: whether write in binary
         """
-        list_str = self.list2d_to_str(list, style)
-        list2d_str = '\n'.join(list_str)
-        with open(file, 'w') as f:
-            f.write(list2d_str)
-        
+        if binary:
+            with open(file, 'wb') as f:
+                pickle.dump(list, f)
+        else:
+            list_str = self.list2d_to_str(list, style)
+            list2d_str = '\n'.join(list_str)
+            with open(file, 'w') as f:
+                f.write(list2d_str)
+    
     def write_list2d_columns(self, file, lists, styles, head=[]):
         """
         write 2-dimensional list
@@ -192,7 +203,7 @@ class SSHTools:
     
     def assign_job(self, poscar):
         """
-        assign jobs to each node according to notation of POSCAR file
+        assign jobs to each node by notation of POSCAR file
 
         Parameters
         ----------
@@ -263,4 +274,21 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    print('ok')
+    class A:
+        def __init__(self):
+            self.a = 1
+            print('aaa')
+            
+    class B:
+        def __init__(self):
+            self.b = 1
+            print('bbb')
+        
+    class C(B, A):
+        def __init__(self):
+            A.__init__(self)
+            B.__init__(self)
+            print(self.a)
+            print(self.b)
+    
+    c = C()

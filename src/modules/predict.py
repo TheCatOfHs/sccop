@@ -365,7 +365,7 @@ class PPModel(ListRWTools):
         model = DataParallel(model)
         model.to(self.device)
         self.validate(test_loader, model, criterion, epoch, normalizer, best_model_test=True)
-        self.write_list2d(f'{self.model_save_dir}/validation.dat', mae_buffer, '{0:3.4f}')
+        self.write_list2d(f'{self.model_save_dir}/validation.dat', mae_buffer, style='{0:6.4f}')
     
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
@@ -448,9 +448,9 @@ class PPModel(ListRWTools):
         if best_model_test:
             system_echo(f'Best model MAE {mae_errors.avg:.3f}')
             self.write_list2d(f'{self.model_save_dir}/pred.dat', 
-                              normalizer.denorm(pred.data.cpu()), '{0:4.4f}')
+                              normalizer.denorm(pred.data.cpu()), style='{0:8.4f}')
             self.write_list2d(f'{self.model_save_dir}/vasp.dat', 
-                              target, '{0:4.4f}')
+                              target, style='{0:8.4f}')
         return mae_errors.avg
     
     def model_initial(self, checkpoint):

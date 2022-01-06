@@ -149,7 +149,7 @@ class SubVASP(ListRWTools, SSHTools):
             cur_E = energy/atom_num
             energys.append([out, true_E[-1], cur_E])
             system_echo(f'{out}, {true_E[-1]}, {cur_E}')
-        self.write_list2d(f'{vasp_out_dir}/Energy-{round}.dat', energys, '{0}')
+        self.write_list2d(f'{vasp_out_dir}/Energy-{round}.dat', energys)
         system_echo(f'Energy file generated successfully!')
         false_E = [not i for i in true_E]
         return true_E, false_E, vasp_out_order
