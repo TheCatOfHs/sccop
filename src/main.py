@@ -11,7 +11,7 @@ from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
 from modules.predict import PPMData, PPModel, batch_balance
 from modules.utils import ListRWTools, system_echo
-from modules.post_process import PostProcess
+from modules.post_process import PostProcess, VASPoptimize
 
 
 def convert():
@@ -47,13 +47,14 @@ if __name__ == '__main__':
             train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
         
         #Generate initial structures
-        atom_pos, atom_type, grid_store = init.generate(recyc, grid_store)
+        atom_pos, atom_type, grid_init = init.generate(recyc, grid_store)
         system_echo('Initial sample from database')
 
         #Build grid
         build = True
-        grid_origin = grid_store
-        grid_mutate = grid_store
+        grid_origin = grid_init
+        grid_mutate = grid_init
+        grid_store = np.concatenate((grid_store, grid_init))
         if build:
             divide.assign(grid_origin, grid_mutate)
         grid_name = grid_origin
@@ -67,7 +68,7 @@ if __name__ == '__main__':
             grid_point = [i for i in range(1000)]
             atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
             atom_type += [[i for i in [29, 30, 6, 7] for _ in range(2)] for _ in range(num_initial)]
-            grid_name = np.concatenate((grid_name, np.random.choice(grid_store, num_initial)))
+            grid_name = np.concatenate((grid_name, np.random.choice(grid_init, num_initial)))
             order = np.argsort(grid_name)
             atom_pos = [atom_pos[i] for i in order]
             atom_type = [atom_type[i] for i in order]
@@ -88,17 +89,17 @@ if __name__ == '__main__':
             num_sample = len(grid_name_right)
             idx = np.arange(num_sample)
             system_echo(f'Sampling number: {num_sample}')
-
+            
             #Select samples
-            round = recyc*num_round
-            select = Select(round)
+            start = recyc * (num_round + 1)
+            select = Select(start)
             select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
-    
+
             #VASP calculate
-            sub_vasp.sub_VASP_job(round)
-        break
+            sub_vasp.sub_VASP_job(start)
+        
         #CCOP optimize
-        for round in range(recyc*num_round, (recyc+1)*num_round):
+        for round in range(start, start+num_round):
             #Data import
             energy_file = rwtools.import_list2d(f'{vasp_out_dir}/Energy-{round:03.0f}.dat', str, numpy=True)
             true_E = np.array(energy_file)[:,1]
@@ -116,11 +117,11 @@ if __name__ == '__main__':
                     atom_pos_right.append(atom_pos[i])
                     atom_type_right.append(atom_type[i])
                     grid_name_right.append(grid_name[i])
-        
+
             #TODO Delete duplicates
             #atom_pos_right, atom_type_right, grid_name_right = \
             #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
-        
+
             num_poscars = len(energys)
             a = int(num_poscars*0.6)
             num_crys = a + len(train_energys)
@@ -142,7 +143,7 @@ if __name__ == '__main__':
             valid_nbr_fea = nbr_fea[a:]
             valid_nbr_fea_idx = nbr_fea_idx[a:]
             valid_energys = energys[a:]
-        
+
             #Training
             train = True
             if train:
@@ -189,7 +190,7 @@ if __name__ == '__main__':
                     init_pos.append(pos_buffer[seed])
                     init_type.append(type_buffer[seed])
                     init_grid.append(grid_buffer[seed])
-            
+
                 #Lattice mutate
                 mut_counter = 0
                 mut_num = int(num_paths*mut_ratio)
@@ -213,19 +214,23 @@ if __name__ == '__main__':
 
             #VASP calculate
             sub_vasp.sub_VASP_job(round+1)
-    
+
         #Export searched POSCARS
-        select = Select(num_round)
+        select = Select(start+num_round)
         grid_buffer = [[i] for i in grid_buffer]
-        select.export(pos_buffer, type_buffer, grid_buffer)
-        system_echo('### End Crystal Combinatorial Optimization Program ###')
-    
+        select.export(recyc, pos_buffer, type_buffer, grid_buffer)
+        system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recyc}')
+
         #VASP optimize
-        post = PostProcess()
-        post.run_optimization()
-        post.get_energy()
+        vasp = VASPoptimize(recyc)
+        vasp.run_optimization()
+        vasp.get_energy()
     '''
+    #Select optimized structures
+    
+    
     #Energy band
+    post = PostProcess()
     post.run_pbe_band()
     
     #Phonon spectrum

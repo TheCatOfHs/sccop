@@ -405,12 +405,13 @@ class Select(ListRWTools, SSHTools):
         with open(file, 'w') as f:
             f.write('\n'.join(POSCAR))
 
-    def export(self, atom_pos, atom_type, grid_name):
+    def export(self, recycle, atom_pos, atom_type, grid_name):
         """
         export configurations after ccop
 
         Parameters
         ----------
+        recycle [int, 0d]: recycle times
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
         grid_name [int, 2d]: name of grid
@@ -430,7 +431,7 @@ class Select(ListRWTools, SSHTools):
         crys_embedded = self.reduce(crys_mean_all)
         clusters = self.cluster(crys_embedded, num_poscars)
         idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
-        self.round = 'CCOP'
+        self.round = f'CCOP-{recycle}'
         self.poscar_save_dir = f'{poscar_dir}/{self.round}'
         self.sh_save_dir = self.poscar_save_dir
         if not os.path.exists(self.poscar_save_dir):

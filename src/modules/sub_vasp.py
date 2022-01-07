@@ -91,7 +91,7 @@ class SubVASP(ListRWTools, SSHTools):
                         date >> $p.out
                         scp $p.out {gpu_node}:{local_vasp_out_dir}/
                         cd ../
-                        #rm -r $p
+                        rm -r $p
                         '''
         self.ssh_node(shell_script, ip)
     

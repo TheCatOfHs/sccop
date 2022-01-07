@@ -17,7 +17,7 @@ class UpdateNodes(SSHTools):
     def __init__(self, sleep_time=1):
         self.num_node = len(nodes)
         self.sleep_time = sleep_time
-        
+    
     def update(self):
         """
         update cpu nodes
@@ -109,12 +109,12 @@ class Initial(GridDivide, UpdateNodes):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        grid_store [int, 1d]: name of grids
+        grid_init [int, 1d]: new initial grids
         """
         num_grid = len(grid_store)
-        initial_dir = f'{poscar_dir}/structure_{recyc}'
+        initial_dir = f'{init_strs_path}_{recyc}'
         file = os.listdir(initial_dir)
-        atom_pos, atom_type, latt = [], [], []
+        atom_pos, atom_type, grid_init, latt = [], [], [], []
         grid_frac = self.fraction_coor(grain)
         for i, poscar in enumerate(file):
             str = Structure.from_file(f'{initial_dir}/{poscar}', sort=True)
@@ -127,15 +127,15 @@ class Initial(GridDivide, UpdateNodes):
             atom_type.append(type)
             atom_pos.append(pos)
             latt.append(latt_file)
-            grid_store.append(num_grid+i)
+            grid_init.append(num_grid+i)
         latt = ' '.join(latt)
         for node in nodes:
             self.copy_latt_to_nodes(latt, node)
         while not self.is_done(self.num_node):
             time.sleep(self.sleep_time)
         self.remove()
-        return atom_pos, atom_type, grid_store
-
+        return atom_pos, atom_type, grid_init
+    
     def put_into_grid(self, stru_frac, grid_frac, latt_vec):
         """
         Approximate target configuration in grid, 
@@ -262,10 +262,10 @@ class Pretrain(Transfer):
         return batch_atom_fea, batch_nbr_fea, \
                 batch_nbr_fea_idx
     
-            
+        
 if __name__ == '__main__':
     init = Initial()
-    print(init.generate('data/poscar/structure_0'))
+    print(init.generate('data/poscar/initial_strs_0'))
     
     
     

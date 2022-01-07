@@ -51,6 +51,7 @@ grid_prop_dir = 'data/grid/property'
 grid_poscar_dir = 'data/grid/poscar'
 ccop_out_dir = 'data/poscar/CCOP'
 optim_strs_path = 'data/poscar/optim_strs'
+init_strs_path = 'data/poscar/initial_strs'
 
 #DFT directory
 vasp_files_path = 'libs/VASP_inputs'

@@ -274,21 +274,6 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    class A:
-        def __init__(self):
-            self.a = 1
-            print('aaa')
-            
-    class B:
-        def __init__(self):
-            self.b = 1
-            print('bbb')
-        
-    class C(B, A):
-        def __init__(self):
-            A.__init__(self)
-            B.__init__(self)
-            print(self.a)
-            print(self.b)
-    
-    c = C()
+    a = []
+    b = [1, 2, 3]
+    print(np.concatenate((a, b)))

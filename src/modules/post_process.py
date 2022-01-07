@@ -11,11 +11,117 @@ from modules.global_var import *
 from modules.utils import ListRWTools, SSHTools, system_echo
 
 
+class VASPoptimize(SSHTools, ListRWTools):
+    #optimize structure by VASP
+    def __init__(self, recycle, sleep_time=1):
+        self.sleep_time = sleep_time
+        self.ccop_out_dir = f'{ccop_out_dir}_{recycle}'
+        self.optim_strs_path = f'{init_strs_path}_{recycle+1}'
+        self.energy_path = f'{vasp_out_dir}/initial_strs_{recycle+1}'
+        self.local_ccop_out_dir = f'/local/ccop/{self.ccop_out_dir}'
+        self.local_optim_strs_path = f'/local/ccop/{self.optim_strs_path}'
+        self.local_energy_path = f'/local/ccop/{self.energy_path}'
+        self.calculation_path = '/local/ccop/vasp'
+        if not os.path.exists(self.optim_strs_path):
+            os.mkdir(self.optim_strs_path)
+            os.mkdir(self.energy_path)
+
+    def run_optimization(self):
+        '''
+        optimize configurations from low to high level
+        '''
+        self.find_symmetry_structure(self.ccop_out_dir)
+        files = sorted(os.listdir(self.ccop_out_dir))
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        num_poscar = len(poscars)
+        system_echo(f'Start VASP calculation --- Optimization')
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            p={poscar}
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Optimization/* .
+                            scp {gpu_node}:{self.local_ccop_out_dir}/$p POSCAR
+                                
+                            cp POSCAR POSCAR_0
+                            DPT -v potcar
+                            for i in 1 2 3
+                            do
+                                cp INCAR_$i INCAR
+                                cp KPOINTS_$i KPOINTS
+                                date > vasp-$i.vasp
+                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                date >> vasp-$i.vasp
+                                cp CONTCAR POSCAR
+                                cp CONTCAR POSCAR_$i
+                                cp OUTCAR OUTCAR_$i
+                                rm WAVECAR CHGCAR
+                            done
+                            if [ `cat CONTCAR|wc -l` -ne 0 ]; then
+                                scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
+                                scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                            fi
+                            cd ../
+                            
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.local_optim_strs_path}/
+                            rm -rf $p FINISH-$p
+                            '''
+            self.ssh_node(shell_script, ip)
+        while not self.is_done(self.optim_strs_path, num_poscar):
+            time.sleep(self.sleep_time)
+        self.find_symmetry_structure(self.optim_strs_path)
+        system_echo(f'All job are completed --- Optimization')
+        self.remove(self.optim_strs_path)
+
+    def find_symmetry_structure(self, dir):
+        """
+        find symmetry unit of structure
+
+        Parameters
+        ----------
+        dir [str, 0d]: structure directory 
+        """
+        files = sorted(os.listdir(dir))
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        for i in poscars:
+            str = Structure.from_file(f'{dir}/{i}')
+            anal_str = SpacegroupAnalyzer(str)
+            sym_str = anal_str.get_refined_structure()
+            sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
+            
+    def get_energy(self):
+        """
+        generate energy file of vasp outputs directory
+        """
+        energys = []
+        vasp_out = os.listdir(f'{self.energy_path}')
+        vasp_out_order = sorted(vasp_out)
+        for out in vasp_out_order:
+            VASP_output_file = f'{self.energy_path}/{out}'
+            with open(VASP_output_file, 'r') as f:
+                ct = f.readlines()
+            for line in ct[:10]:
+                if 'POSCAR found :' in line:
+                    atom_num = int(line.split()[-2])
+            for line in ct[-10:]:
+                if 'F=' in line:
+                    energy = float(line.split()[2])
+            cur_E = energy/atom_num
+            system_echo(f'{out}, {cur_E:18.9f}')
+            energys.append([out, cur_E])
+        self.write_list2d(f'{self.energy_path}/Energy.dat', energys)
+        system_echo(f'Energy file generated successfully!')
+        
+        
 class PostProcess(SSHTools, ListRWTools):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'/local/ccop/{ccop_out_dir}'
         self.optim_strs_path = f'/local/ccop/{optim_strs_path}'
         self.dielectric_path = f'/local/ccop/{dielectric_path}'
         self.elastic_path = f'/local/ccop/{elastic_path}'
@@ -29,8 +135,6 @@ class PostProcess(SSHTools, ListRWTools):
             os.mkdir('vasp')
             os.mkdir(KPOINTS_file)
             os.mkdir(bandconf_file)
-        if not os.path.exists(optim_strs_path):
-            os.mkdir(optim_strs_path)
         if not os.path.exists(optim_vasp_path):
             os.mkdir(optim_vasp_path)
             os.mkdir(dielectric_path)
@@ -38,59 +142,7 @@ class PostProcess(SSHTools, ListRWTools):
             os.mkdir(energy_path)
             os.mkdir(pbe_band_path)
             os.mkdir(phonon_path)
-        
-    def run_optimization(self):
-        '''
-        optimize configurations from low to high level
-        '''
-        self.find_symmetry_structure(ccop_out_dir)
-        files = sorted(os.listdir(ccop_out_dir))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
-        num_poscar = len(poscars)
-        batches, nodes = self.assign_job(poscars)
-        system_echo(f'Start VASP calculation --- Optimization')
-        for j, batch in enumerate(batches):
-            shell_script = f'''
-                            #!/bin/bash
-                            cd {self.calculation_path}
-                            for p in {batch}
-                            do
-                                mkdir $p
-                                cd $p
-                                cp ../../{vasp_files_path}/Optimization/* .
-                                scp {gpu_node}:{self.ccop_out_dir}/$p POSCAR
-                                
-                                cp POSCAR POSCAR_0
-                                DPT -v potcar
-                                for i in 1 2 3
-                                do
-                                    cp INCAR_$i INCAR
-                                    cp KPOINTS_$i KPOINTS
-                                    date > vasp-$i.vasp
-                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
-                                    date >> vasp-$i.vasp
-                                    cp CONTCAR POSCAR
-                                    cp CONTCAR POSCAR_$i
-                                    cp OUTCAR OUTCAR_$i
-                                    rm WAVECAR CHGCAR
-                                done
-                                if [ `cat CONTCAR|wc -l` -ne 0 ]; then
-                                    scp CONTCAR {gpu_node}:{self.optim_strs_path}/$p
-                                    scp vasp-3.vasp {gpu_node}:{self.energy_path}/out-$p
-                                fi
-                                cd ../
-                                touch FINISH-$p
-                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                                rm -rf $p FINISH-$p
-                            done
-                            '''
-            self.sub_jobs_with_ssh(nodes[j], shell_script)
-        while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
-        self.find_symmetry_structure(optim_strs_path)
-        system_echo(f'All job are completed --- Optimization')
-        self.remove(optim_strs_path)
-
+    
     def run_pbe_band(self):
         '''
         calculate energy band of optimied configurations
@@ -285,29 +337,6 @@ class PostProcess(SSHTools, ListRWTools):
         """
         ip = f'node{node}'
         self.ssh_node(shell_script, ip)
-        
-    def get_energy(self):
-        """
-        generate energy file of vasp outputs directory
-        """
-        energys = []
-        vasp_out = os.listdir(f'{energy_path}')
-        vasp_out_order = sorted(vasp_out)
-        for out in vasp_out_order:
-            VASP_output_file = f'{energy_path}/{out}'
-            with open(VASP_output_file, 'r') as f:
-                ct = f.readlines()
-            for line in ct[:10]:
-                if 'POSCAR found :' in line:
-                    atom_num = int(line.split()[-2])
-            for line in ct[-10:]:
-                if 'F=' in line:
-                    energy = float(line.split()[2])
-            cur_E = energy/atom_num
-            system_echo(f'{out}, {cur_E:18.9f}')
-            energys.append([out, cur_E])
-        self.write_list2d(f'{energy_path}/Energy.dat', energys)
-        system_echo(f'Energy file generated successfully!')
 
     def get_k_points(self, poscars, task):
         """
@@ -375,30 +404,13 @@ class PostProcess(SSHTools, ListRWTools):
             labels = [std[i] if item == sp[i] else item for item in labels]
         return labels
     
-    def find_symmetry_structure(self, dir):
-        """
-        find symmetry unit of structure
-
-        Parameters
-        ----------
-        dir [str, 0d]: structure directory 
-        """
-        files = sorted(os.listdir(dir))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
-        for i in poscars:
-            str = Structure.from_file(f'{dir}/{i}')
-            anal_str = SpacegroupAnalyzer(str)
-            sym_str = anal_str.get_refined_structure()
-            sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
     
 if __name__ == '__main__':
-    from modules.initial import Initial
-    init = Initial()
-    init.update()
-    post = PostProcess()
-    #post.run_optimization()
+    vasp = VASPoptimize(0)
+    vasp.run_optimization()
+    #post = PostProcess()
     #post.get_energy()
-    post.run_pbe_band()
-    post.run_phonon()
+    #post.run_pbe_band()
+    #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
