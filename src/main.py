@@ -45,11 +45,11 @@ if __name__ == '__main__':
             grid_store = []
             pos_buffer, type_buffer, grid_buffer = [], [], []
             train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
-            
+        
         #Generate initial structures
         atom_pos, atom_type, grid_store = init.generate(recyc, grid_store)
         system_echo('Initial sample from database')
-        
+
         #Build grid
         build = True
         grid_origin = grid_store
@@ -58,12 +58,11 @@ if __name__ == '__main__':
             divide.assign(grid_origin, grid_mutate)
         grid_name = grid_origin
         system_echo('Initial grid build')
-        break
+        
         #Initial data
         initial = True
         worker = Search(0, 0)
         if initial:
-            round = 0
             num_initial = 100000
             grid_point = [i for i in range(1000)]
             atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
@@ -73,7 +72,7 @@ if __name__ == '__main__':
             atom_pos = [atom_pos[i] for i in order]
             atom_type = [atom_type[i] for i in order]
             grid_name = grid_name[order]
-        
+
             #Geometry check
             batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
             check_near = [worker.near_check(i) for i in batch_nbr_dis]
@@ -91,14 +90,13 @@ if __name__ == '__main__':
             system_echo(f'Sampling number: {num_sample}')
 
             #Select samples
-            if not os.path.exists(f'{search_dir}/000'):
-                os.mkdir(f'{search_dir}/000')
+            round = recyc*num_round
             select = Select(round)
             select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
     
             #VASP calculate
             sub_vasp.sub_VASP_job(round)
-        
+        break
         #CCOP optimize
         for round in range(recyc*num_round, (recyc+1)*num_round):
             #Data import

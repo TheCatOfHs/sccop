@@ -39,17 +39,22 @@ class MultiDivide(ListRWTools, SSHTools):
         while not self.is_done(num_grid):
             time.sleep(self.sleep_time)
         self.zip_file_name(grid_mutate)
+        self.remove_flag_on_gpu()
         system_echo(f'Lattice generate: {grid_mutate}')
-        self.remove()
         
         for node in nodes:
             self.send_grid_to_cpu(node)
         while not self.is_done(self.num_node*num_grid):
             time.sleep(self.sleep_time)
-        self.remove()
+        self.remove_flag_on_gpu()
+        self.remove_flag_on_cpu()
         system_echo(f'Unzip grid file on CPUs')
         
         self.unzip_grid_on_gpu()
+        while not self.is_done(num_grid):
+            time.sleep(self.sleep_time)
+        self.remove_zip_on_gpu()
+        self.remove_flag_on_gpu()
         system_echo(f'Unzip grid file on GPU')
     
     def sub_divide(self, origin, mutate, node):
@@ -75,13 +80,12 @@ class MultiDivide(ListRWTools, SSHTools):
                         python src/modules/grid_divide.py {options}
                         cd {grid_prop_dir}
                         
-                        tar -zcf {mutate}.tar.gz {file}
+                        touch FINISH-{mutate}                        
+                        tar -zcf {mutate}.tar.gz {file} FINISH-{mutate}
                         scp {mutate}.tar.gz {gpu_node}:{self.prop_dir}/
-                        rm {file} {mutate}.tar.gz
-
-                        touch FINISH-{mutate}
+                        
                         scp FINISH-{mutate} {gpu_node}:{self.prop_dir}/
-                        rm FINISH-{mutate}
+                        rm {file} {mutate}.tar.gz FINISH-{mutate}
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -127,8 +131,8 @@ class MultiDivide(ListRWTools, SSHTools):
                         cd {grid_prop_dir}/
                         for i in {zip_file}
                         do
-                            tar -zxf $i
-                            rm $i
+                            nohup tar -zxf $i >& log-$i &
+                            rm log-$i
                         done
                         '''
         os.system(shell_script)
@@ -145,13 +149,32 @@ class MultiDivide(ListRWTools, SSHTools):
         flag = self.check_num_file(command, file_num)
         return flag
     
-    def remove(self): 
+    def remove_flag_on_gpu(self): 
         """
-        remove flag file
+        remove flag file on gpu
         """
         os.system(f'rm {grid_prop_dir}/FINISH*')
         
+    def remove_flag_on_cpu(self):
+        """
+        remove FINISH flags on cpu
+        """
+        for node in nodes:
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd /local/ccop/{grid_prop_dir}
+                            rm FINISH*
+                            '''
+            self.ssh_node(shell_script, ip)
 
+    def remove_zip_on_gpu(self):
+        """
+        remove zip file
+        """
+        os.system(f'rm {grid_prop_dir}/*.tar.gz')
+    
+    
 class GridDivide(ListRWTools):
     #Build the grid
     def __init__(self):

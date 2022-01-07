@@ -1,6 +1,7 @@
 import os, sys
 import shutil, time
 import numpy as np
+from scipy.constants.codata import parse_constants_2002to2014
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -19,23 +20,22 @@ class SubVASP(ListRWTools, SSHTools):
         calculate POSCARs and return energys
         
         POSCAR file notation: POSCAR-round-number-node
-        e.g., POSCAR-001-001-136
+        e.g., POSCAR-001-0001-136
         
         Parameters
         ----------
-        round [int, 0d]: searching-fitting rounds
+        round [int, 0d]: searching rounds
         """
         round = f'{round:03.0f}'
-        poscar = os.listdir(f'{poscar_dir}/{round}')
-        poscar = sorted(poscar, key=lambda x: int(x.split('-')[2]))
-        num_poscar = len(poscar)
-        batches, nodes = self.assign_job(poscar)
+        poscars = os.listdir(f'{poscar_dir}/{round}')
+        poscars = sorted(poscars, key=lambda x: int(x.split('-')[2]))
+        num_poscar = len(poscars)
+        check_poscar = poscars
         for i in range(self.repeat):
-            if not os.path.exists(f'{vasp_out_dir}/{round}-{i}'):
-                os.mkdir(f'{vasp_out_dir}/{round}-{i}')
+            os.mkdir(f'{vasp_out_dir}/{round}-{i}')
             system_echo(f'Start VASP calculation---itersions: '
                         f'{round}-{i}, numbers: {num_poscar}')
-            self.sub_batch_job(batches, round, i, nodes)
+            self.sub_vasp_job(check_poscar, round, i)
             while not self.is_VASP_done(round, i, num_poscar):
                 time.sleep(self.sleep_time)
             system_echo(f'All job are completed---itersions: '
@@ -43,56 +43,55 @@ class SubVASP(ListRWTools, SSHTools):
             if i > 0:
                 self.copy_true_file(round, i, true_E, vasp_out)
             true_E, false_E, vasp_out = self.get_energy(round, i)
-            check_poscar = np.array(poscar)[false_E]
+            check_poscar = np.array(poscars)[false_E]
             num_poscar = len(check_poscar)
-            if not num_poscar == 0:
-                batches, nodes = self.assign_job(check_poscar)
-            else:
+            if num_poscar == 0:
                 system_echo(f'VASP completed---itersions: '
                             f'{round}-{i}, numbers: {num_poscar}')
                 break
     
-    def sub_batch_job(self, batches, round, repeat, nodes):
+    def sub_vasp_job(self, poscars, round, repeat):
         """
         submit vasp jobs to nodes
 
         Parameters
         ----------
-        batches [str, 1d]: string of jobs assigned to different nodes
-        round [str, 0d]: iteration rounds
-        round_repeat [str, 0d]: repeat times of vasp calculation
+        poscars [str, 1d]: name of poscar
+        round [str, 0d]: searching rounds
+        repeat [str, 0d]: repeat times 
         """
-        for j, batch in enumerate(batches):
-            self.sub_jobs_with_ssh(batch, round, repeat, nodes[j])
+        for poscar in poscars:
+            self.sub_job_with_ssh(poscar, round, repeat)
     
-    def sub_jobs_with_ssh(self, batch, round, repeat, node):
+    def sub_job_with_ssh(self, poscar, round, repeat):
         """
         SSH to target node and call vasp for calculation
         
         Parameters
         ----------
-        batch [str, 0d]: POSCAR files assigned to this node
-        node [str, 0d]: job assgined node
+        poscars [str, 1d]: name of poscar
+        round [str, 0d]: searching rounds
+        repeat [str, 0d]: repeat times 
         """
+        node = poscar.split('-')[-1]
         ip = f'node{node}'
+        local_vasp_out_dir = f'/local/ccop/{vasp_out_dir}/{round}-{repeat}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/vasp
-                        for p in {batch}
-                        do
-                            mkdir $p
-                            cd $p
-                            cp ../../{vasp_files_path}/SinglePointEnergy/* .
-                            scp {gpu_node}:/local/ccop/{poscar_dir}/{round}/$p POSCAR
-                            DPT -v potcar
-                            date > $p.out
-                            echo 'VASP-JOB-FINISH' >> $p.out
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
-                            date >> $p.out
-                            scp $p.out {gpu_node}:/local/ccop/{vasp_out_dir}/{round}-{repeat}/
-                            cd ../
-                            rm -r $p
-                        done
+                        p={poscar}
+                        mkdir $p
+                        cd $p
+                        
+                        cp ../../{vasp_files_path}/SinglePointEnergy/* .
+                        scp {gpu_node}:/local/ccop/{poscar_dir}/{round}/$p POSCAR
+                        DPT -v potcar
+                        date > $p.out
+                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
+                        date >> $p.out
+                        scp $p.out {gpu_node}:{local_vasp_out_dir}/
+                        cd ../
+                        #rm -r $p
                         '''
         self.ssh_node(shell_script, ip)
     

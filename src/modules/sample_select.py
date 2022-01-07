@@ -27,6 +27,8 @@ class Select(ListRWTools, SSHTools):
         self.sh_save_dir = f'{search_dir}/{self.round}'
         self.device = torch.device('cuda')
         self.normalizer = Normalizer(torch.tensor([]))
+        if not os.path.exists(self.sh_save_dir):
+            os.mkdir(self.sh_save_dir)
         if not os.path.exists(self.poscar_save_dir):
             os.mkdir(self.poscar_save_dir)
         
