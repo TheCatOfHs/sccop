@@ -159,12 +159,12 @@ def batch_balance(num, batch_size, tuple):
     
     Parameters
     ----------
-    num_crys []: 
-    batch_size []: 
-    tuple []:
+    num_crys [int, 0d]: number of training samples
+    batch_size [int, 0d]: batch size of training
+    tuple [tuple]: tuple of pos, type, grid, energy
     """
     num_last_batch = np.mod(num, batch_size)
-    if num_last_batch < num_gpus:
+    if 0 < num_last_batch < num_gpus:
         for i in tuple:
             del i[-num_last_batch:]
 

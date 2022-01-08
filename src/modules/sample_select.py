@@ -1,10 +1,13 @@
 import sys, os
 import re, time
+import shutil
 import torch
 import numpy as np
 from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
+from pymatgen.core.structure import Structure
+
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -13,6 +16,7 @@ from modules.utils import ListRWTools, SSHTools, system_echo
 from modules.predict import CrystalGraphConvNet, batch_balance
 from modules.predict import DataParallel, Normalizer
 from modules.predict import PPMData, get_loader
+from modules.initial import Initial
 
 
 class Select(ListRWTools, SSHTools):
@@ -439,7 +443,64 @@ class Select(ListRWTools, SSHTools):
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize configurations: {num_poscars}')
 
+
+class OptimSelect(Select, Initial, Transfer):
+    #
+    def __init__(self, round):
+        Select.__init__(self, round)
     
+    def optim_select(self, ):
+        if not os.path.exists(optim_strs_path):
+            os.mkdir(optim_strs_path)
+        energys = []
+        for i in range(num_recycle):
+            start_dir = f'{init_strs_path}_{i+1}'
+            poscars = os.listdir(start_dir)
+            for poscar in poscars:
+                source = f'{start_dir}/{poscar}'
+                target = f'{optim_strs_path}/{poscar}'
+                shutil.copyfile(source, target)
+            energy_dir = f'{vasp_out_dir}/initial_strs_{i+1}/Energy.dat'
+            energy = self.import_list2d(energy_dir, str, numpy=True)[:, 1]
+            energys = np.concatenate((energys, energy))
+        energys = np.array(energys, dtype='float32')
+        poscars = os.listdir(optim_strs_path)
+        self.num_crys = len(poscars)
+        print(poscars)
+        atom_feas, nbr_feas, nbr_fea_idxs = [], [], []
+        for poscar in poscars:
+            stru = Structure.from_file(f'{optim_strs_path}/{poscar}', sort=True)
+            atom_type = self.get_atom_number(stru)
+            atom_fea = self.atom_initializer(atom_type)
+            nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff)
+            nbr_fea = self.expand(nbr_dis)
+            atom_feas.append(atom_fea)
+            nbr_feas.append(nbr_fea)
+            nbr_fea_idxs.append(nbr_fea_idx)
+        
+        data = PPMData(atom_feas, nbr_feas, nbr_fea_idxs, energys)
+        loader = get_loader(data)
+        
+        model_names = self.model_select()
+        _, _, crys_mean = self.mean(model_names, loader)
+        idx_all = np.arange(self.num_crys)
+        
+        crys_mean_all = crys_mean.cpu().numpy()
+        crys_embedded = self.reduce(crys_mean_all)
+        clusters = self.cluster(crys_embedded, num_optims)
+        idx_slt = self.min_in_cluster(idx_all, energys, clusters)
+        idx_drop = np.setdiff1d(idx_all, idx_slt)
+        for i in idx_drop:
+            os.remove(f'{optim_strs_path}/{poscars[i]}')
+        system_echo(f'Optimize configurations: {num_optims}')
+        
+        def read(self,):
+            pass
+        
+        def transfer(self,):
+            pass
+        
+        
 class FeatureExtractNet(CrystalGraphConvNet):
     #Calculate crys_fea
     def __init__(self, orig_atom_fea_len, nbr_fea_len):
@@ -466,6 +527,7 @@ class ReadoutNet(CrystalGraphConvNet):
     
 
 if __name__ == '__main__':
+    '''
     #Data import
     matools = ListRWTools()
     atom_pos = matools.import_list2d(f'{search_dir}/001/atom_pos.dat', int)
@@ -479,3 +541,6 @@ if __name__ == '__main__':
     select.samples(atom_pos, atom_type, grid_name)
     end = time.time()
     print(end - start)
+    '''
+    opt_slt = OptimSelect(1)
+    opt_slt.optim_select()

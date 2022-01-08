@@ -202,7 +202,8 @@ class GridDivide(ListRWTools):
             system_echo('Lattice mutate!')
         frac_coor = self.fraction_coor(grain)
         self.write_grid_POSCAR(latt_vec, frac_coor)
-        nbr_idx, nbr_dis = self.near_property(cutoff)
+        stru = Structure.from_file(self.poscar)
+        nbr_idx, nbr_dis = self.near_property(stru, cutoff)
         self.write_list2d(f'{self.prop_dir}_latt_vec.bin', 
                           latt_vec, binary=True)
         self.write_list2d(f'{self.prop_dir}_frac_coor.bin',
@@ -244,12 +245,13 @@ class GridDivide(ListRWTools):
                 for k in np.arange(0, 1, grain_c)]
         return np.array(coor)
     
-    def near_property(self, cutoff):
+    def near_property(self, stru, cutoff):
         """
         index and distance of near grid points
         
         Parameters
         ----------
+        stru [obj]: pymatgen object
         cutoff [float, 0d]: cutoff distance
         
         Returns
@@ -257,8 +259,7 @@ class GridDivide(ListRWTools):
         nbr_idx [int, 2d]: index of near neighbor 
         nbr_dis [float, 2d]: distance of near neighbor 
         """
-        crystal = Structure.from_file(self.poscar)
-        all_nbrs = crystal.get_all_neighbors(cutoff)
+        all_nbrs = stru.get_all_neighbors(cutoff)
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
         num_near = min(map(lambda x: len(x), all_nbrs))
         nbr_idx, nbr_dis = [], []

@@ -15,7 +15,7 @@ class VASPoptimize(SSHTools, ListRWTools):
     #optimize structure by VASP
     def __init__(self, recycle, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'{ccop_out_dir}_{recycle}'
+        self.ccop_out_dir = f'{ccop_out_dir}-{recycle}'
         self.optim_strs_path = f'{init_strs_path}_{recycle+1}'
         self.energy_path = f'{vasp_out_dir}/initial_strs_{recycle+1}'
         self.local_ccop_out_dir = f'/local/ccop/{self.ccop_out_dir}'
@@ -26,7 +26,7 @@ class VASPoptimize(SSHTools, ListRWTools):
             os.mkdir(self.optim_strs_path)
             os.mkdir(self.energy_path)
 
-    def run_optimization(self):
+    def run_optimization_low(self):
         '''
         optimize configurations from low to high level
         '''
@@ -46,7 +46,59 @@ class VASPoptimize(SSHTools, ListRWTools):
                             cd $p
                             cp ../../{vasp_files_path}/Optimization/* .
                             scp {gpu_node}:{self.local_ccop_out_dir}/$p POSCAR
-                                
+                            
+                            cp POSCAR POSCAR_0
+                            DPT -v potcar
+                            for i in 1
+                            do
+                                cp INCAR_$i INCAR
+                                cp KPOINTS_$i KPOINTS
+                                date > vasp-$i.vasp
+                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                date >> vasp-$i.vasp
+                                cp CONTCAR POSCAR
+                                cp CONTCAR POSCAR_$i
+                                cp OUTCAR OUTCAR_$i
+                                rm WAVECAR CHGCAR
+                            done
+                            if [ `cat CONTCAR|wc -l` -ge 8 ]; then
+                                scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
+                                scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                            fi
+                            cd ../
+                            
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.local_optim_strs_path}/
+                            rm -rf $p FINISH-$p
+                            '''
+            self.ssh_node(shell_script, ip)
+        while not self.is_done(self.optim_strs_path, num_poscar):
+            time.sleep(self.sleep_time)
+        self.find_symmetry_structure(self.optim_strs_path)
+        system_echo(f'All job are completed --- Optimization')
+        self.remove(self.optim_strs_path)
+    
+    def run_optimization_high(self):
+        '''
+        optimize configurations from low to high level
+        '''
+        self.find_symmetry_structure(self.ccop_out_dir)
+        files = sorted(os.listdir(self.ccop_out_dir))
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        num_poscar = len(poscars)
+        system_echo(f'Start VASP calculation --- Optimization')
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            p={poscar}
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Optimization/* .
+                            scp {gpu_node}:{self.local_ccop_out_dir}/$p POSCAR
+                            
                             cp POSCAR POSCAR_0
                             DPT -v potcar
                             for i in 1 2 3
@@ -61,7 +113,7 @@ class VASPoptimize(SSHTools, ListRWTools):
                                 cp OUTCAR OUTCAR_$i
                                 rm WAVECAR CHGCAR
                             done
-                            if [ `cat CONTCAR|wc -l` -ne 0 ]; then
+                            if [ `cat CONTCAR|wc -l` -ge 8 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
                                 scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
@@ -142,50 +194,50 @@ class PostProcess(SSHTools, ListRWTools):
             os.mkdir(energy_path)
             os.mkdir(pbe_band_path)
             os.mkdir(phonon_path)
-    
+
     def run_pbe_band(self):
         '''
         calculate energy band of optimied configurations
         '''
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
-        batches, nodes = self.assign_job(poscars)
         self.get_k_points(poscars, task='band')
         system_echo(f'Start VASP calculation --- Electronic structure')
-        for j, batch in enumerate(batches):
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
-                            for p in {batch}
+                            p={poscar}
+                            
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/ElectronicStructure/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            scp {gpu_node}:{self.KPOINTS}/KPOINTS-$p KPOINTS_2
+
+                            for i in 1 2
                             do
-                                mkdir $p
-                                cd $p
-                                cp ../../{vasp_files_path}/ElectronicStructure/* .
-                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
-                                scp {gpu_node}:{self.KPOINTS}/KPOINTS-$p KPOINTS_2
-
-                                for i in 1 2
-                                do
-                                    DPT -v potcar
-                                    cp INCAR_$i INCAR
-                                    cp KPOINTS_$i KPOINTS
-                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
-                                    cp OUTCAR OUTCAR_$i
-                                    cp IBZKPT IBZKPT_$i
-                                    cp EIGENVAL EIGENVAL_$i
-                                done
-
-                                DPT -b
-                                python ../../libs/scripts/plot-energy-band.py
-                                scp DPT.BAND.dat {gpu_node}:{self.pbe_band_path}/band-$p.dat
-                                scp DPT.band.png {gpu_node}:{self.pbe_band_path}/band-$p.png
-                                cd ../
-                                touch FINISH-$p
-                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                                rm -rf $p FINISH-$p
+                                DPT -v potcar
+                                cp INCAR_$i INCAR
+                                cp KPOINTS_$i KPOINTS
+                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                cp OUTCAR OUTCAR_$i
+                                cp IBZKPT IBZKPT_$i
+                                cp EIGENVAL EIGENVAL_$i
                             done
+
+                            DPT -b
+                            python ../../libs/scripts/plot-energy-band.py
+                            scp DPT.BAND.dat {gpu_node}:{self.pbe_band_path}/band-$p.dat
+                            scp DPT.band.png {gpu_node}:{self.pbe_band_path}/band-$p.png
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
                             '''
-            self.sub_jobs_with_ssh(nodes[j], shell_script)
+            self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Electronic structure')
@@ -197,50 +249,50 @@ class PostProcess(SSHTools, ListRWTools):
         '''
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
-        batches, nodes = self.assign_job(poscars)
         self.get_k_points(poscars, task='phonon')
         system_echo(f'Start VASP calculation --- Phonon spectrum')
-        for j, batch in enumerate(batches):
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
-                            for p in {batch}
+                            p={poscar}
+                            
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Phonon/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
+                                
+                            phonopy -d --dim="2 2 2"
+                            n=`ls | grep POSCAR- | wc -l`
+                            for i in `seq -f%03g 1 $n`
                             do
-                                mkdir $p
-                                cd $p
-                                cp ../../{vasp_files_path}/Phonon/* .
-                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
-                                scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
+                                mkdir disp-$i
+                                cp INCAR KPOINTS POTCAR vdw* disp-$i/
+                                cp POSCAR-$i disp-$i/POSCAR
                                 
-                                phonopy -d --dim="2 2 2"
-                                n=`ls | grep POSCAR- | wc -l`
-                                for i in `seq -f%03g 1 $n`
-                                do
-                                    mkdir disp-$i
-                                    cp INCAR KPOINTS POTCAR vdw* disp-$i/
-                                    cp POSCAR-$i disp-$i/POSCAR
-                                
-                                    cd disp-$i/
-                                        DPT -v potcar
-                                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
-                                        rm CHG* WAVECAR
-                                        cp vasprun.xml ../vasprun.xml-$i
-                                    cd ..
-                                done
-                                
-                                phonopy -f vasprun.xml-*
-                                phonopy band.conf
-                                phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
-                                python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
-                                scp phonon-$p.dat {gpu_node}:{self.phonon_path}/phonon-$p.dat
-                                scp PHON.png {gpu_node}:{self.phonon_path}/phonon-$p.png
-                                cd ../
-                                touch FINISH-$p
-                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                                rm -rf $p FINISH-$p
+                                cd disp-$i/
+                                    DPT -v potcar
+                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                    rm CHG* WAVECAR
+                                    cp vasprun.xml ../vasprun.xml-$i
+                                cd ..
                             done
+                                
+                            phonopy -f vasprun.xml-*
+                            phonopy band.conf
+                            phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
+                            python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
+                            scp phonon-$p.dat {gpu_node}:{self.phonon_path}/phonon-$p.dat
+                            scp PHON.png {gpu_node}:{self.phonon_path}/phonon-$p.png
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
                             '''
-            self.sub_jobs_with_ssh(nodes[j], shell_script)
+            self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Phonon spectrum')
@@ -252,36 +304,36 @@ class PostProcess(SSHTools, ListRWTools):
         """
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
-        batches, nodes = self.assign_job(poscars)
         system_echo(f'Start VASP calculation --- Elastic modulous')
-        for j, batch in enumerate(batches):
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
-                            for p in {batch}
-                            do
-                                mkdir $p
-                                cd $p
-                                cp ../../{vasp_files_path}/Elastic/* .
-                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            p={poscar}
+        
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Elastic/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                                 
-                                DPT -v potcar
-                                cp INCAR_$i INCAR
-                                cp KPOINTS_$i KPOINTS
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                            DPT -v potcar
+                            cp INCAR_$i INCAR
+                            cp KPOINTS_$i KPOINTS
+                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
 
-                                DPT --elastic
-                                python ../../libs/scripts/plot-poisson-ratio.py
-                                scp DPT.poisson.png {gpu_node}:{self.elastic_path}/poisson-$p.png
-                                scp DPT.elastic_constant.dat {gpu_node}:{self.elastic_path}/elastic_constant-$p.dat
-                                scp DPT.modulous.dat {gpu_node}:{self.elastic_path}/modulous-$p.dat
-                                cd ../
-                                touch FINISH-$p
-                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                                rm -rf $p FINISH-$p
-                            done
+                            DPT --elastic
+                            python ../../libs/scripts/plot-poisson-ratio.py
+                            scp DPT.poisson.png {gpu_node}:{self.elastic_path}/poisson-$p.png
+                            scp DPT.elastic_constant.dat {gpu_node}:{self.elastic_path}/elastic_constant-$p.dat
+                            scp DPT.modulous.dat {gpu_node}:{self.elastic_path}/modulous-$p.dat
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
                             '''
-            self.sub_jobs_with_ssh(nodes[j], shell_script)
+            self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Elastic modulous')
@@ -293,50 +345,38 @@ class PostProcess(SSHTools, ListRWTools):
         """
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
-        batches, nodes = self.assign_job(poscars)
         system_echo(f'Start VASP calculation --- Dielectric tensor')
-        for j, batch in enumerate(batches):
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
                             cd {self.calculation_path}
-                            for p in {batch}
-                            do
-                                mkdir $p
-                                cd $p
-                                cp ../../{vasp_files_path}/Dielectric/* .
-                                scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            p={poscar}
+                            
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Dielectric/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                                 
-                                DPT -v potcar
-                                cp INCAR_$i INCAR
-                                cp KPOINTS_$i KPOINTS
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                            DPT -v potcar
+                            cp INCAR_$i INCAR
+                            cp KPOINTS_$i KPOINTS
+                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
                                 
-                                DPT --diele
-                                scp dielectric.dat {gpu_node}:{self.dielectric_path}/dielectric-$p.dat
-                                scp born_charges.dat {gpu_node}:{self.dielectric_path}/born_charges-$p.dat
-                                cd ../
-                                touch FINISH-$p
-                                scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                                rm -rf $p FINISH-$p
-                            done
+                            DPT --diele
+                            scp dielectric.dat {gpu_node}:{self.dielectric_path}/dielectric-$p.dat
+                            scp born_charges.dat {gpu_node}:{self.dielectric_path}/born_charges-$p.dat
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
                             '''
-            self.sub_jobs_with_ssh(nodes[j], shell_script)
+            self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.sleep_time)
         system_echo(f'All job are completed --- Dielectric tensor')
         self.remove(optim_strs_path)
-    
-    def sub_jobs_with_ssh(self, node, shell_script):
-        """
-        SSH to target node and call vasp for calculation
-        
-        Parameters
-        ----------
-        node [int, 1d]: POSCAR files assigned to nodes
-        shell_script [str, 0d]: job assgined to nodes
-        """
-        ip = f'node{node}'
-        self.ssh_node(shell_script, ip)
 
     def get_k_points(self, poscars, task):
         """
@@ -408,6 +448,7 @@ class PostProcess(SSHTools, ListRWTools):
 if __name__ == '__main__':
     vasp = VASPoptimize(0)
     vasp.run_optimization()
+    vasp.get_energy()
     #post = PostProcess()
     #post.get_energy()
     #post.run_pbe_band()

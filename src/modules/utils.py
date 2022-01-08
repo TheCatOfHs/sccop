@@ -274,6 +274,10 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    a = []
-    b = [1, 2, 3]
-    print(np.concatenate((a, b)))
+    from modules.predict import batch_balance, batch_divide
+    a = [i for i in range(10)]
+    b = [i for i in range(10)]
+    tuple = (a, b)
+    batch_balance(513, 256, tuple)
+    print(a)
+    print(batch_divide(a))

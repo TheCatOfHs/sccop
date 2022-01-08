@@ -233,7 +233,7 @@ class Pretrain(Transfer):
             nbr_idx.append(idx)
             nbr_dis.append(dis)
         nbr_idx, nbr_dis = np.array(nbr_idx), np.array(nbr_dis)
-        atom_fea = self.atom_initilizer(atom_type)
+        atom_fea = self.atom_initializer(atom_type)
         nbr_fea = self.expand(nbr_dis)
         return atom_fea, nbr_fea, nbr_idx
     

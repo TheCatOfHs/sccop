@@ -6,7 +6,7 @@ from modules.global_var import *
 from modules.initial import Initial, UpdateNodes
 from modules.grid_divide import MultiDivide, GridDivide
 from modules.data_transfer import MultiGridTransfer
-from modules.sample_select import Select
+from modules.sample_select import Select, OptimSelect
 from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
 from modules.predict import PPMData, PPModel, batch_balance
@@ -89,7 +89,7 @@ if __name__ == '__main__':
             num_sample = len(grid_name_right)
             idx = np.arange(num_sample)
             system_echo(f'Sampling number: {num_sample}')
-            
+
             #Select samples
             start = recyc * (num_round + 1)
             select = Select(start)
@@ -126,9 +126,10 @@ if __name__ == '__main__':
             a = int(num_poscars*0.6)
             num_crys = a + len(train_energys)
             tuple = (atom_pos_right, atom_type_right, grid_name_right, energys)
-            batch_balance(num_crys, train_batchsize, tuple)       
+            batch_balance(num_crys, train_batchsize, tuple)
+            system_echo(f'Training set: {num_crys}')       
             atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
-
+            system_echo(f'New add to training set: {len(atom_fea)}')
             #Training data
             pos_buffer += atom_pos_right[0:a]
             type_buffer += atom_type_right[0:a]
@@ -137,7 +138,7 @@ if __name__ == '__main__':
             train_nbr_fea += nbr_fea[0:a]
             train_nbr_fea_idx += nbr_fea_idx[0:a]
             train_energys += energys[0:a]
-        
+            system_echo(f'Training set: {len(train_energys)}')
             #Validation data
             valid_atom_fea = atom_fea[a:]
             valid_nbr_fea = nbr_fea[a:]
@@ -172,7 +173,7 @@ if __name__ == '__main__':
                 if round == 0:
                     mutate = False
                 else:
-                    if np.mod(round, 2) == 0:
+                    if np.mod(round, 3) == 0:
                         mutate = True
                     else:
                         mutate = False
@@ -223,11 +224,15 @@ if __name__ == '__main__':
 
         #VASP optimize
         vasp = VASPoptimize(recyc)
-        vasp.run_optimization()
+        if recyc == num_recycle-1:
+            vasp.run_optimization_high()
+        else:
+            vasp.run_optimization_low()
         vasp.get_energy()
     '''
     #Select optimized structures
-    
+    opt_slt = OptimSelect(start+num_round)
+    opt_slt.optim_select()
     
     #Energy band
     post = PostProcess()

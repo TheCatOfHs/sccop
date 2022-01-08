@@ -32,7 +32,7 @@ class Transfer(ListRWTools):
         self.grid_point_num = len(self.grid_nbr_dis)
         self.grid_point_array = np.arange(self.grid_point_num)
         
-    def atom_initilizer(self, atom_type):
+    def atom_initializer(self, atom_type):
         """
         initialize atom features
 
@@ -144,7 +144,7 @@ class Transfer(ListRWTools):
         nbr_fea [float, 3d, np]: neighbor feature
         nbr_fea_idx [float, 2d, np]: neighbor index
         """
-        atom_fea = self.atom_initilizer(atom_type)
+        atom_fea = self.atom_initializer(atom_type)
         nbr_fea, nbr_fea_idx = self.find_nbr(atom_pos)
         return atom_fea, nbr_fea, \
                 nbr_fea_idx

@@ -11,9 +11,10 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 2
-num_round = 30
+num_recycle = 4
+num_round = 5
 num_poscars = 30
+num_optims = 10
 
 #Training
 train_batchsize = 128
