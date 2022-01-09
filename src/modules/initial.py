@@ -115,7 +115,6 @@ class Initial(GridDivide, UpdateNodes):
         initial_dir = f'{init_strs_path}_{recyc}'
         file = os.listdir(initial_dir)
         atom_pos, atom_type, grid_init, latt = [], [], [], []
-        grid_frac = self.fraction_coor(grain)
         for i, poscar in enumerate(file):
             str = Structure.from_file(f'{initial_dir}/{poscar}', sort=True)
             latt_vec = str.lattice.matrix
@@ -123,6 +122,7 @@ class Initial(GridDivide, UpdateNodes):
             self.write_list2d(latt_file, latt_vec, binary=True)
             type = self.get_atom_number(str)
             stru_frac = str.frac_coords
+            grid_frac = self.fraction_coor(grain, latt_vec)
             pos = self.put_into_grid(stru_frac, grid_frac, latt_vec)
             atom_type.append(type)
             atom_pos.append(pos)

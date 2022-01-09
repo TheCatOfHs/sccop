@@ -444,32 +444,35 @@ class Select(ListRWTools, SSHTools):
         system_echo(f'CCOP optimize configurations: {num_poscars}')
 
 
-class OptimSelect(Select, Initial, Transfer):
+class OptimSelect(Select, Initial, Transfer, SSHTools):
     #
     def __init__(self, round):
         Select.__init__(self, round)
+        Transfer.__init__(self, 0)
+        self.elem_embed = self.import_list2d(
+            atom_init_file, int, numpy=True)
     
-    def optim_select(self, ):
-        if not os.path.exists(optim_strs_path):
-            os.mkdir(optim_strs_path)
+    def optim_select(self):
+        if not os.path.exists(ccop_out_dir):
+            os.mkdir(ccop_out_dir)
         energys = []
         for i in range(num_recycle):
             start_dir = f'{init_strs_path}_{i+1}'
             poscars = os.listdir(start_dir)
             for poscar in poscars:
                 source = f'{start_dir}/{poscar}'
-                target = f'{optim_strs_path}/{poscar}'
+                target = f'{ccop_out_dir}/{poscar}'
                 shutil.copyfile(source, target)
             energy_dir = f'{vasp_out_dir}/initial_strs_{i+1}/Energy.dat'
             energy = self.import_list2d(energy_dir, str, numpy=True)[:, 1]
             energys = np.concatenate((energys, energy))
         energys = np.array(energys, dtype='float32')
-        poscars = os.listdir(optim_strs_path)
+        poscars = sorted(os.listdir(ccop_out_dir))
         self.num_crys = len(poscars)
-        print(poscars)
+        
         atom_feas, nbr_feas, nbr_fea_idxs = [], [], []
         for poscar in poscars:
-            stru = Structure.from_file(f'{optim_strs_path}/{poscar}', sort=True)
+            stru = Structure.from_file(f'{ccop_out_dir}/{poscar}', sort=True)
             atom_type = self.get_atom_number(stru)
             atom_fea = self.atom_initializer(atom_type)
             nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff)
@@ -479,7 +482,7 @@ class OptimSelect(Select, Initial, Transfer):
             nbr_fea_idxs.append(nbr_fea_idx)
         
         data = PPMData(atom_feas, nbr_feas, nbr_fea_idxs, energys)
-        loader = get_loader(data)
+        loader = get_loader(data, 256, 0)
         
         model_names = self.model_select()
         _, _, crys_mean = self.mean(model_names, loader)
@@ -491,14 +494,36 @@ class OptimSelect(Select, Initial, Transfer):
         idx_slt = self.min_in_cluster(idx_all, energys, clusters)
         idx_drop = np.setdiff1d(idx_all, idx_slt)
         for i in idx_drop:
-            os.remove(f'{optim_strs_path}/{poscars[i]}')
+            os.remove(f'{ccop_out_dir}/{poscars[i]}')
+        
+        poscars = sorted(os.listdir(ccop_out_dir))
+        node_assign = self.assign_node(num_optims)
+        for i, poscar in enumerate(poscars):
+            os.rename(f'{ccop_out_dir}/{poscar}', 
+                      f'{ccop_out_dir}/POSCAR-{i+1:02.0f}-{node_assign[i]}')
         system_echo(f'Optimize configurations: {num_optims}')
+    
+    def near_property(self, stru, cutoff):
+        """
+        index and distance of near grid points
         
-        def read(self,):
-            pass
+        Parameters
+        ----------
+        stru [obj]: pymatgen object
+        cutoff [float, 0d]: cutoff distance
         
-        def transfer(self,):
-            pass
+        Returns
+        ----------
+        nbr_idx [int, 2d]: index of near neighbor 
+        nbr_dis [float, 2d]: distance of near neighbor 
+        """
+        all_nbrs = stru.get_all_neighbors(cutoff)
+        all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
+        nbr_idx, nbr_dis = [], []
+        for nbr in all_nbrs:
+            nbr_idx.append(list(map(lambda x: x[2], nbr[:self.nbr])))
+            nbr_dis.append(list(map(lambda x: x[1], nbr[:self.nbr])))
+        return np.array(nbr_idx), np.array(nbr_dis)
         
         
 class FeatureExtractNet(CrystalGraphConvNet):

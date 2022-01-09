@@ -2,7 +2,7 @@ import os
 
 #Grid
 cutoff = 6
-grain = [.1, .1, .1]
+grain = [.5, .5, .5]
 
 #Mutate
 num_mutate = 6
@@ -11,10 +11,10 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 4
-num_round = 5
+num_recycle = 2
+num_round = 10
 num_poscars = 30
-num_optims = 10
+num_optims = 12
 
 #Training
 train_batchsize = 128

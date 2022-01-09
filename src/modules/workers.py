@@ -256,10 +256,9 @@ class MultiWorkers(ListRWTools, SSHTools):
         sort = np.argsort(grid)
         assign, grid = assign[sort], grid[sort]
         atom_pos, atom_type, grid_name = [], [], []
-        for item in assign:
+        for i, item in enumerate(assign):
             pos = self.read_result('pos', *tuple(item))
             atom_pos += pos
-        for i, item in enumerate(assign):
             type = self.read_result('type', *tuple(item))
             atom_type += type
             num_sample = len(type)

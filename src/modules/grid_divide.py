@@ -200,7 +200,7 @@ class GridDivide(ListRWTools):
             delta = np.identity(3) + self.strain_mat()
             latt_vec = np.dot(delta, latt_vec)
             system_echo('Lattice mutate!')
-        frac_coor = self.fraction_coor(grain)
+        frac_coor = self.fraction_coor(grain, latt_vec)
         self.write_grid_POSCAR(latt_vec, frac_coor)
         stru = Structure.from_file(self.poscar)
         nbr_idx, nbr_dis = self.near_property(stru, cutoff)
@@ -212,7 +212,7 @@ class GridDivide(ListRWTools):
                           nbr_idx, binary=True)
         self.write_list2d(f'{self.prop_dir}_nbr_dis.bin',
                           nbr_dis, binary=True)
-
+    
     def strain_mat(self):
         """
         symmetry stain matrix
@@ -227,7 +227,7 @@ class GridDivide(ListRWTools):
         strain = np.clip(gauss_sym, -1, 1)
         return strain
     
-    def fraction_coor(self, grain):
+    def fraction_coor(self, grain, latt_vec):
         """
         fraction coordinate of grid
         
@@ -239,7 +239,9 @@ class GridDivide(ListRWTools):
         ----------
         coor [float, 2d]: fraction coordinate of grid
         """
-        grain_a, grain_b, grain_c = grain
+        norm = [np.linalg.norm(i) for i in latt_vec]
+        n = [norm[i]//grain[i] for i in range(3)]
+        grain_a, grain_b, grain_c = [1/i for i in n]
         coor = [[i, j, k] for i in np.arange(0, 1, grain_a)
                 for j in np.arange(0, 1, grain_b)
                 for k in np.arange(0, 1, grain_c)]

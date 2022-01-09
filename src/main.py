@@ -64,11 +64,13 @@ if __name__ == '__main__':
         initial = True
         worker = Search(0, 0)
         if initial:
-            num_initial = 100000
-            grid_point = [i for i in range(1000)]
-            atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
-            atom_type += [[i for i in [29, 30, 6, 7] for _ in range(2)] for _ in range(num_initial)]
-            grid_name = np.concatenate((grid_name, np.random.choice(grid_init, num_initial)))
+            num_initial = 4000
+            for i in grid_init:
+                point_num = len(rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True))
+                grid_point = [i for i in range(point_num)]
+                atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
+                atom_type += [[i for i in [29, 30, 6, 7] for _ in range(2)] for _ in range(num_initial)]
+                grid_name = np.concatenate((grid_name, [i for _ in range(num_initial)]))
             order = np.argsort(grid_name)
             atom_pos = [atom_pos[i] for i in order]
             atom_type = [atom_type[i] for i in order]
@@ -106,7 +108,7 @@ if __name__ == '__main__':
             true_E = [bool(i) for i in true_E]
             energys = energy_file[:,2][true_E]
             energys = [float(i) for i in energys]
-
+            
             atom_pos = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_pos_select.dat', int)
             atom_type = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_type_select.dat', int)
             grid_name = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/grid_name_select.dat', int)
@@ -152,7 +154,7 @@ if __name__ == '__main__':
                 valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
                 ppm = PPModel(round+1, train_data, valid_data, valid_data)
                 ppm.train_epochs()
-        
+
             #Train data added
             train_atom_fea += atom_fea[a:]
             train_nbr_fea += nbr_fea[a:]
@@ -161,14 +163,14 @@ if __name__ == '__main__':
             pos_buffer += atom_pos_right[a:]
             type_buffer += atom_type_right[a:]
             grid_buffer += grid_name_right[a:]
-        
+    
             #Search
             search = True
             if search:
                 num_seed = 30
                 min_idx = np.argsort(train_energys)[:num_seed]
                 grid_pool = np.array(grid_buffer)[min_idx] 
-            
+              
                 #Generate mutate lattice grid
                 if round == 0:
                     mutate = False
@@ -183,7 +185,8 @@ if __name__ == '__main__':
                     grid_mutate = np.arange(num_grid, num_grid+num_mutate)
                     grid_store = np.concatenate((grid_store, grid_mutate))
                     divide.assign(grid_origin, grid_mutate)
-            
+                    system_echo(f'Grid origin: {grid_origin}')
+                    
                 #Initial search start point
                 init_pos, init_type, init_grid = [], [], []
                 for _ in range(num_paths):
@@ -197,15 +200,23 @@ if __name__ == '__main__':
                 mut_num = int(num_paths*mut_ratio)
                 mut_pos = init_pos[:mut_num]
                 mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
+                init_frac = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid]
+                init_latt_vec = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in init_grid]
+                mut_frac = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in mut_latt]
+                mut_latt_vec = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in mut_latt]
+                mut_pos = [mul_transfer.put_into_grid(mut_pos[i], init_frac[i], init_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
                 batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
-                check = [worker.near_check(i) for i in batch_nbr_dis]
+                check_near = [worker.near_check(i) for i in batch_nbr_dis]
+                check_overlay = [worker.overlay_check(i, len(i)) for i in mut_pos]
+                check = [i and j for i, j in zip(check_near, check_overlay)]
                 for i, correct in enumerate(check):
                     if correct:
+                        init_pos[i] = mut_pos[i]
                         init_grid[i] = mut_latt[i]
                         mut_counter += 1
                 system_echo(f'Lattice mutate number: {mut_counter}')
                 workers.search(round+1, num_paths, init_pos, init_type, init_grid)
-
+            
             #Sample
             atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
             atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
@@ -218,24 +229,23 @@ if __name__ == '__main__':
 
         #Export searched POSCARS
         select = Select(start+num_round)
-        grid_buffer = [[i] for i in grid_buffer]
-        select.export(recyc, pos_buffer, type_buffer, grid_buffer)
+        grid_buffer_2d = [[i] for i in grid_buffer]
+        select.export(recyc, pos_buffer, type_buffer, grid_buffer_2d)
         system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recyc}')
 
         #VASP optimize
         vasp = VASPoptimize(recyc)
-        if recyc == num_recycle-1:
-            vasp.run_optimization_high()
-        else:
-            vasp.run_optimization_low()
-        vasp.get_energy()
-    '''
+        vasp.run_optimization_low()
+
     #Select optimized structures
     opt_slt = OptimSelect(start+num_round)
     opt_slt.optim_select()
     
-    #Energy band
+    #Optimize
     post = PostProcess()
+    post.run_optimization()
+
+    #Energy band
     post.run_pbe_band()
     
     #Phonon spectrum
@@ -246,4 +256,3 @@ if __name__ == '__main__':
     
     #Dielectric matrix
     post.run_dielectric()
-    '''
