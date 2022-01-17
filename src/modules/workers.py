@@ -36,17 +36,17 @@ class MultiWorkers(ListRWTools, SSHTools):
         init_grid [int, 2d]: initial grid name
         """
         self.round = f'{round:03.0f}'
-        self.sh_save_dir = f'{search_path}/{self.round}'
-        self.model_save_dir = f'{model_path}/{self.round}'
+        self.sh_save_path = f'{search_path}/{self.round}'
+        self.model_save_path = f'{model_path}/{self.round}'
         self.generate_job(round, num_paths, init_pos,
                           init_type, init_grid)
         pos, type, job = self.read_job()
         system_echo('Get the job node!')
         for node in nodes:
             self.update_with_ssh(node)
-        while not self.is_done(self.sh_save_dir, len(nodes)):
+        while not self.is_done(self.sh_save_path, len(nodes)):
             time.sleep(self.sleep_time)
-        self.remove(self.sh_save_dir)
+        self.remove(self.sh_save_path)
         system_echo('Successful update each node!')
         
         self.sub_job_to_workers(pos, type, job)
@@ -57,11 +57,11 @@ class MultiWorkers(ListRWTools, SSHTools):
         atom_pos, atom_type, grid_name = self.collect(job_finish)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
         
-        self.write_list2d(f'{self.sh_save_dir}/atom_pos.dat', 
+        self.write_list2d(f'{self.sh_save_path}/atom_pos.dat', 
                           atom_pos, style='{0:3.0f}')
-        self.write_list2d(f'{self.sh_save_dir}/atom_type.dat',
+        self.write_list2d(f'{self.sh_save_path}/atom_type.dat',
                           atom_type, style='{0:3.0f}')
-        self.write_list2d(f'{self.sh_save_dir}/grid_name.dat',
+        self.write_list2d(f'{self.sh_save_path}/grid_name.dat',
                           grid_name, style='{0:3.0f}')
         self.remove_all_path()
     
@@ -78,17 +78,17 @@ class MultiWorkers(ListRWTools, SSHTools):
         init_type [int, 2d]: initial atom type
         init_grid [int, 2d]: initial grid name
         """
-        if not os.path.exists(self.sh_save_dir):
-            os.mkdir(self.sh_save_dir)
+        if not os.path.exists(self.sh_save_path):
+            os.mkdir(self.sh_save_path)
         worker_job = []
         model = 'model_best.pth.tar'
         node_assign = self.assign_node(num_paths)
         for i, node in enumerate(node_assign):
             job = [round, i, node, init_grid[i], model]
             worker_job.append(job)
-        worker_file = f'{self.sh_save_dir}/worker_job_{self.round}.dat'
-        pos_file = f'{self.sh_save_dir}/initial_pos_{self.round}.dat'
-        type_file = f'{self.sh_save_dir}/initial_type_{self.round}.dat'
+        worker_file = f'{self.sh_save_path}/worker_job_{self.round}.dat'
+        pos_file = f'{self.sh_save_path}/initial_pos_{self.round}.dat'
+        type_file = f'{self.sh_save_path}/initial_type_{self.round}.dat'
         self.write_list2d(worker_file, worker_job)
         self.write_list2d(pos_file, init_pos)
         self.write_list2d(type_file, init_type)
@@ -101,12 +101,12 @@ class MultiWorkers(ListRWTools, SSHTools):
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
-                        mkdir {self.sh_save_dir}
+                        mkdir {self.sh_save_path}
                         cd data/
-                        scp -r {gpu_node}:/local/ccop/{self.model_save_dir} ppmodel/
+                        scp -r {gpu_node}:/local/ccop/{self.model_save_path} ppmodel/
                         
                         touch FINISH-{ip}
-                        scp FINISH-{ip} {gpu_node}:/local/ccop/{self.sh_save_dir}/
+                        scp FINISH-{ip} {gpu_node}:/local/ccop/{self.sh_save_path}/
                         rm FINISH-{ip}
                         '''
         self.ssh_node(shell_script, ip)
@@ -132,18 +132,18 @@ class MultiWorkers(ListRWTools, SSHTools):
                   f'--grid_name {grid_name} --model_name {model_name}'
         postfix = f'{self.round}-{path.zfill(3)}-{node}.dat'
         pos, type, energy = f'pos-{postfix}', f'type-{postfix}', f'energy-{postfix}'
-        local_sh_save_dir = f'/local/ccop/{self.sh_save_dir}'
+        local_sh_save_path = f'/local/ccop/{self.sh_save_path}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
                         python src/modules/search.py {options}
                         
-                        cd {self.sh_save_dir}
+                        cd {self.sh_save_path}
                         if [ -f {pos} -a -f {type} -a -f {energy} ]; then
                             tar -zcf {path}.tar.gz {pos} {type} {energy}
-                            scp {path}.tar.gz {gpu_node}:{local_sh_save_dir}
+                            scp {path}.tar.gz {gpu_node}:{local_sh_save_path}
                             touch FINISH-{path}
-                            scp FINISH-{path} {gpu_node}:{local_sh_save_dir}
+                            scp FINISH-{path} {gpu_node}:{local_sh_save_path}
                             rm FINISH-{path} {pos} {type} {energy} {path}.tar.gz
                         fi
                         '''
@@ -166,7 +166,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         """
         exist_path = np.arange(num_paths)
         time_counter, repeat_counter = 0, 0
-        while not self.is_done(self.sh_save_dir, num_paths):
+        while not self.is_done(self.sh_save_path, num_paths):
             time.sleep(self.sleep_time)
             time_counter += 1
             if time_counter > self.wait_time:
@@ -198,7 +198,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         exist_path [int, 1d, np]: index of success jobs
         """
         all_path = [int(i) for i in job[:,1]]
-        shell_script = f'ls {self.sh_save_dir} | grep tar.gz'
+        shell_script = f'ls {self.sh_save_path} | grep tar.gz'
         ct = os.popen(shell_script).read().split()
         exist_path = [int(i.split('.')[0]) for i in ct]
         fail_path = np.setdiff1d(all_path, exist_path)
@@ -229,7 +229,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         zip_file = ' '.join(zip_file)
         shell_script = f'''
                         #!/bin/bash
-                        cd {self.sh_save_dir}
+                        cd {self.sh_save_path}
                         for i in {zip_file}
                         do
                             tar -zxf $i
@@ -281,7 +281,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         ----------
         list [int, 2d]: position or type 
         """
-        file = f'{self.sh_save_dir}/' \
+        file = f'{self.sh_save_path}/' \
             f'{file}-{round.zfill(3)}-{path.zfill(3)}-{node}.dat'
         list = self.import_list2d(file, int)
         return list
@@ -314,7 +314,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         ----------
         list [str, 1d or 2d, np]: return string list
         """
-        file = f'{self.sh_save_dir}/{dat}'
+        file = f'{self.sh_save_path}/{dat}'
         with open(file, 'r') as f:
             ct = f.readlines()
         if split:
@@ -328,7 +328,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         remove file of each path
         """
         shell_script = f'''
-                        cd {self.sh_save_dir}
+                        cd {self.sh_save_path}
                         rm FINISH*
                         rm pos* type* energy*
                         '''
@@ -342,8 +342,8 @@ class Search(ListRWTools):
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([]))
         self.round = f'{round:03.0f}'
-        self.model_save_dir = f'{model_path}/{self.round}'
-        self.sh_save_dir = f'{search_path}/{self.round}'
+        self.model_save_path = f'{model_path}/{self.round}'
+        self.sh_save_path = f'{search_path}/{self.round}'
     
     def explore(self, pos, type, model_name, path, node):
         """
@@ -530,7 +530,7 @@ class Search(ListRWTools):
         """
         self.model = CrystalGraphConvNet(orig_atom_fea_len, 
                                          nbr_bond_fea_len)
-        paras = torch.load(f'{self.model_save_dir}/{model_name}', 
+        paras = torch.load(f'{self.model_save_path}/{model_name}', 
                            map_location=self.device)
         self.model.load_state_dict(paras['state_dict'])
         self.normalizer.load_state_dict(paras['normalizer'])
@@ -570,13 +570,13 @@ class Search(ListRWTools):
         type_buffer [int, 2d]: atom types
         energy_buffer [float, 2d]: configuration energy
         """
-        self.write_list2d(f'{self.sh_save_dir}/'
+        self.write_list2d(f'{self.sh_save_path}/'
                           f'pos-{self.round}-{path:03.0f}-{node}.dat', 
                           pos_buffer, style='{0:4.0f}')
-        self.write_list2d(f'{self.sh_save_dir}/'
+        self.write_list2d(f'{self.sh_save_path}/'
                           f'type-{self.round}-{path:03.0f}-{node}.dat', 
                           type_buffer, style='{0:4.0f}')
-        self.write_list2d(f'{self.sh_save_dir}/'
+        self.write_list2d(f'{self.sh_save_path}/'
                           f'energy-{self.round}-{path:03.0f}-{node}.dat', 
                           energy_buffer, style='{0:8.4f}')
 

@@ -20,7 +20,7 @@ class MultiDivide(ListRWTools, SSHTools):
     def __init__(self, sleep_time=1):
         self.num_node = len(nodes)
         self.sleep_time = sleep_time
-        self.prop_dir = f'/local/ccop/{grid_prop_path}'
+        self.prop_path = f'/local/ccop/{grid_prop_path}'
     
     def assign(self, grid_origin, grid_mutate):
         """
@@ -82,9 +82,9 @@ class MultiDivide(ListRWTools, SSHTools):
                         
                         touch FINISH-{mutate}                        
                         tar -zcf {mutate}.tar.gz {file} FINISH-{mutate}
-                        scp {mutate}.tar.gz {gpu_node}:{self.prop_dir}/
+                        scp {mutate}.tar.gz {gpu_node}:{self.prop_path}/
                         
-                        scp FINISH-{mutate} {gpu_node}:{self.prop_dir}/
+                        scp FINISH-{mutate} {gpu_node}:{self.prop_path}/
                         rm {file} {mutate}.tar.gz FINISH-{mutate}
                         '''
         self.ssh_node(shell_script, ip)
@@ -111,12 +111,12 @@ class MultiDivide(ListRWTools, SSHTools):
             shell_script = f'''
                             #!/bin/bash
                             cd /local/ccop/{grid_prop_path}
-                            scp {gpu_node}:{self.prop_dir}/{file} .
+                            scp {gpu_node}:{self.prop_path}/{file} .
                             tar -zxf {file}
                             rm {file}
                             
                             touch FINISH-{node}-{i}
-                            scp FINISH-{node}-{i} {gpu_node}:{self.prop_dir}/
+                            scp FINISH-{node}-{i} {gpu_node}:{self.prop_path}/
                             rm FINISH-{node}-{i}
                             '''
             self.ssh_node(shell_script, ip)
@@ -194,7 +194,7 @@ class GridDivide(ListRWTools):
         mutate [bool, 0d]: whether mutate lattice vector
         """
         self.grid = f'{grid_name:03.0f}'
-        self.prop_dir = f'{grid_prop_path}/{self.grid}'
+        self.prop_path = f'{grid_prop_path}/{self.grid}'
         self.poscar = f'{grid_poscar_path}/POSCAR_{self.grid}'
         if mutate:
             delta = np.identity(3) + self.strain_mat()
@@ -204,13 +204,13 @@ class GridDivide(ListRWTools):
         self.write_grid_POSCAR(latt_vec, frac_coor)
         stru = Structure.from_file(self.poscar)
         nbr_idx, nbr_dis = self.near_property(stru, cutoff)
-        self.write_list2d(f'{self.prop_dir}_latt_vec.bin', 
+        self.write_list2d(f'{self.prop_path}_latt_vec.bin', 
                           latt_vec, binary=True)
-        self.write_list2d(f'{self.prop_dir}_frac_coor.bin',
+        self.write_list2d(f'{self.prop_path}_frac_coor.bin',
                           frac_coor, binary=True)
-        self.write_list2d(f'{self.prop_dir}_nbr_idx.bin',
+        self.write_list2d(f'{self.prop_path}_nbr_idx.bin',
                           nbr_idx, binary=True)
-        self.write_list2d(f'{self.prop_dir}_nbr_dis.bin',
+        self.write_list2d(f'{self.prop_path}_nbr_dis.bin',
                           nbr_dis, binary=True)
     
     def strain_mat(self):

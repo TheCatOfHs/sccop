@@ -26,7 +26,7 @@ class UpdateNodes(SSHTools):
             self.copy_file_to_nodes(node)
         while not self.is_done(self.num_node):
             time.sleep(self.sleep_time)
-        self.remove()
+        self.remove_flag()
         system_echo('Each node consistent with main node')
     
     def copy_file_to_nodes(self, node):
@@ -54,26 +54,27 @@ class UpdateNodes(SSHTools):
                         '''
         self.ssh_node(shell_script, ip)
     
-    def copy_latt_to_nodes(self, latt, node):
+    def copy_latt_to_nodes(self, node):
         """
         copy lattice vector file to each node
         
         Parameters
         ----------
-        latt [str, 1d]: name of lattice vectors 
+        node [int, 0d]: cpu node
         """
         ip = f'node{node}'
-        for i in latt:
-            shell_script = f'''
-                            #!/bin/bash
-                            cd /local/ccop/{grid_prop_path}
-                            scp {gpu_node}:/local/ccop/{i} .
-                                            
-                            touch FINISH-{ip}
-                            scp FINISH-{ip} {gpu_node}:/local/ccop/
-                            rm FINISH-{ip}
-                            '''
-            self.ssh_node(shell_script, ip)
+        local_grid_prop_path = f'/local/ccop/{grid_prop_path}'
+        shell_script = f'''
+                        #!/bin/bash
+                        cd {local_grid_prop_path}
+                        scp {gpu_node}:{local_grid_prop_path}/latt_vec.tar.gz .
+                        tar -zxf latt_vec.tar.gz
+                            
+                        touch FINISH-{ip}
+                        scp FINISH-{ip} {gpu_node}:/local/ccop/
+                        rm FINISH-{ip} latt_vec.tar.gz
+                        '''
+        self.ssh_node(shell_script, ip)
     
     def is_done(self, file_num):
         """
@@ -87,9 +88,9 @@ class UpdateNodes(SSHTools):
         flag = self.check_num_file(command, file_num)
         return flag
     
-    def remove(self): 
+    def remove_flag(self): 
         os.system(f'rm FINISH*')
-    
+
 
 class Initial(GridDivide, UpdateNodes):
     #Generate initial samples of ccop
@@ -120,8 +121,8 @@ class Initial(GridDivide, UpdateNodes):
         for i, poscar in enumerate(file):
             stru = Structure.from_file(f'{initial_path}/{poscar}', sort=True)
             latt_vec = stru.lattice.matrix
-            latt_file = f'{grid_prop_path}/{num_grid+i:03.0f}_latt_vec.bin'
-            self.write_list2d(latt_file, latt_vec, binary=True)
+            latt_file = f'{num_grid+i:03.0f}_latt_vec.bin'
+            self.write_list2d(f'{grid_prop_path}/{latt_file}', latt_vec, binary=True)
             type = self.get_atom_number(stru)
             stru_frac = stru.frac_coords
             grid_frac = self.fraction_coor(grain, latt_vec)
@@ -130,12 +131,41 @@ class Initial(GridDivide, UpdateNodes):
             atom_pos.append(pos)
             latt.append(latt_file)
             grid_init.append(num_grid+i)
+        self.zip_latt_vec(latt)
         for node in nodes:
-            self.copy_latt_to_nodes(latt, node)
-        while not self.is_done(self.num_node*len(latt)):
+            self.copy_latt_to_nodes(node)
+        while not self.is_done(self.num_node):
             time.sleep(self.sleep_time)
-        self.remove()
+        self.remove_zip()
+        self.remove_flag()
         return atom_pos, atom_type, grid_init
+    
+    def zip_latt_vec(self, latt):
+        """
+        zip latt_vec.bin sent to nodes
+        
+        Parameters
+        ----------
+        latt [str, 1d]: name of lattice vectors 
+        """
+        latt_str = ' '.join(latt)
+        shell_script = f'''
+                        #!/bin/bash
+                        cd data/grid/property/
+                        tar -zcf latt_vec.tar.gz {latt_str}
+                        '''
+        os.system(shell_script)
+    
+    def remove_zip(self):
+        """
+        remove latt_vec.tar.gz
+        """
+        shell_script = f'''
+                        #!/bin/bash
+                        cd data/grid/property/
+                        rm latt_vec.tar.gz
+                        '''
+        os.system(shell_script)
     
     def put_into_grid(self, stru_frac, grid_frac, latt_vec):
         """
@@ -145,7 +175,7 @@ class Initial(GridDivide, UpdateNodes):
         Parameters
         ----------
         stru_coor [float, 2d, np]: fraction coordinate of test configuration
-        grid_coor [float, 2d. np]: fraction coordinate of grid point
+        grid_coor [float, 2d, np]: fraction coordinate of grid point
         latt_vec [float, 2d, np]: lattice vector
         
         Returns

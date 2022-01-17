@@ -26,15 +26,15 @@ class Select(ListRWTools, SSHTools):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.round = f'{round:03.0f}'
-        self.model_save_dir = f'{model_path}/{self.round}'
-        self.poscar_save_dir = f'{poscar_path}/{self.round}'
-        self.sh_save_dir = f'{search_path}/{self.round}'
+        self.model_save_path = f'{model_path}/{self.round}'
+        self.poscar_save_path = f'{poscar_path}/{self.round}'
+        self.sh_save_path = f'{search_path}/{self.round}'
         self.device = torch.device('cuda')
         self.normalizer = Normalizer(torch.tensor([]))
-        if not os.path.exists(self.sh_save_dir):
-            os.mkdir(self.sh_save_dir)
-        if not os.path.exists(self.poscar_save_dir):
-            os.mkdir(self.poscar_save_dir)
+        if not os.path.exists(self.sh_save_path):
+            os.mkdir(self.sh_save_path)
+        if not os.path.exists(self.poscar_save_path):
+            os.mkdir(self.poscar_save_path)
         
     def samples(self, atom_pos, atom_type, grid_name):
         """
@@ -151,10 +151,10 @@ class Select(ListRWTools, SSHTools):
         ----------
         best_models [str, 1d, np]: name of best models
         """
-        files = os.listdir(self.model_save_dir)
+        files = os.listdir(self.model_save_path)
         models = [i for i in files if re.match(r'check', i)]
         models = sorted(models)
-        valid_file = f'{self.model_save_dir}/validation.dat'
+        valid_file = f'{self.model_save_path}/validation.dat'
         mae = self.import_list2d(valid_file, float)
         order = np.argsort(np.ravel(mae))
         sort_models = np.array(models)[order]
@@ -208,7 +208,7 @@ class Select(ListRWTools, SSHTools):
                                            nbr_bond_fea_len)
         self.model_val = ReadoutNet(orig_atom_fea_len,
                                     nbr_bond_fea_len)
-        paras = torch.load(f'{self.model_save_dir}/{model_name}', 
+        paras = torch.load(f'{self.model_save_path}/{model_name}', 
                            map_location=self.device)
         self.model_vec.load_state_dict(paras['state_dict'])
         self.model_val.load_state_dict(paras['state_dict'])
@@ -376,11 +376,11 @@ class Select(ListRWTools, SSHTools):
                 self.write_POSCAR(pos[idx_slt], type[idx_slt],
                                   i+1, node_assign[i], 
                                   transfer, elements)
-        self.write_list2d(f'{self.sh_save_dir}/atom_pos_select.dat',
+        self.write_list2d(f'{self.sh_save_path}/atom_pos_select.dat',
                           pos_order)
-        self.write_list2d(f'{self.sh_save_dir}/atom_type_select.dat', 
+        self.write_list2d(f'{self.sh_save_path}/atom_type_select.dat', 
                           type_order)
-        self.write_list2d(f'{self.sh_save_dir}/grid_name_select.dat', 
+        self.write_list2d(f'{self.sh_save_path}/grid_name_select.dat', 
                           np.transpose([grid_order]))
     
     def write_POSCAR(self, pos, type, num, node, transfer, elements):
@@ -404,7 +404,7 @@ class Select(ListRWTools, SSHTools):
                      'Direct']
         frac_coor = transfer.frac_coor[pos]
         frac_coor_str = self.list2d_to_str(frac_coor, '{0:4.6f}')
-        file = f'{self.poscar_save_dir}/POSCAR-{self.round}-{num:04.0f}-{node}'
+        file = f'{self.poscar_save_path}/POSCAR-{self.round}-{num:04.0f}-{node}'
         POSCAR = head_str + latt_str + compn_str + frac_coor_str
         with open(file, 'w') as f:
             f.write('\n'.join(POSCAR))
@@ -436,10 +436,10 @@ class Select(ListRWTools, SSHTools):
         clusters = self.cluster(crys_embedded, num_poscars)
         idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
         self.round = f'CCOP-{recycle}'
-        self.poscar_save_dir = f'{poscar_path}/{self.round}'
-        self.sh_save_dir = self.poscar_save_dir
-        if not os.path.exists(self.poscar_save_dir):
-            os.mkdir(self.poscar_save_dir)
+        self.poscar_save_path = f'{poscar_path}/{self.round}'
+        self.sh_save_path = self.poscar_save_path
+        if not os.path.exists(self.poscar_save_path):
+            os.mkdir(self.poscar_save_path)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize configurations: {num_poscars}')
 
@@ -457,14 +457,14 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
             os.mkdir(ccop_out_path)
         energys = []
         for i in range(num_recycle):
-            start_dir = f'{init_strs_path}_{i+1}'
-            poscars = os.listdir(start_dir)
+            start_path = f'{init_strs_path}_{i+1}'
+            poscars = os.listdir(start_path)
             for poscar in poscars:
-                source = f'{start_dir}/{poscar}'
+                source = f'{start_path}/{poscar}'
                 target = f'{ccop_out_path}/{poscar}'
                 shutil.copyfile(source, target)
-            energy_dir = f'{vasp_out_path}/initial_strs_{i+1}/Energy.dat'
-            energy = self.import_list2d(energy_dir, str, numpy=True)[:, 1]
+            energy_path = f'{vasp_out_path}/initial_strs_{i+1}/Energy.dat'
+            energy = self.import_list2d(energy_path, str, numpy=True)[:, 1]
             energys = np.concatenate((energys, energy))
         energys = np.array(energys, dtype='float32')
         poscars = sorted(os.listdir(ccop_out_path))
@@ -555,9 +555,9 @@ if __name__ == '__main__':
     '''
     #Data import
     matools = ListRWTools()
-    atom_pos = matools.import_list2d(f'{search_dir}/001/atom_pos.dat', int)
-    atom_type = matools.import_list2d(f'{search_dir}/001/atom_type.dat', int)
-    grid_name = matools.import_list2d(f'{search_dir}/001/grid_name.dat', int)
+    atom_pos = matools.import_list2d(f'{search_path}/001/atom_pos.dat', int)
+    atom_type = matools.import_list2d(f'{search_path}/001/atom_type.dat', int)
+    grid_name = matools.import_list2d(f'{search_path}/001/grid_name.dat', int)
     
     #Select samples
     os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'

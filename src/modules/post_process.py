@@ -15,10 +15,10 @@ class VASPoptimize(SSHTools, ListRWTools):
     #optimize structure by VASP
     def __init__(self, recycle, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'{ccop_out_path}-{recycle}'
+        self.ccop_out_path = f'{ccop_out_path}-{recycle}'
         self.optim_strs_path = f'{init_strs_path}_{recycle+1}'
         self.energy_path = f'{vasp_out_path}/initial_strs_{recycle+1}'
-        self.local_ccop_out_dir = f'/local/ccop/{self.ccop_out_dir}'
+        self.local_ccop_out_path = f'/local/ccop/{self.ccop_out_path}'
         self.local_optim_strs_path = f'/local/ccop/{self.optim_strs_path}'
         self.local_energy_path = f'/local/ccop/{self.energy_path}'
         self.calculation_path = '/local/ccop/vasp'
@@ -30,8 +30,8 @@ class VASPoptimize(SSHTools, ListRWTools):
         '''
         optimize configurations at low level
         '''
-        self.find_symmetry_structure(self.ccop_out_dir)
-        files = sorted(os.listdir(self.ccop_out_dir))
+        self.find_symmetry_structure(self.ccop_out_path)
+        files = sorted(os.listdir(self.ccop_out_path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         num_poscar = len(poscars)
         system_echo(f'Start VASP calculation --- Optimization')
@@ -45,7 +45,7 @@ class VASPoptimize(SSHTools, ListRWTools):
                             mkdir $p
                             cd $p
                             cp ../../{vasp_files_path}/Optimization/* .
-                            scp {gpu_node}:{self.local_ccop_out_dir}/$p POSCAR
+                            scp {gpu_node}:{self.local_ccop_out_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
@@ -79,35 +79,35 @@ class VASPoptimize(SSHTools, ListRWTools):
         system_echo(f'All job are completed --- Optimization')
         self.remove(self.optim_strs_path)
 
-    def find_symmetry_structure(self, dir):
+    def find_symmetry_structure(self, path):
         """
         find symmetry unit of structure
 
         Parameters
         ----------
-        dir [str, 0d]: structure directory 
+        path [str, 0d]: structure save path 
         """
-        files = sorted(os.listdir(dir))
+        files = sorted(os.listdir(path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         for i in poscars:
-            str = Structure.from_file(f'{dir}/{i}')
-            anal_str = SpacegroupAnalyzer(str)
-            sym_str = anal_str.get_refined_structure()
-            sym_str.to(filename=f'{dir}/{i}', fmt='poscar')
+            stru = Structure.from_file(f'{path}/{i}')
+            anal_stru = SpacegroupAnalyzer(stru)
+            sym_stru = anal_stru.get_refined_structure()
+            sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
             
-    def get_energy(self, dir):
+    def get_energy(self, path):
         """
         generate energy file of vasp outputs directory
         
         Parameters
         ----------
-        dir [str, 0d]: energy directory
+        path [str, 0d]: energy file path
         """
         energys = []
-        vasp_out = os.listdir(f'{dir}')
+        vasp_out = os.listdir(f'{path}')
         vasp_out_order = sorted(vasp_out)
         for out in vasp_out_order:
-            VASP_output_file = f'{dir}/{out}'
+            VASP_output_file = f'{path}/{out}'
             with open(VASP_output_file, 'r') as f:
                 ct = f.readlines()
             for line in ct[:10]:
@@ -119,7 +119,7 @@ class VASPoptimize(SSHTools, ListRWTools):
             cur_E = energy/atom_num
             system_echo(f'{out}, {cur_E:18.9f}')
             energys.append([out, cur_E])
-        self.write_list2d(f'{dir}/Energy.dat', energys)
+        self.write_list2d(f'{path}/Energy.dat', energys)
         system_echo(f'Energy file generated successfully!')
         
         
@@ -127,7 +127,7 @@ class PostProcess(VASPoptimize):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'/local/ccop/{ccop_out_path}'
+        self.ccop_out_path = f'/local/ccop/{ccop_out_path}'
         self.optim_strs_path = f'/local/ccop/{optim_strs_path}'
         self.dielectric_path = f'/local/ccop/{dielectric_path}'
         self.elastic_path = f'/local/ccop/{elastic_path}'
@@ -170,11 +170,11 @@ class PostProcess(VASPoptimize):
                             mkdir $p
                             cd $p
                             cp ../../{vasp_files_path}/Optimization/* .
-                            scp {gpu_node}:{self.ccop_out_dir}/$p POSCAR
+                            scp {gpu_node}:{self.ccop_out_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            for i in 1 2 3
+                            for i in 2 3
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
@@ -462,7 +462,7 @@ class PostProcess(VASPoptimize):
     
 if __name__ == '__main__':
     vasp = VASPoptimize(0)
-    vasp.run_optimization()
+    vasp.run_optimization_low()
     vasp.get_energy()
     #post = PostProcess()
     #post.get_energy()

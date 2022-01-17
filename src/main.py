@@ -53,7 +53,7 @@ if __name__ == '__main__':
         #Generate initial structures
         atom_pos, atom_type, grid_init = init.generate(recyc, grid_store)
         system_echo('Initial sample from database')
-
+        
         #Build grid
         build = True
         grid_origin = grid_init

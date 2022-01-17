@@ -230,36 +230,36 @@ class SSHTools:
         batches.append(' '.join(store))
         return batches, nodes
     
-    def is_done(self, dir, num_file):
+    def is_done(self, path, num_file):
         """
         if the vasp calculation is completed, return True
         
         Parameters
         ----------
-        dir [str, 0d]: directory used to store flags
+        path [str, 0d]: path used to store flags
         num_file [int, 0d]: number of file
         
         Returns
         ----------
         flag [bool, 0d]: whether all nodes are done
         """
-        command = f'ls -l {dir} | grep FINISH | wc -l'
+        command = f'ls -l {path} | grep FINISH | wc -l'
         flag = self.check_num_file(command, num_file)
         return flag
     
-    def remove(self, dir):
+    def remove(self, path):
         """
         remove FINISH flags
         
         Parameters
         ----------
-        dir [str, 0d]: directory used to store flags
+        path [str, 0d]: path used to store flags
         """
-        os.system(f'rm {dir}/FINISH*')
+        os.system(f'rm {path}/FINISH*')
     
     def check_num_file(self, command, file_num):
         """
-        If shell is completed, return True
+        if shell is completed, return True
         
         Returns
         ----------
@@ -271,8 +271,10 @@ class SSHTools:
         if finish == file_num:
             flag = True
         return flag
-    
+
 
 if __name__ == '__main__':
-    from modules.initial import Initial
-    init = Initial(component, ndensity, mindis)
+    import torch
+    a = torch.tensor([[1]])
+    b = torch.tensor([[0]])
+    print(torch.cat((a, b), dim=0))

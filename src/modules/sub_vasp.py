@@ -74,7 +74,7 @@ class SubVASP(ListRWTools, SSHTools):
         """
         node = poscar.split('-')[-1]
         ip = f'node{node}'
-        local_vasp_out_dir = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
+        local_vasp_out_path = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/vasp
@@ -88,7 +88,7 @@ class SubVASP(ListRWTools, SSHTools):
                         date > $p.out
                         /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
                         date >> $p.out
-                        scp $p.out {gpu_node}:{local_vasp_out_dir}/
+                        scp $p.out {gpu_node}:{local_vasp_out_path}/
                         cd ../
                         rm -r $p
                         '''

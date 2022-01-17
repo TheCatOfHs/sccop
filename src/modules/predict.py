@@ -19,22 +19,17 @@ from modules.utils import ListRWTools
 class DataParallel(DataParallel_raw):
     """
     scatter outside of the DataPrallel
-    input: Scattered Inputs without kwargs
     """
     def __init__(self, module):
         # Disable all the other parameters
         super(DataParallel, self).__init__(module)
-
-    def forward(self, *inputs, **kwargs):
-        assert len(inputs) == 0, "Only support arguments like [variable_name = xxx]"
+    
+    def forward(self, **kwargs):
         new_inputs = [{} for _ in self.device_ids]
         for key in kwargs:
             if key == 'crys_fea':
                 for i, device in enumerate(self.device_ids):
-                    if i ==0:
-                        new_inputs[i][key] = kwargs[key][i]
-                    else:
-                        new_inputs[i][key] = kwargs[key][i].to(device, non_blocking=True)
+                    new_inputs[i][key] = kwargs[key][i].to(device, non_blocking=True)
                 break
             if key == 'crystal_atom_idx':
                 for i, device in enumerate(self.device_ids):
@@ -70,10 +65,10 @@ class PPMData(Dataset):
         
         Returns
         ----------
-        atom_fea [float, 2d, tensor]: 
-        nbr_fea [float, 3d, tensor]: 
-        nbr_fea_idx [int, 2d, tensor]: 
-        target [int, 2d, tensor]: 
+        atom_fea [float, 2d, tensor]: feature of atoms
+        nbr_fea [float, 3d, tensor]: bond feature
+        nbr_fea_idx [int, 2d, tensor]: index of neighbors
+        target [int, 1d, tensor]: target value
         """
         atom_fea = self.atom_feas[idx]
         nbr_fea = self.nbr_feas[idx]
@@ -92,17 +87,16 @@ def collate_pool(dataset_list):
     
     Parameters
     ----------
-    dataset_list [turple]: training set, input of PPM
+    dataset_list [tuple]: output of PPMData
     
     Returns
     ----------
-    store_1 [float, 3d]:
-    store_2 [float, 4d]:
-    store_3 [int, 3d]:
-    store_4 [int, 3d]:
-    target [float, 2d, tensor]:
+    store_1 [float, 3d]: atom features assigned to gpus
+    store_2 [float, 4d]: bond features assigned to gpus
+    store_3 [int, 3d]: index of neighbors assigned to gpus
+    store_4 [int, 3d]: index of crystals assigned to gpus
+    target [float, 2d, tensor]: target values
     """
-    #should be split into num_gpus 
     assign_plan = batch_divide(dataset_list)
     batch_atom_fea, batch_nbr_fea, batch_nbr_fea_idx = [], [], []
     crystal_atom_idx, batch_target = [], []
@@ -132,14 +126,15 @@ def collate_pool(dataset_list):
 
 def batch_divide(dataset_list):
     """
-
+    divide batch by number of gpus
+    
     Parameters
     ----------
-    dataset_list []: 
+    dataset_list [tuple]: output of PPMData
 
     Returns
     ----------
-    []: 
+    assign_plan [int, 1d]: gpu assign plan
     """
     sample_num = len(dataset_list)
     assign_num = sample_num//num_gpus
@@ -155,7 +150,7 @@ def batch_divide(dataset_list):
 
 def batch_balance(num, batch_size, tuple):
     """
-    assure that data can assign to gpus
+    delete samples that make the inequal assignment
     
     Parameters
     ----------
@@ -178,7 +173,7 @@ def get_loader(dataset, batch_size, num_workers, shuffle=False):
     
     Returns
     ----------
-    loader [obj]: 
+    loader [obj]: data loader of ppm
     """
     loader = DataLoader(dataset, batch_size=batch_size,
                         collate_fn=collate_pool,
@@ -204,6 +199,7 @@ class ConvLayer(nn.Module):
     def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
         """
 
+        
         Parameters
         ----------
         atom_in_fea [float, 2d]: 
@@ -290,22 +286,7 @@ class CrystalGraphConvNet(nn.Module):
         summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
                       for idx_map in crystal_atom_idx]
         return torch.cat(summed_fea, dim=0)
-
-
-class FineTuneNet(CrystalGraphConvNet):
-    #Fine tune model
-    def __init__(self, orig_atom_fea_len, nbr_fea_len, 
-                 h_fea_len=128, n_h=1):
-        super(FineTuneNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
-        for para in self.parameters():
-            para.requires_grad = False
-        if n_h > 1:
-            self.fcs = nn.ModuleList([nn.Linear(h_fea_len, h_fea_len)
-                                      for _ in range(n_h-1)])
-            self.softpluses = nn.ModuleList([nn.Softplus()
-                                             for _ in range(n_h-1)])
-        self.fc_out = nn.Linear(h_fea_len, 1)
-
+    
 
 class PPModel(ListRWTools):
     #Train property predict model
@@ -321,9 +302,9 @@ class PPModel(ListRWTools):
         self.num_workers = num_workers
         self.num_gpus = num_gpus
         self.print_feq = print_feq
-        self.model_save_dir = f'{model_path}/{round:03.0f}'
-        if not os.path.exists(self.model_save_dir):
-            os.mkdir(self.model_save_dir)
+        self.model_save_path = f'{model_path}/{round:03.0f}'
+        if not os.path.exists(self.model_save_path):
+            os.mkdir(self.model_save_path)
     
     def train_epochs(self):
         """
@@ -340,7 +321,6 @@ class PPModel(ListRWTools):
         normalizer = Normalizer(sample_target)
         normalizer.load_state_dict(checkpoint['normalizer'])
         model = self.model_initial(checkpoint)
-        #model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model = DataParallel(model)
         model.to(self.device)
         criterion = nn.MSELoss()
@@ -360,12 +340,12 @@ class PPModel(ListRWTools):
                 }, is_best)
             mae_buffer.append([mae_error])
         system_echo('-----------------Evaluate Model on Test Set-----------------')
-        best_checkpoint = torch.load(f'{self.model_save_dir}/model_best.pth.tar')
+        best_checkpoint = torch.load(f'{self.model_save_path}/model_best.pth.tar')
         model = self.model_initial(best_checkpoint)
         model = DataParallel(model)
         model.to(self.device)
         self.validate(test_loader, model, criterion, epoch, normalizer, best_model_test=True)
-        self.write_list2d(f'{self.model_save_dir}/validation.dat', mae_buffer, style='{0:6.4f}')
+        self.write_list2d(f'{self.model_save_path}/validation.dat', mae_buffer, style='{0:6.4f}')
     
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
@@ -409,7 +389,7 @@ class PPModel(ListRWTools):
     
     def validate(self, loader, model, criterion, epoch, normalizer, best_model_test=False):
         """
-        Test model on validation set
+        test model on validation set
         
         Parameters
         ----------
@@ -424,6 +404,7 @@ class PPModel(ListRWTools):
         losses = AverageMeter()
         mae_errors = AverageMeter()
         model.eval()
+        pred_all, vasp_all = torch.tensor([]), torch.tensor([])
         start = time.time()
         for _, (input, target) in enumerate(loader):
             with torch.no_grad():
@@ -434,11 +415,15 @@ class PPModel(ListRWTools):
             pred = model(atom_fea=atom_fea, nbr_fea=nbr_fea,
                          nbr_fea_idx=nbr_fea_idx, crystal_atom_idx=crystal_atom_idx)
             loss = criterion(pred, target_var)
-            mae_error = self.mae(normalizer.denorm(pred.data.cpu()), target)
+            pred = normalizer.denorm(pred.data.cpu())
+            mae_error = self.mae(pred, target)
             losses.update(loss.data.cpu(), target.size(0))
             mae_errors.update(mae_error, target.size(0))
             batch_time.update(time.time() - start)
             start = time.time()
+            if best_model_test:
+                pred_all = torch.cat((pred_all, pred))
+                vasp_all = torch.cat((vasp_all, target))
         if epoch % self.print_feq == 0:
             system_echo(f'Test: [{epoch}/{self.epochs}]\t'
                         f'Time {batch_time.val:.3f} ({batch_time.avg:.3f})\t'
@@ -447,10 +432,10 @@ class PPModel(ListRWTools):
                         )
         if best_model_test:
             system_echo(f'Best model MAE {mae_errors.avg:.3f}')
-            self.write_list2d(f'{self.model_save_dir}/pred.dat', 
-                              normalizer.denorm(pred.data.cpu()), style='{0:8.4f}')
-            self.write_list2d(f'{self.model_save_dir}/vasp.dat', 
-                              target, style='{0:8.4f}')
+            self.write_list2d(f'{self.model_save_path}/pred.dat', 
+                              pred_all, style='{0:8.4f}')
+            self.write_list2d(f'{self.model_save_path}/vasp.dat', 
+                              vasp_all, style='{0:8.4f}')
         return mae_errors.avg
     
     def model_initial(self, checkpoint):
@@ -510,10 +495,10 @@ class PPModel(ListRWTools):
         state [dict]: save data in the form of dictionary
         is_best [bool]: whether model perform best in validation set
         """
-        filename = f'{self.model_save_dir}/checkpoint-{epoch:03.0f}.pth.tar'
+        filename = f'{self.model_save_path}/checkpoint-{epoch:03.0f}.pth.tar'
         torch.save(state, filename)
         if is_best:
-            shutil.copyfile(filename, f'{self.model_save_dir}/model_best.pth.tar')
+            shutil.copyfile(filename, f'{self.model_save_path}/model_best.pth.tar')
 
 
 class Normalizer():
