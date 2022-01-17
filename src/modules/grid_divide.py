@@ -20,7 +20,7 @@ class MultiDivide(ListRWTools, SSHTools):
     def __init__(self, sleep_time=1):
         self.num_node = len(nodes)
         self.sleep_time = sleep_time
-        self.prop_dir = f'/local/ccop/{grid_prop_dir}'
+        self.prop_dir = f'/local/ccop/{grid_prop_path}'
     
     def assign(self, grid_origin, grid_mutate):
         """
@@ -78,7 +78,7 @@ class MultiDivide(ListRWTools, SSHTools):
                         #!/bin/bash
                         cd /local/ccop/
                         python src/modules/grid_divide.py {options}
-                        cd {grid_prop_dir}
+                        cd {grid_prop_path}
                         
                         touch FINISH-{mutate}                        
                         tar -zcf {mutate}.tar.gz {file} FINISH-{mutate}
@@ -110,7 +110,7 @@ class MultiDivide(ListRWTools, SSHTools):
             ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
-                            cd /local/ccop/{grid_prop_dir}
+                            cd /local/ccop/{grid_prop_path}
                             scp {gpu_node}:{self.prop_dir}/{file} .
                             tar -zxf {file}
                             rm {file}
@@ -128,7 +128,7 @@ class MultiDivide(ListRWTools, SSHTools):
         zip_file = ' '.join(self.zip_file)
         shell_script = f'''
                         #!/bin/bash
-                        cd {grid_prop_dir}/
+                        cd {grid_prop_path}/
                         for i in {zip_file}
                         do
                             nohup tar -zxf $i >& log-$i &
@@ -145,7 +145,7 @@ class MultiDivide(ListRWTools, SSHTools):
         ----------
         file_num [int, 0d]: number of file
         """
-        command = f'ls -l {grid_prop_dir} | grep FINISH | wc -l'
+        command = f'ls -l {grid_prop_path} | grep FINISH | wc -l'
         flag = self.check_num_file(command, file_num)
         return flag
     
@@ -153,7 +153,7 @@ class MultiDivide(ListRWTools, SSHTools):
         """
         remove flag file on gpu
         """
-        os.system(f'rm {grid_prop_dir}/FINISH*')
+        os.system(f'rm {grid_prop_path}/FINISH*')
         
     def remove_flag_on_cpu(self):
         """
@@ -163,7 +163,7 @@ class MultiDivide(ListRWTools, SSHTools):
             ip = f'node{node}'
             shell_script = f'''
                             #!/bin/bash
-                            cd /local/ccop/{grid_prop_dir}
+                            cd /local/ccop/{grid_prop_path}
                             rm FINISH*
                             '''
             self.ssh_node(shell_script, ip)
@@ -172,7 +172,7 @@ class MultiDivide(ListRWTools, SSHTools):
         """
         remove zip file
         """
-        os.system(f'rm {grid_prop_dir}/*.tar.gz')
+        os.system(f'rm {grid_prop_path}/*.tar.gz')
     
     
 class GridDivide(ListRWTools):
@@ -194,8 +194,8 @@ class GridDivide(ListRWTools):
         mutate [bool, 0d]: whether mutate lattice vector
         """
         self.grid = f'{grid_name:03.0f}'
-        self.prop_dir = f'{grid_prop_dir}/{self.grid}'
-        self.poscar = f'{grid_poscar_dir}/POSCAR_{self.grid}'
+        self.prop_dir = f'{grid_prop_path}/{self.grid}'
+        self.poscar = f'{grid_poscar_path}/POSCAR_{self.grid}'
         if mutate:
             delta = np.identity(3) + self.strain_mat()
             latt_vec = np.dot(delta, latt_vec)
@@ -295,7 +295,7 @@ if __name__ == '__main__':
     #Build grid
     grid = GridDivide()
     rwtools = ListRWTools()
-    latt_file = f'{grid_prop_dir}/{grid_origin:03.0f}_latt_vec.bin'
+    latt_file = f'{grid_prop_path}/{grid_origin:03.0f}_latt_vec.bin'
     latt_vec = rwtools.import_list2d(latt_file, float, binary=True)
     if grid_origin == grid_mutate:
         mutate = False

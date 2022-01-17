@@ -9,7 +9,7 @@ from modules.data_transfer import MultiGridTransfer
 from modules.sample_select import Select, OptimSelect
 from modules.sub_vasp import SubVASP
 from modules.workers import MultiWorkers, Search
-from modules.predict import PPMData, PPModel, batch_balance
+from modules.predict import PPMData, PPModel
 from modules.utils import ListRWTools, system_echo
 from modules.post_process import PostProcess, VASPoptimize
 
@@ -23,9 +23,13 @@ def delete_duplicates():
     #TODO delete duplicates that are already in training set
     pass
 
+def main():
+    #TODO ccop program
+    pass
+
 
 if __name__ == '__main__':
-    init = Initial()
+    init = Initial(component, ndensity, mindis)
     cpu_nodes = UpdateNodes()
     grid = GridDivide()
     divide = MultiDivide()
@@ -64,9 +68,9 @@ if __name__ == '__main__':
         initial = True
         worker = Search(0, 0)
         if initial:
-            num_initial = 4000
+            num_initial = 1000
             for i in grid_init:
-                point_num = len(rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True))
+                point_num = len(rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True))
                 grid_point = [i for i in range(point_num)]
                 atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
                 atom_type += [[i for i in [29, 30, 6, 7] for _ in range(2)] for _ in range(num_initial)]
@@ -103,15 +107,15 @@ if __name__ == '__main__':
         #CCOP optimize
         for round in range(start, start+num_round):
             #Data import
-            energy_file = rwtools.import_list2d(f'{vasp_out_dir}/Energy-{round:03.0f}.dat', str, numpy=True)
+            energy_file = rwtools.import_list2d(f'{vasp_out_path}/Energy-{round:03.0f}.dat', str, numpy=True)
             true_E = np.array(energy_file)[:,1]
-            true_E = [bool(i) for i in true_E]
+            true_E = [True if i=='True' else False for i in true_E]
             energys = energy_file[:,2][true_E]
             energys = [float(i) for i in energys]
             
-            atom_pos = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_pos_select.dat', int)
-            atom_type = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/atom_type_select.dat', int)
-            grid_name = rwtools.import_list2d(f'{search_dir}/{round:03.0f}/grid_name_select.dat', int)
+            atom_pos = rwtools.import_list2d(f'{search_path}/{round:03.0f}/atom_pos_select.dat', int)
+            atom_type = rwtools.import_list2d(f'{search_path}/{round:03.0f}/atom_type_select.dat', int)
+            grid_name = rwtools.import_list2d(f'{search_path}/{round:03.0f}/grid_name_select.dat', int)
             grid_name = np.ravel(grid_name)
             atom_pos_right, atom_type_right, grid_name_right = [], [], []
             for i, correct in enumerate(true_E):
@@ -119,7 +123,7 @@ if __name__ == '__main__':
                     atom_pos_right.append(atom_pos[i])
                     atom_type_right.append(atom_type[i])
                     grid_name_right.append(grid_name[i])
-
+            
             #TODO Delete duplicates
             #atom_pos_right, atom_type_right, grid_name_right = \
             #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
@@ -127,8 +131,9 @@ if __name__ == '__main__':
             num_poscars = len(energys)
             a = int(num_poscars*0.6)
             num_crys = a + len(train_energys)
-            tuple = (atom_pos_right, atom_type_right, grid_name_right, energys)
-            batch_balance(num_crys, train_batchsize, tuple)
+            num_last_batch = np.mod(num_crys, train_batchsize)
+            if 0 < num_last_batch < num_gpus:
+                a -= num_last_batch
             system_echo(f'Training set: {num_crys}')       
             atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
             system_echo(f'New add to training set: {len(atom_fea)}')
@@ -163,14 +168,15 @@ if __name__ == '__main__':
             pos_buffer += atom_pos_right[a:]
             type_buffer += atom_type_right[a:]
             grid_buffer += grid_name_right[a:]
-    
+            
             #Search
             search = True
             if search:
                 num_seed = 30
                 min_idx = np.argsort(train_energys)[:num_seed]
                 grid_pool = np.array(grid_buffer)[min_idx] 
-              
+                all_idx = np.arange(len(train_energys))
+                
                 #Generate mutate lattice grid
                 if round == 0:
                     mutate = False
@@ -186,24 +192,30 @@ if __name__ == '__main__':
                     grid_store = np.concatenate((grid_store, grid_mutate))
                     divide.assign(grid_origin, grid_mutate)
                     system_echo(f'Grid origin: {grid_origin}')
-                    
+                
                 #Initial search start point
                 init_pos, init_type, init_grid = [], [], []
-                for _ in range(num_paths):
+                for _ in range(num_paths//2):
                     seed = np.random.choice(min_idx)
                     init_pos.append(pos_buffer[seed])
                     init_type.append(type_buffer[seed])
                     init_grid.append(grid_buffer[seed])
-
+                
+                for _ in range(num_paths//2):
+                    seed = np.random.choice(all_idx)
+                    init_pos.append(pos_buffer[seed])
+                    init_type.append(type_buffer[seed])
+                    init_grid.append(grid_buffer[seed])
+                
                 #Lattice mutate
                 mut_counter = 0
                 mut_num = int(num_paths*mut_ratio)
                 mut_pos = init_pos[:mut_num]
                 mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
-                init_frac = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid]
-                init_latt_vec = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in init_grid]
-                mut_frac = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in mut_latt]
-                mut_latt_vec = [rwtools.import_list2d(f'{grid_prop_dir}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in mut_latt]
+                init_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid]
+                init_latt_vec = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in init_grid]
+                mut_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in mut_latt]
+                mut_latt_vec = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in mut_latt]
                 mut_pos = [mul_transfer.put_into_grid(mut_pos[i], init_frac[i], init_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
                 batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
                 check_near = [worker.near_check(i) for i in batch_nbr_dis]
@@ -218,9 +230,9 @@ if __name__ == '__main__':
                 workers.search(round+1, num_paths, init_pos, init_type, init_grid)
             
             #Sample
-            atom_pos = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_pos.dat', int)
-            atom_type = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/atom_type.dat', int)
-            grid_name = rwtools.import_list2d(f'{search_dir}/{round+1:03.0f}/grid_name.dat', int)
+            atom_pos = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_pos.dat', int)
+            atom_type = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_type.dat', int)
+            grid_name = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/grid_name.dat', int)
             select = Select(round+1)
             select.samples(atom_pos, atom_type, grid_name)
 

@@ -17,7 +17,7 @@ class Transfer(ListRWTools):
         grid_name [int, 0d]: name of grid 
         """
         self.nbr, self.var = nbr, var
-        file_prefix = f'{grid_prop_dir}/{grid_name:03.0f}'
+        file_prefix = f'{grid_prop_path}/{grid_name:03.0f}'
         self.elem_embed = self.import_list2d(
             atom_init_file, int, numpy=True)
         self.latt_vec = self.import_list2d(

@@ -15,9 +15,9 @@ class VASPoptimize(SSHTools, ListRWTools):
     #optimize structure by VASP
     def __init__(self, recycle, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'{ccop_out_dir}-{recycle}'
+        self.ccop_out_dir = f'{ccop_out_path}-{recycle}'
         self.optim_strs_path = f'{init_strs_path}_{recycle+1}'
-        self.energy_path = f'{vasp_out_dir}/initial_strs_{recycle+1}'
+        self.energy_path = f'{vasp_out_path}/initial_strs_{recycle+1}'
         self.local_ccop_out_dir = f'/local/ccop/{self.ccop_out_dir}'
         self.local_optim_strs_path = f'/local/ccop/{self.optim_strs_path}'
         self.local_energy_path = f'/local/ccop/{self.energy_path}'
@@ -127,7 +127,7 @@ class PostProcess(VASPoptimize):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
-        self.ccop_out_dir = f'/local/ccop/{ccop_out_dir}'
+        self.ccop_out_dir = f'/local/ccop/{ccop_out_path}'
         self.optim_strs_path = f'/local/ccop/{optim_strs_path}'
         self.dielectric_path = f'/local/ccop/{dielectric_path}'
         self.elastic_path = f'/local/ccop/{elastic_path}'
@@ -155,8 +155,8 @@ class PostProcess(VASPoptimize):
         '''
         optimize configurations from low to high level
         '''
-        self.find_symmetry_structure(ccop_out_dir)
-        files = sorted(os.listdir(ccop_out_dir))
+        self.find_symmetry_structure(ccop_out_path)
+        files = sorted(os.listdir(ccop_out_path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         num_poscar = len(poscars)
         system_echo(f'Start VASP calculation --- Optimization')
@@ -201,8 +201,14 @@ class PostProcess(VASPoptimize):
             time.sleep(self.sleep_time)
         self.find_symmetry_structure(optim_strs_path)
         self.get_energy(energy_path)
-        system_echo(f'All job are completed --- Optimization')
         self.remove(optim_strs_path)
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_optims = len(poscars)
+        node_assign = self.assign_node(num_optims)
+        for i, poscar in enumerate(poscars):
+            os.rename(f'{optim_strs_path}/{poscar}', 
+                      f'{optim_strs_path}/{poscar}-{node_assign[i]}')
+        system_echo(f'All job are completed --- Optimization')
     
     def run_pbe_band(self):
         '''
@@ -402,7 +408,7 @@ class PostProcess(VASPoptimize):
             if task == 'band':
                 k_points = list(k_path.get_kpoints(line_density=40, coords_are_cartesian=False))
                 weights = [[1/len(k_points[0])] for _ in k_points[0]]
-                labels = self.convert_special_k_labels(k_points[1], ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
+                labels = self.convert_special_k_labels(k_points[1], ['GAMMA', 'SIGMA_0', 'LAMBDA_0'], ['\Gamma', '\Sigma', '\Lambda'])
                 labels = [['  !'] if item == '' else [f'  ! ${item}$'] for item in labels]
                 k_points.insert(1, labels)
                 k_points.insert(1, weights)
@@ -411,7 +417,7 @@ class PostProcess(VASPoptimize):
                                           head = ['Automatically generated mesh', str(len(k_points[0])), 'Reciprocal lattice'])
             elif task == 'phonon':
                 points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
-                labels = self.convert_special_k_labels(labels, ['GAMMA', 'SIGMA_0'], ['\Gamma', '\Sigma'])
+                labels = self.convert_special_k_labels(labels, ['GAMMA', 'SIGMA_0', 'LAMBDA_0'], ['\Gamma', '\Sigma', '\Lambda'])
                 while '' in labels:
                     points.pop(labels.index(''))
                     labels.remove('')

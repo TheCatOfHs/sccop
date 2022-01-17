@@ -1,4 +1,5 @@
 import os, sys, time
+import itertools
 import numpy as np
 import torch
 from functools import reduce
@@ -35,8 +36,8 @@ class MultiWorkers(ListRWTools, SSHTools):
         init_grid [int, 2d]: initial grid name
         """
         self.round = f'{round:03.0f}'
-        self.sh_save_dir = f'{search_dir}/{self.round}'
-        self.model_save_dir = f'{model_dir}/{self.round}'
+        self.sh_save_dir = f'{search_path}/{self.round}'
+        self.model_save_dir = f'{model_path}/{self.round}'
         self.generate_job(round, num_paths, init_pos,
                           init_type, init_grid)
         pos, type, job = self.read_job()
@@ -51,6 +52,7 @@ class MultiWorkers(ListRWTools, SSHTools):
         self.sub_job_to_workers(pos, type, job)
         system_echo('Successful assign works to workers!')
         job_finish = self.worker_monitor(pos, type, job, num_paths)
+        system_echo(f'Finished searching jobs: {len(job_finish)}/{num_paths}')
         
         atom_pos, atom_type, grid_name = self.collect(job_finish)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
@@ -340,8 +342,8 @@ class Search(ListRWTools):
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([]))
         self.round = f'{round:03.0f}'
-        self.model_save_dir = f'{model_dir}/{self.round}'
-        self.sh_save_dir = f'{search_dir}/{self.round}'
+        self.model_save_dir = f'{model_path}/{self.round}'
+        self.sh_save_dir = f'{search_path}/{self.round}'
     
     def explore(self, pos, type, model_name, path, node):
         """
@@ -387,18 +389,50 @@ class Search(ListRWTools):
         new_pos [int, 1d]: position of atom after 1 SA step
         type [int, 1d]: type of atom after 1 SA step
         """
-        num_atom = len(pos)
         flag = False
+        exchange = 0.1
+        num_atom = len(pos)
         while not flag:
             new_pos = pos.copy()
-            nbr_dis = self.transfer.grid_nbr_dis[new_pos]
-            nbr_idx = self.transfer.grid_nbr_idx[new_pos]
-            idx = np.random.randint(0, num_atom)
-            actions= self.action_filter(idx, nbr_dis, nbr_idx)
-            point = np.random.choice(actions)
-            new_pos[idx] = point
+            if np.random.rand() < exchange:
+                actions = self.exchange_action(type)
+                num_actions = len(actions)
+                idx = np.random.randint(0, num_actions)
+                idx_1, idx_2 = actions[idx]
+                new_pos[idx_1], new_pos[idx_2] = \
+                    new_pos[idx_2], new_pos[idx_1]
+            else:
+                nbr_dis = self.transfer.grid_nbr_dis[new_pos]
+                nbr_idx = self.transfer.grid_nbr_idx[new_pos]
+                idx = np.random.randint(0, num_atom)
+                actions= self.action_filter(idx, nbr_dis, nbr_idx)
+                point = np.random.choice(actions)
+                new_pos[idx] = point
             flag = self.overlay_check(new_pos, num_atom)
         return new_pos, type.copy()
+    
+    def exchange_action(self, type):
+        """
+        actions of exchanging atoms
+        
+        Parameters
+        ----------
+        type [int, 1d]: type of atoms
+
+        Returns
+        ---------
+        allow_action [int, 2d]: effective exchange actions
+        """
+        element = np.unique(type)
+        buffer = np.arange(len(element))
+        idx_ele, allow_action = [], []
+        for ele in element:
+            idx = [i for i, j in enumerate(type) if j==ele]
+            idx_ele.append(idx)
+        for i, j in itertools.combinations(buffer, 2):
+            action = itertools.product(idx_ele[i], idx_ele[j])
+            allow_action += [i for i in action]
+        return allow_action
     
     def action_filter(self, idx, nbr_dis, nbr_idx):
         """

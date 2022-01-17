@@ -26,9 +26,9 @@ class Select(ListRWTools, SSHTools):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.round = f'{round:03.0f}'
-        self.model_save_dir = f'{model_dir}/{self.round}'
-        self.poscar_save_dir = f'{poscar_dir}/{self.round}'
-        self.sh_save_dir = f'{search_dir}/{self.round}'
+        self.model_save_dir = f'{model_path}/{self.round}'
+        self.poscar_save_dir = f'{poscar_path}/{self.round}'
+        self.sh_save_dir = f'{search_path}/{self.round}'
         self.device = torch.device('cuda')
         self.normalizer = Normalizer(torch.tensor([]))
         if not os.path.exists(self.sh_save_dir):
@@ -436,7 +436,7 @@ class Select(ListRWTools, SSHTools):
         clusters = self.cluster(crys_embedded, num_poscars)
         idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
         self.round = f'CCOP-{recycle}'
-        self.poscar_save_dir = f'{poscar_dir}/{self.round}'
+        self.poscar_save_dir = f'{poscar_path}/{self.round}'
         self.sh_save_dir = self.poscar_save_dir
         if not os.path.exists(self.poscar_save_dir):
             os.mkdir(self.poscar_save_dir)
@@ -453,26 +453,26 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
             atom_init_file, int, numpy=True)
     
     def optim_select(self):
-        if not os.path.exists(ccop_out_dir):
-            os.mkdir(ccop_out_dir)
+        if not os.path.exists(ccop_out_path):
+            os.mkdir(ccop_out_path)
         energys = []
         for i in range(num_recycle):
             start_dir = f'{init_strs_path}_{i+1}'
             poscars = os.listdir(start_dir)
             for poscar in poscars:
                 source = f'{start_dir}/{poscar}'
-                target = f'{ccop_out_dir}/{poscar}'
+                target = f'{ccop_out_path}/{poscar}'
                 shutil.copyfile(source, target)
-            energy_dir = f'{vasp_out_dir}/initial_strs_{i+1}/Energy.dat'
+            energy_dir = f'{vasp_out_path}/initial_strs_{i+1}/Energy.dat'
             energy = self.import_list2d(energy_dir, str, numpy=True)[:, 1]
             energys = np.concatenate((energys, energy))
         energys = np.array(energys, dtype='float32')
-        poscars = sorted(os.listdir(ccop_out_dir))
+        poscars = sorted(os.listdir(ccop_out_path))
         self.num_crys = len(poscars)
         
         atom_feas, nbr_feas, nbr_fea_idxs = [], [], []
         for poscar in poscars:
-            stru = Structure.from_file(f'{ccop_out_dir}/{poscar}', sort=True)
+            stru = Structure.from_file(f'{ccop_out_path}/{poscar}', sort=True)
             atom_type = self.get_atom_number(stru)
             atom_fea = self.atom_initializer(atom_type)
             nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff)
@@ -494,13 +494,13 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
         idx_slt = self.min_in_cluster(idx_all, energys, clusters)
         idx_drop = np.setdiff1d(idx_all, idx_slt)
         for i in idx_drop:
-            os.remove(f'{ccop_out_dir}/{poscars[i]}')
+            os.remove(f'{ccop_out_path}/{poscars[i]}')
         
-        poscars = sorted(os.listdir(ccop_out_dir))
+        poscars = sorted(os.listdir(ccop_out_path))
         node_assign = self.assign_node(num_optims)
         for i, poscar in enumerate(poscars):
-            os.rename(f'{ccop_out_dir}/{poscar}', 
-                      f'{ccop_out_dir}/POSCAR-{i+1:02.0f}-{node_assign[i]}')
+            os.rename(f'{ccop_out_path}/{poscar}', 
+                      f'{ccop_out_path}/POSCAR-{i+1:02.0f}-{node_assign[i]}')
         system_echo(f'Optimize configurations: {num_optims}')
     
     def near_property(self, stru, cutoff):

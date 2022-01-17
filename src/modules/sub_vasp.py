@@ -1,7 +1,6 @@
 import os, sys
 import shutil, time
 import numpy as np
-from scipy.constants.codata import parse_constants_2002to2014
 
 sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
@@ -27,12 +26,12 @@ class SubVASP(ListRWTools, SSHTools):
         round [int, 0d]: searching rounds
         """
         round = f'{round:03.0f}'
-        poscars = os.listdir(f'{poscar_dir}/{round}')
+        poscars = os.listdir(f'{poscar_path}/{round}')
         poscars = sorted(poscars, key=lambda x: int(x.split('-')[2]))
         num_poscar = len(poscars)
         check_poscar = poscars
         for i in range(self.repeat):
-            os.mkdir(f'{vasp_out_dir}/{round}-{i}')
+            os.mkdir(f'{vasp_out_path}/{round}-{i}')
             system_echo(f'Start VASP calculation---itersions: '
                         f'{round}-{i}, numbers: {num_poscar}')
             self.sub_vasp_job(check_poscar, round, i)
@@ -75,7 +74,7 @@ class SubVASP(ListRWTools, SSHTools):
         """
         node = poscar.split('-')[-1]
         ip = f'node{node}'
-        local_vasp_out_dir = f'/local/ccop/{vasp_out_dir}/{round}-{repeat}'
+        local_vasp_out_dir = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/vasp
@@ -84,7 +83,7 @@ class SubVASP(ListRWTools, SSHTools):
                         cd $p
                         
                         cp ../../{vasp_files_path}/SinglePointEnergy/* .
-                        scp {gpu_node}:/local/ccop/{poscar_dir}/{round}/$p POSCAR
+                        scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
                         DPT -v potcar
                         date > $p.out
                         /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
@@ -107,7 +106,7 @@ class SubVASP(ListRWTools, SSHTools):
         ----------
         flag [bool, 0d]: whether all nodes are done
         """
-        command = f'ls -l {vasp_out_dir}/{round}-{repeat} | grep ^- | wc -l'
+        command = f'ls -l {vasp_out_path}/{round}-{repeat} | grep ^- | wc -l'
         flag = self.check_num_file(command, num_poscar)
         return flag
     
@@ -122,10 +121,10 @@ class SubVASP(ListRWTools, SSHTools):
         vasp_out_order [str, 1d]: name of vasp files
         """
         true_E, energys = [], []
-        vasp_out = os.listdir(f'{vasp_out_dir}/{round}-{repeat}')
+        vasp_out = os.listdir(f'{vasp_out_path}/{round}-{repeat}')
         vasp_out_order = sorted(vasp_out)
         for out in vasp_out_order:
-            VASP_output_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
+            VASP_output_file = f'{vasp_out_path}/{round}-{repeat}/{out}'
             with open(VASP_output_file, 'r') as f:
                 ct = f.readlines()
             energy, state_line = 1e6, []
@@ -140,15 +139,16 @@ class SubVASP(ListRWTools, SSHTools):
             if energy == 1e6:
                 system_echo(' *WARNING* SinglePointEnergy is failed!')
                 true_E.append(False)
+                cur_E = energy
             else:
                 if abs(float(state_line[-1].split()[3])) < self.dE:
                     true_E.append(True)
                 else:
                     true_E.append(False)
-            cur_E = energy/atom_num
+                cur_E = energy/atom_num
             energys.append([out, true_E[-1], cur_E])
             system_echo(f'{out}, {true_E[-1]}, {cur_E}')
-        self.write_list2d(f'{vasp_out_dir}/Energy-{round}.dat', energys)
+        self.write_list2d(f'{vasp_out_path}/Energy-{round}.dat', energys)
         system_echo(f'Energy file generated successfully!')
         false_E = [not i for i in true_E]
         return true_E, false_E, vasp_out_order
@@ -165,8 +165,8 @@ class SubVASP(ListRWTools, SSHTools):
         true_out = np.array(vasp_out)[true_E]
         if len(true_out) > 0:
             for out in vasp_out:
-                last_true_file = f'{vasp_out_dir}/{round}-{repeat-1}/{out}'
-                current_true_file = f'{vasp_out_dir}/{round}-{repeat}/{out}'
+                last_true_file = f'{vasp_out_path}/{round}-{repeat-1}/{out}'
+                current_true_file = f'{vasp_out_path}/{round}-{repeat}/{out}'
                 shutil.copyfile(last_true_file, current_true_file)
             system_echo(f'Copy true vasp out to next---true numbers: {len(true_out)}.')
     

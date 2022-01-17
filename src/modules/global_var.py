@@ -11,10 +11,15 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 2
+num_recycle = 3
 num_round = 10
 num_poscars = 30
-num_optims = 12
+num_optims = 15
+
+#Initial Samples
+component = 'Ga1N1Zn1O1'
+ndensity = 0.1 
+mindis = 1.8
 
 #Training
 train_batchsize = 128
@@ -27,8 +32,8 @@ T = .1
 decay = .99
 steps = 300
 num_paths = 180
-min_bond = 1.8
-wait_time = 240
+min_bond = 1.6
+wait_time = 300
 
 #Sample Select
 num_models = 5
@@ -44,19 +49,20 @@ nodes = [131, 132, 133, 134, 135, 136]
 os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
 
 #Save directory
-poscar_dir = 'data/poscar' 
-model_dir = 'data/ppmodel'
-search_dir = 'data/search'
-vasp_out_dir = 'data/vasp_out'
-grid_prop_dir = 'data/grid/property'
-grid_poscar_dir = 'data/grid/poscar'
-ccop_out_dir = 'data/poscar/CCOP'
+poscar_path = 'data/poscar' 
+model_path = 'data/ppmodel'
+search_path = 'data/search'
+vasp_out_path = 'data/vasp_out'
+grid_path = 'data/grid'
+grid_prop_path = 'data/grid/property'
+grid_poscar_path = 'data/grid/poscar'
+ccop_out_path = 'data/poscar/CCOP'
 optim_strs_path = 'data/poscar/optim_strs'
 init_strs_path = 'data/poscar/initial_strs'
 
 #DFT directory
 vasp_files_path = 'libs/VASP_inputs'
-sing_point_energy_dir = 'libs/VASP_inputs/SinglePointEnergy'
+sing_point_energy_path = 'libs/VASP_inputs/SinglePointEnergy'
 
 #File
 log_file = 'data/system.log'
@@ -67,7 +73,7 @@ bandconf_file = 'vasp/bandconf'
 pretrain_model = 'database/mp_20/pretrain_model/model_best.pth.tar'
 
 #Property file
-optim_vasp_path = f'{vasp_out_dir}/optim_strs'
+optim_vasp_path = f'{vasp_out_path}/optim_strs'
 dielectric_path = f'{optim_vasp_path}/dielectric'
 elastic_path = f'{optim_vasp_path}/elastic'
 energy_path = f'{optim_vasp_path}/energy'

@@ -321,7 +321,7 @@ class PPModel(ListRWTools):
         self.num_workers = num_workers
         self.num_gpus = num_gpus
         self.print_feq = print_feq
-        self.model_save_dir = f'{model_dir}/{round:03.0f}'
+        self.model_save_dir = f'{model_path}/{round:03.0f}'
         if not os.path.exists(self.model_save_dir):
             os.mkdir(self.model_save_dir)
     

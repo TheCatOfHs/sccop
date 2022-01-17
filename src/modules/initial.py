@@ -40,11 +40,13 @@ class UpdateNodes(SSHTools):
                         rm -rf ccop/
                         mkdir ccop/
                         cd ccop/
-                        mkdir vasp/
+                        mkdir vasp/ libs/
                         
                         scp -r {gpu_node}:/local/ccop/data .
-                        scp -r {gpu_node}:/local/ccop/libs .
                         scp -r {gpu_node}:/local/ccop/src .
+                        scp -r {gpu_node}:/local/ccop/libs/DPT libs/.
+                        scp -r {gpu_node}:/local/ccop/libs/scripts libs/.
+                        scp -r {gpu_node}:/local/ccop/libs/VASP_inputs libs/.
                         
                         touch FINISH-{ip}
                         scp FINISH-{ip} {gpu_node}:/local/ccop/
@@ -58,22 +60,20 @@ class UpdateNodes(SSHTools):
         
         Parameters
         ----------
-        latt [str, 0d]: name of lattice vectors 
+        latt [str, 1d]: name of lattice vectors 
         """
         ip = f'node{node}'
-        shell_script = f'''
-                        #!/bin/bash
-                        cd /local/ccop/{grid_prop_dir}
-                        for i in {latt}
-                        do
-                            scp {gpu_node}:/local/ccop/$i .
-                        done
-                        
-                        touch FINISH-{ip}
-                        scp FINISH-{ip} {gpu_node}:/local/ccop/
-                        rm FINISH-{ip}
-                        '''
-        self.ssh_node(shell_script, ip)
+        for i in latt:
+            shell_script = f'''
+                            #!/bin/bash
+                            cd /local/ccop/{grid_prop_path}
+                            scp {gpu_node}:/local/ccop/{i} .
+                                            
+                            touch FINISH-{ip}
+                            scp FINISH-{ip} {gpu_node}:/local/ccop/
+                            rm FINISH-{ip}
+                            '''
+            self.ssh_node(shell_script, ip)
     
     def is_done(self, file_num):
         """
@@ -89,13 +89,15 @@ class UpdateNodes(SSHTools):
     
     def remove(self): 
         os.system(f'rm FINISH*')
-
+    
 
 class Initial(GridDivide, UpdateNodes):
     #Generate initial samples of ccop
-    def __init__(self):
+    def __init__(self, component, ndensity, mindis):
         UpdateNodes.__init__(self)
-    
+        self.makedir()
+        self.CSPD_generate(component, ndensity, mindis)
+        
     def generate(self, recyc, grid_store):
         """
         generate initial samples
@@ -112,33 +114,32 @@ class Initial(GridDivide, UpdateNodes):
         grid_init [int, 1d]: new initial grids
         """
         num_grid = len(grid_store)
-        initial_dir = f'{init_strs_path}_{recyc}'
-        file = os.listdir(initial_dir)
+        initial_path = f'{init_strs_path}_{recyc}'
+        file = os.listdir(initial_path)
         atom_pos, atom_type, grid_init, latt = [], [], [], []
         for i, poscar in enumerate(file):
-            str = Structure.from_file(f'{initial_dir}/{poscar}', sort=True)
-            latt_vec = str.lattice.matrix
-            latt_file = f'{grid_prop_dir}/{num_grid+i:03.0f}_latt_vec.bin'
+            stru = Structure.from_file(f'{initial_path}/{poscar}', sort=True)
+            latt_vec = stru.lattice.matrix
+            latt_file = f'{grid_prop_path}/{num_grid+i:03.0f}_latt_vec.bin'
             self.write_list2d(latt_file, latt_vec, binary=True)
-            type = self.get_atom_number(str)
-            stru_frac = str.frac_coords
+            type = self.get_atom_number(stru)
+            stru_frac = stru.frac_coords
             grid_frac = self.fraction_coor(grain, latt_vec)
             pos = self.put_into_grid(stru_frac, grid_frac, latt_vec)
             atom_type.append(type)
             atom_pos.append(pos)
             latt.append(latt_file)
             grid_init.append(num_grid+i)
-        latt = ' '.join(latt)
         for node in nodes:
             self.copy_latt_to_nodes(latt, node)
-        while not self.is_done(self.num_node):
+        while not self.is_done(self.num_node*len(latt)):
             time.sleep(self.sleep_time)
         self.remove()
         return atom_pos, atom_type, grid_init
     
     def put_into_grid(self, stru_frac, grid_frac, latt_vec):
         """
-        Approximate target configuration in grid, 
+        approximate target configuration in grid, 
         return corresponding index of grid point
         
         Parameters
@@ -174,9 +175,41 @@ class Initial(GridDivide, UpdateNodes):
         """
         return list(np.array(stru.atomic_numbers) - 1)
     
+    def makedir(self):
+        """
+        make directory
+        """
+        os.mkdir(poscar_path)
+        os.mkdir(model_path)
+        os.mkdir(search_path)
+        os.mkdir(vasp_out_path)
+        os.mkdir(grid_path)
+        os.mkdir(grid_poscar_path)
+        os.mkdir(grid_prop_path)
 
+    def CSPD_generate(self, component, ndensity, mindis):
+        """
+        generate initial samples from CSPD
+        
+        Parameters
+        ----------
+        component [str, 0d]: component of searching system
+        ndensity [float, 0d]: density of atoms
+        mindis [float, 0d]: minimal distance between atoms
+        """
+        options = f'--component {component} --ndensity {ndensity} --mindis {mindis}'
+        shell_script = f'''
+                        cd libs/ASG
+                        tar -zxf CSPD.tar.gz
+                        python generate.py {options}
+                        mv structure_folder ../../data/poscar/initial_strs_0
+                        rm CSPD.db
+                        '''
+        os.system(shell_script)
+    
+    
 class Pretrain(Transfer):
-    #
+    #Pretrain property predict model
     def __init__(self, 
                  cutoff=8, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
         self.cutoff = cutoff
@@ -264,63 +297,12 @@ class Pretrain(Transfer):
     
         
 if __name__ == '__main__':
-    init = Initial()
-    print(init.generate('data/poscar/initial_strs_0'))
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    '''
-    def write_POSCAR(frac_coor, type, num, node, latt_vec, elements):
-        """
-        write POSCAR file of one configuration
-        
-        Parameters
-        ----------
-        pos [int, 1d]: atom position
-        type [int, 1d]: atom type
-        round [int, 0d]: searching round
-        num [int, 0d]: configuration number
-        node [int, 0d]: calculate node
-        """
-        head_str = ['E = -1', '1']
-        latt_str = rwtools.list2d_to_str(latt_vec, '{0:8.4f}')
-        compn = elements[type]
-        compn_dict = dict(Counter(compn))
-        compn_str = [' '.join(list(compn_dict.keys())),
-                    ' '.join([str(i) for i in compn_dict.values()]),
-                    'Direct']
-        frac_coor_str = rwtools.list2d_to_str(frac_coor, '{0:8.4f}')
-        file = f'{grid_poscar_dir}/POSCAR-{num:04.0f}-{node}'
-        POSCAR = head_str + latt_str + compn_str + frac_coor_str
-        with open(file, 'w') as f:
-            f.write('\n'.join(POSCAR))
-    
-    init_sam = Initial()
-    rwtools = ListRWTools()
-    
-    file = os.listdir('data/poscar/structure_0')
-    for i, poscar in enumerate(file):
-        a = Structure.from_file(f'data/poscar/structure_0/{poscar}', sort=True)
-        rwtools.write_list2d(f'data/grid/property/{i:03.0f}_latt_vec.dat', a.lattice.matrix, style='{0:8.4f}')
-    
-    file = os.listdir('data/poscar/structure_0')
-    print(file)
-    elements = rwtools.import_list2d(elements_file, str, numpy=True).ravel()
-    for i, poscar in enumerate(file):
-        grid_frac = rwtools.import_list2d(f'data/grid/property/000_frac_coor.dat', float, numpy=True)
-        test = Structure.from_file(f'data/poscar/structure_0/{poscar}', sort=True)
-        pos = init_sam.put_into_grid(test.frac_coords, grid_frac, test.lattice.matrix)
-        write_POSCAR(grid_frac[pos], np.array(test.atomic_numbers)-1, i, 1, test.lattice.matrix, elements)
-    '''
+    init = Initial(component, ndensity, mindis)
+    str = Structure.from_file(f'test/POSCAR-CCOP-0-0023-135', sort=True)
+    latt_vec = str.lattice.matrix
+    type = init.get_atom_number(str)
+    stru_frac = str.frac_coords
+    grid_frac = init.fraction_coor(grain, latt_vec)
+    pos = init.put_into_grid(stru_frac, grid_frac, latt_vec)
+    print(grid_frac[pos])
+    init.write_list2d('test/coor.dat', grid_frac[pos])

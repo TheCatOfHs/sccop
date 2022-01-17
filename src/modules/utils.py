@@ -271,7 +271,8 @@ class SSHTools:
         if finish == file_num:
             flag = True
         return flag
-
+    
 
 if __name__ == '__main__':
-    print('ok')
+    from modules.initial import Initial
+    init = Initial(component, ndensity, mindis)

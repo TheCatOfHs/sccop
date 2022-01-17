@@ -194,7 +194,7 @@ class VisualizeGrid():
     
 if __name__ == '__main__':
     rwtools = ListRWTools()
-    if True:
+    if False:
         mae = rwtools.import_list2d('test/GaN_ZnO_3/100/validation.dat', float)
         x = np.arange(len(mae))
         y = [min(mae) for i in range(len(mae))]
@@ -206,11 +206,10 @@ if __name__ == '__main__':
         ax_1.set_xlabel('Training Round', fontsize=24)
         ax_1.set_ylabel('Mean Absolute Error / eV', fontsize=24)
         plt.savefig('mp_mae.png', dpi=600)
-    
     energy_buffer = []
     if True:
-        for i in range(0, 31):
-            dir = f'test/GaN_ZnO_3'
+        for i in range(0, 35):
+            dir = f'test/GaN_ZnO_6/vasp_out'
             with open(f'{dir}/Energy-{i:03.0f}.dat', 'r') as f:
                 ct = f.readlines()
             energy_file = np.array(rwtools.str_to_list2d(ct, str))
@@ -220,7 +219,7 @@ if __name__ == '__main__':
             energys = [float(i) for i in energys]
             average = np.mean(energys)
             energy_buffer.append(average)
-        x = np.arange(0, 31)
+        x = np.arange(0, 35)
         plt.rc('font', family='Times New Roman')
         figure_1 = plt.figure(figsize=(8, 6))
         ax_1 = figure_1.add_subplot(1, 1, 1)
@@ -228,4 +227,5 @@ if __name__ == '__main__':
         ax_1.tick_params(labelsize=16)
         ax_1.set_xlabel('Recycling Round', fontsize=24)
         ax_1.set_ylabel('Energy / eV', fontsize=24)
+        #plt.show()
         plt.savefig('energy.png', dpi=600)
