@@ -1,5 +1,5 @@
 import sys, os
-import re, time
+import re
 import shutil
 import torch
 import numpy as np
@@ -445,7 +445,7 @@ class Select(ListRWTools, SSHTools):
 
 
 class OptimSelect(Select, Initial, Transfer, SSHTools):
-    #
+    #Select structures from low level optimization
     def __init__(self, round):
         Select.__init__(self, round)
         Transfer.__init__(self, 0)
@@ -453,6 +453,9 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
             atom_init_file, int, numpy=True)
     
     def optim_select(self):
+        """
+        select optimized structuers from initial_X
+        """
         if not os.path.exists(ccop_out_path):
             os.mkdir(ccop_out_path)
         energys = []
@@ -475,7 +478,7 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
             stru = Structure.from_file(f'{ccop_out_path}/{poscar}', sort=True)
             atom_type = self.get_atom_number(stru)
             atom_fea = self.atom_initializer(atom_type)
-            nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff)
+            nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff, near=self.nbr)
             nbr_fea = self.expand(nbr_dis)
             atom_feas.append(atom_fea)
             nbr_feas.append(nbr_fea)
@@ -502,30 +505,8 @@ class OptimSelect(Select, Initial, Transfer, SSHTools):
             os.rename(f'{ccop_out_path}/{poscar}', 
                       f'{ccop_out_path}/POSCAR-{i+1:02.0f}-{node_assign[i]}')
         system_echo(f'Optimize configurations: {num_optims}')
+        
     
-    def near_property(self, stru, cutoff):
-        """
-        index and distance of near grid points
-        
-        Parameters
-        ----------
-        stru [obj]: pymatgen object
-        cutoff [float, 0d]: cutoff distance
-        
-        Returns
-        ----------
-        nbr_idx [int, 2d]: index of near neighbor 
-        nbr_dis [float, 2d]: distance of near neighbor 
-        """
-        all_nbrs = stru.get_all_neighbors(cutoff)
-        all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
-        nbr_idx, nbr_dis = [], []
-        for nbr in all_nbrs:
-            nbr_idx.append(list(map(lambda x: x[2], nbr[:self.nbr])))
-            nbr_dis.append(list(map(lambda x: x[1], nbr[:self.nbr])))
-        return np.array(nbr_idx), np.array(nbr_dis)
-        
-        
 class FeatureExtractNet(CrystalGraphConvNet):
     #Calculate crys_fea
     def __init__(self, orig_atom_fea_len, nbr_fea_len):

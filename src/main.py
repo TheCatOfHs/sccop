@@ -208,15 +208,16 @@ if __name__ == '__main__':
                     init_grid.append(grid_buffer[seed])
                 
                 #Lattice mutate
+                #TODO clean below code
                 mut_counter = 0
                 mut_num = int(num_paths*mut_ratio)
-                mut_pos = init_pos[:mut_num]
                 mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
-                init_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid]
-                init_latt_vec = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in init_grid]
+                init_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid[:mut_num]]
+                stru_frac = [init_frac[i][init_pos[i]] for i in range(mut_num)]
                 mut_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in mut_latt]
                 mut_latt_vec = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in mut_latt]
-                mut_pos = [mul_transfer.put_into_grid(mut_pos[i], init_frac[i], init_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
+                
+                mut_pos = [mul_transfer.put_into_grid(stru_frac[i], mut_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
                 batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
                 check_near = [worker.near_check(i) for i in batch_nbr_dis]
                 check_overlay = [worker.overlay_check(i, len(i)) for i in mut_pos]
@@ -228,7 +229,7 @@ if __name__ == '__main__':
                         mut_counter += 1
                 system_echo(f'Lattice mutate number: {mut_counter}')
                 workers.search(round+1, num_paths, init_pos, init_type, init_grid)
-            
+
             #Sample
             atom_pos = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_pos.dat', int)
             atom_type = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_type.dat', int)

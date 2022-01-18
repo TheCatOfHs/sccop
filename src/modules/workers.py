@@ -20,7 +20,7 @@ class MultiWorkers(ListRWTools, SSHTools):
     
     def search(self, round, num_paths, init_pos, init_type, init_grid):
         """
-        Assign jobs by the following files
+        assign jobs by the following files
         initial_pos_XXX.dat: initial position by line
         initial_type_XXX.dat: initial type by line
         worker_job_XXX.dat: node job by line

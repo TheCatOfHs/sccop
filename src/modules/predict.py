@@ -39,7 +39,7 @@ class DataParallel(DataParallel_raw):
         replicas = self.replicate(self.module, self.device_ids)
         outputs = self.parallel_apply(replicas, nones, new_inputs)
         return self.gather(outputs, self.output_device)
-
+        
 
 class PPMData(Dataset):
     #Self-define training set of PPM

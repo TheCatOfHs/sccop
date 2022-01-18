@@ -247,7 +247,7 @@ class GridDivide(ListRWTools):
                 for k in np.arange(0, 1, grain_c)]
         return np.array(coor)
     
-    def near_property(self, stru, cutoff):
+    def near_property(self, stru, cutoff, near=0):
         """
         index and distance of near grid points
         
@@ -263,7 +263,10 @@ class GridDivide(ListRWTools):
         """
         all_nbrs = stru.get_all_neighbors(cutoff)
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
-        num_near = min(map(lambda x: len(x), all_nbrs))
+        if near == 0:
+            num_near = min(map(lambda x: len(x), all_nbrs))
+        else:
+            num_near = near
         nbr_idx, nbr_dis = [], []
         for nbr in all_nbrs:
             nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))

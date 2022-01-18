@@ -209,7 +209,7 @@ class MultiGridTransfer:
         batch_nbr_dis = [transfer.find_nbr_dis(pos) for pos in atom_pos[i:]]
         nbr_dis += batch_nbr_dis
         return nbr_dis
-
+    
     def batch(self, atom_pos, atom_type, grid_name):
         """
         transfer configurations into input of PPM in batch
@@ -246,33 +246,31 @@ class MultiGridTransfer:
         nbr_fea_idxes += nbr_fea_idx
         return atom_feas, nbr_feas, nbr_fea_idxes
     
-    def put_into_grid(self, init_pos, init_frac, init_vec, mut_frac, mut_vec):
+    def put_into_grid(self, stru_frac, stru_latt, grid_frac, grid_latt):
         """
-        Approximate target configuration in grid, 
+        approximate target configuration in grid, 
         return corresponding index of grid point
         
         Parameters
         ----------
-        init_pos [int, 2d]: postion in old lattice
-        init_frac [float, 2d]: fraction coordinate of old lattice
-        init_vec [float, 2d]: lattice vector of old lattice
-        mut_frac [float, 2d]: fraction coordinate of new lattice
-        mut_vec [float, 2d]: lattice vector of new lattice
+        stru_frac [float, 2d, np]: fraction coordinate of test configuration
+        stru_latt [float, 2d, np]: lattice vector of structure
+        grid_frac [float, 2d, np]: fraction coordinate of grid point
+        grid_latt [float, 2d, np]: lattice vector of grid
         
         Returns
         ----------
         pos [int, 1d]: postion of atoms in grid
         """
-        init_frac = init_frac[init_pos]
-        stru_coor = np.dot(init_frac, init_vec)
-        grid_coor = np.dot(mut_frac, mut_vec)
+        stru_coor = np.dot(stru_frac, stru_latt)
+        grid_coor = np.dot(grid_frac, grid_latt)
         distance = np.zeros((len(stru_coor), len(grid_coor)))
         for i, atom_coor in enumerate(stru_coor):
             for j, point_coor in enumerate(grid_coor):
                 distance[i, j] = np.sqrt(np.sum((atom_coor - point_coor)**2))
         pos = list(map(lambda x: np.argmin(x), distance))
         return pos
-
+    
 
 if __name__ == "__main__":
     grid_name = 1

@@ -32,7 +32,7 @@ T = .1
 decay = .99
 steps = 300
 num_paths = 180
-min_bond = 1.6
+min_bond = 1.8
 wait_time = 300
 
 #Sample Select

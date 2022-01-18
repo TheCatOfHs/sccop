@@ -8,7 +8,7 @@ sys.path.append(f'{os.getcwd()}/src')
 from modules.global_var import *
 from modules.utils import SSHTools, system_echo
 from modules.predict import PPMData, PPModel
-from modules.data_transfer import Transfer
+from modules.data_transfer import Transfer, MultiGridTransfer
 from modules.grid_divide import GridDivide
 
 
@@ -92,7 +92,7 @@ class UpdateNodes(SSHTools):
         os.system(f'rm FINISH*')
 
 
-class Initial(GridDivide, UpdateNodes):
+class Initial(GridDivide, UpdateNodes, MultiGridTransfer):
     #Generate initial samples of ccop
     def __init__(self, component, ndensity, mindis):
         UpdateNodes.__init__(self)
@@ -126,7 +126,7 @@ class Initial(GridDivide, UpdateNodes):
             type = self.get_atom_number(stru)
             stru_frac = stru.frac_coords
             grid_frac = self.fraction_coor(grain, latt_vec)
-            pos = self.put_into_grid(stru_frac, grid_frac, latt_vec)
+            pos = self.put_into_grid(stru_frac, latt_vec, grid_frac, latt_vec)
             atom_type.append(type)
             atom_pos.append(pos)
             latt.append(latt_file)
@@ -166,30 +166,6 @@ class Initial(GridDivide, UpdateNodes):
                         rm latt_vec.tar.gz
                         '''
         os.system(shell_script)
-    
-    def put_into_grid(self, stru_frac, grid_frac, latt_vec):
-        """
-        approximate target configuration in grid, 
-        return corresponding index of grid point
-        
-        Parameters
-        ----------
-        stru_coor [float, 2d, np]: fraction coordinate of test configuration
-        grid_coor [float, 2d, np]: fraction coordinate of grid point
-        latt_vec [float, 2d, np]: lattice vector
-        
-        Returns
-        ----------
-        pos [int, 1d]: postion of atoms in grid
-        """
-        stru_coor = np.dot(stru_frac, latt_vec)
-        grid_coor = np.dot(grid_frac, latt_vec)
-        distance = np.zeros((len(stru_coor), len(grid_coor)))
-        for i, atom_coor in enumerate(stru_coor):
-            for j, point_coor in enumerate(grid_coor):
-                distance[i, j] = np.sqrt(np.sum((atom_coor - point_coor)**2))
-        pos = list(map(lambda x: np.argmin(x), distance))
-        return pos
     
     def get_atom_number(self, stru):
         """
@@ -333,6 +309,6 @@ if __name__ == '__main__':
     type = init.get_atom_number(str)
     stru_frac = str.frac_coords
     grid_frac = init.fraction_coor(grain, latt_vec)
-    pos = init.put_into_grid(stru_frac, grid_frac, latt_vec)
+    pos = init.put_into_grid(stru_frac, latt_vec, grid_frac, latt_vec)
     print(grid_frac[pos])
     init.write_list2d('test/coor.dat', grid_frac[pos])

@@ -1,4 +1,3 @@
-from math import exp
 import os, sys
 import time
 import paramiko
@@ -275,4 +274,12 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    print(exp(-3))
+    from modules.data_transfer import MultiGridTransfer
+    from pymatgen.core.structure import Structure
+    rwtools = ListRWTools()
+    mul = MultiGridTransfer()
+    a = Structure.from_file('test/POSCAR-08-133-133')
+    b = Structure.from_file('test/POSCAR_090')
+    pos = mul.put_into_grid(a.frac_coords, b.lattice.matrix, b.frac_coords, b.lattice.matrix)
+    print(pos)
+    rwtools.write_list2d('test/coor_in_grid.dat', b.frac_coords[pos])
