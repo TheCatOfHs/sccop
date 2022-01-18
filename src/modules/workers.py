@@ -367,7 +367,7 @@ class Search(ListRWTools):
         type_buffer.append(type_1)
         energy_buffer.append([value_1])
         for _ in range(steps):
-            pos_2, type_2 = self.step(pos_1, type_1)
+            pos_2, type_2 = self.step(pos_1, type_1, value_1)
             value_2 = self.predict(pos_2, type_2)
             if self.metropolis(value_1, value_2, self.T):
                 pos_1 = pos_2
@@ -380,7 +380,7 @@ class Search(ListRWTools):
         self.save(pos_buffer, type_buffer,
                   energy_buffer, path, node)
     
-    def step(self, pos, type):
+    def step(self, pos, type, value):
         """
         modify atom position under the geometry constrain
         
@@ -390,7 +390,10 @@ class Search(ListRWTools):
         type [int, 1d]: type of atom after 1 SA step
         """
         flag = False
-        exchange = 0.1
+        if value < -4.8:
+            exchange = 0.5
+        else:
+            exchange = 0.01
         num_atom = len(pos)
         while not flag:
             new_pos = pos.copy()

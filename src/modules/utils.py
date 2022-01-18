@@ -1,3 +1,4 @@
+from math import exp
 import os, sys
 import time
 import paramiko
@@ -274,7 +275,4 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    import torch
-    a = torch.tensor([[1]])
-    b = torch.tensor([[0]])
-    print(torch.cat((a, b), dim=0))
+    print(exp(-3))

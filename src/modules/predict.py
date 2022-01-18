@@ -17,11 +17,8 @@ from modules.utils import ListRWTools
 
 
 class DataParallel(DataParallel_raw):
-    """
-    scatter outside of the DataPrallel
-    """
+    #Scatter outside of the DataPrallel
     def __init__(self, module):
-        # Disable all the other parameters
         super(DataParallel, self).__init__(module)
     
     def forward(self, **kwargs):
@@ -54,14 +51,14 @@ class PPMData(Dataset):
 
     def __len__(self):
         """
-        Length of dataset
+        length of dataset
         """
         return len(self.targets)
     
     @functools.lru_cache(maxsize=None)
     def __getitem__(self, idx):
         """
-        Get each item in dataset by idx
+        get each item in dataset by idx
         
         Returns
         ----------
@@ -83,7 +80,7 @@ class PPMData(Dataset):
 
 def collate_pool(dataset_list):
     """
-    Collate data of each batch
+    collate data of each batch
     
     Parameters
     ----------
@@ -165,7 +162,7 @@ def batch_balance(num, batch_size, tuple):
 
 def get_loader(dataset, batch_size, num_workers, shuffle=False):
     """
-    Returen data loader
+    returen data loader
         
     Parameters
     ----------
@@ -183,7 +180,7 @@ def get_loader(dataset, batch_size, num_workers, shuffle=False):
 
 
 class ConvLayer(nn.Module):
-    #
+    #Graph convolutional layer
     def __init__(self, atom_fea_len, nbr_fea_len):
         super(ConvLayer, self).__init__()
         self.atom_fea_len = atom_fea_len
@@ -198,17 +195,17 @@ class ConvLayer(nn.Module):
 
     def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
         """
-
+        embedding crystal into vector
         
         Parameters
         ----------
-        atom_in_fea [float, 2d]: 
-        nbr_fea [float, 3d]: 
-        nbr_fea_idx [int, 2d]: 
+        atom_in_fea [float, 2d]: atom feature vector
+        nbr_fea [float, 3d]: bond feature vector
+        nbr_fea_idx [int, 2d]: index of neighbors
 
         Returns
         ----------
-        out [float, 2d]: 
+        out [float, 2d]: embedded atom vector
         """
         N, M = nbr_fea_idx.shape
         atom_nbr_fea = atom_in_fea[nbr_fea_idx, :]
@@ -247,17 +244,18 @@ class CrystalGraphConvNet(nn.Module):
 
     def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx):
         """
-
+        predict value
+        
         Parameters
         ----------
-        atom_fea [float, 2d, tensor]: 
-        nbr_fea [float, 3d, tensor]: 
-        nbr_fea_idx [int, 2d, tensor]: 
-        crystal_atom_idx [int, 3d, tensor]: 
+        atom_fea [float, 2d, tensor]: atom feature 
+        nbr_fea [float, 3d, tensor]: bond feature
+        nbr_fea_idx [int, 2d, tensor]: neighbor index
+        crystal_atom_idx [int, 3d, tensor]: atom index in batch
 
         Returns
         ----------
-        out [float, 2d, tensor]: 
+        out [float, 2d, tensor]: predict value
         """
         atom_fea = self.embedding(atom_fea)
         for conv_func in self.convs:
@@ -273,15 +271,16 @@ class CrystalGraphConvNet(nn.Module):
 
     def pooling(self, atom_fea, crystal_atom_idx):
         """
-
+        mix atom vector into crystal vector
+        
         Parameters
         ----------
-        atom_fea [float, 2d, tensor]: 
-        crystal_atom_idx [int, 2d, tensor]: 
+        atom_fea [float, 2d, tensor]: atom vector
+        crystal_atom_idx [int, 2d, tensor]: atom index in batch
 
         Returns
         ----------
-        crys_fea [float, , tensor]: 
+        crys_fea [float, 2d, tensor]: crystal vector
         """
         summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
                       for idx_map in crystal_atom_idx]
@@ -308,7 +307,7 @@ class PPModel(ListRWTools):
     
     def train_epochs(self):
         """
-        Train model by epochs
+        train model by epochs
         """
         train_loader = get_loader(self.train_data, 
                                   self.batch_size, self.num_workers, shuffle=True)
@@ -349,7 +348,7 @@ class PPModel(ListRWTools):
     
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
-        Train model one batch
+        train model one batch
         
         Parameters
         ----------
@@ -367,6 +366,7 @@ class PPModel(ListRWTools):
         model.train()
         start = time.time()
         for input, target in loader:
+            data_time.update(time.time() - start)
             target_normed = normalizer.norm(target)
             target_var = target_normed.to(self.device, non_blocking=True)
             pred = model(atom_fea=input[0], nbr_fea=input[1],
@@ -398,7 +398,7 @@ class PPModel(ListRWTools):
         
         Returns
         ----------
-        mae_errors.avg [float, 0d]: 
+        mae_errors.avg [float, 0d]: average mae
         """
         batch_time = AverageMeter()
         losses = AverageMeter()
@@ -440,15 +440,15 @@ class PPModel(ListRWTools):
     
     def model_initial(self, checkpoint):
         """
-        Initialize model by input len_atom_fea and nbr_fea_len
+        initialize model by input len_atom_fea and nbr_fea_len
         
         Parameters
         ----------
-        checkpoint []:
+        checkpoint [dict]: save parameters of model
         
         Returns
         ----------
-        model [obj]: 
+        model [obj]: initialized model
         """
         model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model.load_state_dict(checkpoint['state_dict'])
@@ -456,12 +456,12 @@ class PPModel(ListRWTools):
     
     def sample_data_list(self, dataset):
         """
-        Sample data from training set to calculate mean and std
+        sample data from training set to calculate mean and std
         to normalize targets
         
         Returns
         ----------
-        sample_target []: 
+        sample_target [float, 2d, tensor]: sampled target 
         """
         if len(dataset) < 500:
             sample_data_list = [dataset[i] for i in range(len(dataset))]
@@ -473,22 +473,22 @@ class PPModel(ListRWTools):
 
     def mae(self, prediction, target):
         """
-        Computes the mean absolute error between prediction and target
+        computes the mean absolute error between prediction and target
 
         Parameters
         ----------
-        prediction: torch.Tensor (N, 1)
-        target: torch.Tensor (N, 1)
+        prediction [float, 2d, tensor]: prediction vector
+        target [float, 2d, tensor]: target vector
         
         Returns
         ----------
-        mae []: 
+        mae [float, 0d]
         """
         return torch.mean(torch.abs(target - prediction))
     
     def save_checkpoint(self, epoch, state, is_best):
         """
-        Save model
+        save model
         
         Parameters
         ----------
@@ -515,7 +515,7 @@ class Normalizer():
         
     def norm(self, tensor):
         """
-        Normalize target tensor
+        normalize target tensor
         
         Parameters
         ----------
@@ -529,7 +529,7 @@ class Normalizer():
 
     def denorm(self, normed_tensor):
         """
-        Denormalize target tensor
+        denormalize target tensor
         
         Parameters
         ----------
@@ -543,7 +543,7 @@ class Normalizer():
 
     def state_dict(self):
         """
-        Return dictionary of mean and std of sampled targets
+        return dictionary of mean and std of sampled targets
         
         Returns
         ----------
@@ -553,7 +553,7 @@ class Normalizer():
 
     def load_state_dict(self, state_dict):
         """
-        Load mean and std to denormalize target tensor
+        load mean and std to denormalize target tensor
         
         Parameters
         ----------
@@ -584,6 +584,13 @@ class AverageMeter():
         self.count = 0
 
     def update(self, val, n=1):
+        """
+        update average value
+        
+        Parameters
+        ----------
+        val [float, 0d]: record value
+        """
         self.val = val
         self.sum += val*n
         self.count += n
