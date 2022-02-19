@@ -19,6 +19,8 @@ num_optims = 15
 component = 'Ga1N1Zn1O1'
 ndensity = 0.1 
 mindis = 1.8
+num_rand = 1000
+num_initial = 500
 
 #Training
 train_batchsize = 128
@@ -32,12 +34,12 @@ decay = .99
 steps = 300
 num_paths = 180
 min_bond = 1.8
-wait_time = 800
+wait_time = 300
 
 #Sample Select
 num_models = 5
-n_components = 2
-n_clusters = 60
+num_components = 2
+num_clusters = 60
 ratio_min_energy = 0.2
 ratio_max_std = 0.2
 

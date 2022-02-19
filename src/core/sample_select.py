@@ -17,7 +17,7 @@ from core.utils import ListRWTools, SSHTools, system_echo
 from core.predict import CrystalGraphConvNet, batch_balance
 from core.predict import DataParallel, Normalizer
 from core.predict import PPMData, get_loader
-from core.initial import Initial
+from core.initialize import Initial
 
 
 class Select(ListRWTools, SSHTools):
@@ -61,7 +61,7 @@ class Select(ListRWTools, SSHTools):
         mean_pred_few = mean_pred[idx_few].cpu().numpy()
         crys_mean_few = crys_mean[idx_few].cpu().numpy()
         crys_embedded = self.reduce(crys_mean_few)
-        clusters = self.cluster(crys_embedded, n_clusters)
+        clusters = self.cluster(crys_embedded, num_clusters)
         idx_slt = self.min_in_cluster(idx_few, mean_pred_few, clusters)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         
@@ -274,7 +274,7 @@ class Select(ListRWTools, SSHTools):
     
     def reduce(self, crys_fea):
         """
-        reduce dimension of crys_fea from 128 to n_components
+        reduce dimension of crys_fea from 128 to num_components
         
         Parameters
         ----------
@@ -284,7 +284,7 @@ class Select(ListRWTools, SSHTools):
         ----------
         crys_embedded [float, 2d, np]: redcued crystal vector
         """
-        crys_embedded = TSNE(n_components=n_components, 
+        crys_embedded = TSNE(n_components=num_components, 
                           learning_rate='auto', 
                           init='random',
                           random_state=0).fit_transform(crys_fea)

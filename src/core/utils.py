@@ -250,7 +250,7 @@ class SSHTools:
         flag = self.check_num_file(command, num_file)
         return flag
     
-    def remove(self, path):
+    def remove_flag(self, path):
         """
         remove FINISH flags
         

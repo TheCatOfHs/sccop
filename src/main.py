@@ -4,7 +4,7 @@ import time
 
 from core.global_var import *
 from core.dir_path import *
-from core.initial import Initial, UpdateNodes
+from core.initialize import InitSampling, UpdateNodes
 from core.grid_divide import MultiDivide, GridDivide
 from core.data_transfer import MultiGridTransfer
 from core.sample_select import Select, OptimSelect
@@ -34,7 +34,7 @@ if __name__ == '__main__':
     
     main()
     
-    init = Initial(component, ndensity, mindis)
+    init = InitSampling(component, ndensity, mindis)
     cpu_nodes = UpdateNodes()
     grid = GridDivide()
     divide = MultiDivide()
@@ -91,6 +91,7 @@ if __name__ == '__main__':
             check_overlay = [worker.overlay_check(i, len(i)) for i in atom_pos]
             check = [i and j for i, j in zip(check_near, check_overlay)]
             atom_pos_right, atom_type_right, grid_name_right = [], [], []
+            #TODO add number constrain
             for i, correct in enumerate(check):
                 if correct:
                     atom_pos_right.append(atom_pos[i])

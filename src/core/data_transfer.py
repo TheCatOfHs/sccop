@@ -1,6 +1,8 @@
 import os, sys
 import numpy as np
 
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -178,11 +180,11 @@ class Transfer(ListRWTools):
 
 
 class MultiGridTransfer:
-    #transfer configurations in different grid into the input of PPM
+    #transfer configurations in different grid into input of PPM
     def __init__(self):
         pass
     
-    def find_batch_nbr_dis(self, atom_pos, grid_name):
+    def find_nbr_dis(self, atom_pos, grid_name):
         """
         calculate near distance of configurations
         
@@ -271,7 +273,7 @@ class MultiGridTransfer:
                 distance[i, j] = np.sqrt(np.sum((atom_coor - point_coor)**2))
         pos = list(map(lambda x: np.argmin(x), distance))
         return pos
-    
+
 
 if __name__ == "__main__":
     grid_name = 1
