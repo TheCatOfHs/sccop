@@ -5,18 +5,19 @@ import pandas as pd
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.utils import SSHTools, system_echo
-from modules.predict import PPMData, PPModel
-from modules.data_transfer import Transfer, MultiGridTransfer
-from modules.grid_divide import GridDivide
+from core.global_var import *
+from core.dir_path import *
+from core.utils import SSHTools, system_echo
+from core.predict import PPMData, PPModel
+from core.data_transfer import Transfer, MultiGridTransfer
+from core.grid_divide import GridDivide
 
 
 class UpdateNodes(SSHTools):
-    #make each node consistent with main node
-    def __init__(self, sleep_time=1):
+    #make cpu nodes consistent with gpu node
+    def __init__(self, wait_time=0.1):
         self.num_node = len(nodes)
-        self.sleep_time = sleep_time
+        self.wait_time = wait_time
     
     def update(self):
         """
@@ -25,13 +26,13 @@ class UpdateNodes(SSHTools):
         for node in nodes:
             self.copy_file_to_nodes(node)
         while not self.is_done(self.num_node):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         self.remove_flag()
-        system_echo('Each node consistent with main node')
+        system_echo('Each node is consistent with main node')
     
     def copy_file_to_nodes(self, node):
         """
-        SSH to target node and update ccop
+        SSH to target node and copy necessary files
         """
         ip = f'node{node}'
         shell_script = f'''
@@ -98,7 +99,7 @@ class Initial(GridDivide, UpdateNodes, MultiGridTransfer):
         UpdateNodes.__init__(self)
         self.makedir()
         self.CSPD_generate(component, ndensity, mindis)
-        
+    
     def generate(self, recyc, grid_store):
         """
         generate initial samples

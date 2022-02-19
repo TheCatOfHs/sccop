@@ -2,16 +2,17 @@ import os, sys
 import numpy as np
 import time
 
-from modules.global_var import *
-from modules.initial import Initial, UpdateNodes
-from modules.grid_divide import MultiDivide, GridDivide
-from modules.data_transfer import MultiGridTransfer
-from modules.sample_select import Select, OptimSelect
-from modules.sub_vasp import SubVASP
-from modules.workers import MultiWorkers, Search
-from modules.predict import PPMData, PPModel
-from modules.utils import ListRWTools, system_echo
-from modules.post_process import PostProcess, VASPoptimize
+from core.global_var import *
+from core.dir_path import *
+from core.initial import Initial, UpdateNodes
+from core.grid_divide import MultiDivide, GridDivide
+from core.data_transfer import MultiGridTransfer
+from core.sample_select import Select, OptimSelect
+from core.sub_vasp import SubVASP
+from core.workers import MultiWorkers, Search
+from core.predict import PPMData, PPModel
+from core.utils import ListRWTools, system_echo
+from core.post_process import PostProcess, VASPoptimize
 
 
 def convert():
@@ -29,6 +30,10 @@ def main():
 
 
 if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+    
+    main()
+    
     init = Initial(component, ndensity, mindis)
     cpu_nodes = UpdateNodes()
     grid = GridDivide()
@@ -52,7 +57,7 @@ if __name__ == '__main__':
         
         #Generate initial structures
         atom_pos, atom_type, grid_init = init.generate(recyc, grid_store)
-        system_echo('Initial sample from database')
+        system_echo('Initial sample generate')
         
         #Build grid
         build = True
@@ -79,7 +84,7 @@ if __name__ == '__main__':
             atom_pos = [atom_pos[i] for i in order]
             atom_type = [atom_type[i] for i in order]
             grid_name = grid_name[order]
-
+            
             #Geometry check
             batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
             check_near = [worker.near_check(i) for i in batch_nbr_dis]
@@ -129,28 +134,28 @@ if __name__ == '__main__':
             #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
 
             num_poscars = len(energys)
-            a = int(num_poscars*0.6)
-            num_crys = a + len(train_energys)
+            num_add = int(num_poscars*0.6)
+            num_crys = num_add + len(train_energys)
             num_last_batch = np.mod(num_crys, train_batchsize)
             if 0 < num_last_batch < num_gpus:
-                a -= num_last_batch
+                num_add -= num_last_batch
             system_echo(f'Training set: {num_crys}')       
             atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
             system_echo(f'New add to training set: {len(atom_fea)}')
             #Training data
-            pos_buffer += atom_pos_right[0:a]
-            type_buffer += atom_type_right[0:a]
-            grid_buffer += grid_name_right[0:a]
-            train_atom_fea += atom_fea[0:a]
-            train_nbr_fea += nbr_fea[0:a]
-            train_nbr_fea_idx += nbr_fea_idx[0:a]
-            train_energys += energys[0:a]
+            pos_buffer += atom_pos_right[0:num_add]
+            type_buffer += atom_type_right[0:num_add]
+            grid_buffer += grid_name_right[0:num_add]
+            train_atom_fea += atom_fea[0:num_add]
+            train_nbr_fea += nbr_fea[0:num_add]
+            train_nbr_fea_idx += nbr_fea_idx[0:num_add]
+            train_energys += energys[0:num_add]
             system_echo(f'Training set: {len(train_energys)}')
             #Validation data
-            valid_atom_fea = atom_fea[a:]
-            valid_nbr_fea = nbr_fea[a:]
-            valid_nbr_fea_idx = nbr_fea_idx[a:]
-            valid_energys = energys[a:]
+            valid_atom_fea = atom_fea[num_add:]
+            valid_nbr_fea = nbr_fea[num_add:]
+            valid_nbr_fea_idx = nbr_fea_idx[num_add:]
+            valid_energys = energys[num_add:]
 
             #Training
             train = True
@@ -161,13 +166,13 @@ if __name__ == '__main__':
                 ppm.train_epochs()
 
             #Train data added
-            train_atom_fea += atom_fea[a:]
-            train_nbr_fea += nbr_fea[a:]
-            train_nbr_fea_idx += nbr_fea_idx[a:]
-            train_energys += energys[a:]
-            pos_buffer += atom_pos_right[a:]
-            type_buffer += atom_type_right[a:]
-            grid_buffer += grid_name_right[a:]
+            train_atom_fea += atom_fea[num_add:]
+            train_nbr_fea += nbr_fea[num_add:]
+            train_nbr_fea_idx += nbr_fea_idx[num_add:]
+            train_energys += energys[num_add:]
+            pos_buffer += atom_pos_right[num_add:]
+            type_buffer += atom_type_right[num_add:]
+            grid_buffer += grid_name_right[num_add:]
             
             #Search
             search = True
@@ -181,7 +186,7 @@ if __name__ == '__main__':
                 if round == 0:
                     mutate = False
                 else:
-                    if np.mod(round, 3) == 0:
+                    if np.mod(round, mut_freq) == 0:
                         mutate = True
                     else:
                         mutate = False
@@ -208,7 +213,7 @@ if __name__ == '__main__':
                     init_grid.append(grid_buffer[seed])
                 
                 #Lattice mutate
-                #TODO clean below code
+                #TODO clean up the below code
                 mut_counter = 0
                 mut_num = int(num_paths*mut_ratio)
                 mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
@@ -229,7 +234,7 @@ if __name__ == '__main__':
                         mut_counter += 1
                 system_echo(f'Lattice mutate number: {mut_counter}')
                 workers.search(round+1, num_paths, init_pos, init_type, init_grid)
-
+            
             #Sample
             atom_pos = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_pos.dat', int)
             atom_type = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_type.dat', int)
@@ -239,7 +244,7 @@ if __name__ == '__main__':
 
             #VASP calculate
             sub_vasp.sub_VASP_job(round+1)
-
+        
         #Export searched POSCARS
         select = Select(start+num_round)
         grid_buffer_2d = [[i] for i in grid_buffer]

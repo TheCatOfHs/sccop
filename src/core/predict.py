@@ -11,9 +11,10 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import DataParallel as DataParallel_raw
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.sub_vasp import system_echo
-from modules.utils import ListRWTools
+from core.global_var import *
+from core.dir_path import *
+from core.sub_vasp import system_echo
+from core.utils import ListRWTools
 
 
 class DataParallel(DataParallel_raw):
@@ -268,7 +269,7 @@ class CrystalGraphConvNet(nn.Module):
                 crys_fea = softplus(fc(crys_fea))
         out = self.fc_out(crys_fea)
         return out
-
+    
     def pooling(self, atom_fea, crystal_atom_idx):
         """
         mix atom vector into crystal vector

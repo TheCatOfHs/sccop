@@ -3,7 +3,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.utils import ListRWTools
+from core.utils import ListRWTools
 
 
 class VisualizeGrid():

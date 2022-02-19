@@ -5,10 +5,11 @@ import torch
 from functools import reduce
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.data_transfer import Transfer
-from modules.utils import ListRWTools, SSHTools, system_echo
-from modules.predict import CrystalGraphConvNet, Normalizer
+from core.global_var import *
+from core.dir_path import *
+from core.data_transfer import Transfer
+from core.utils import ListRWTools, SSHTools, system_echo
+from core.predict import CrystalGraphConvNet, Normalizer
 
 
 class MultiWorkers(ListRWTools, SSHTools):

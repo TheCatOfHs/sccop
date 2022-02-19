@@ -5,7 +5,8 @@ import pickle
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
+from core.global_var import *
+from core.dir_path import *
 
 
 def system_echo(ct):
@@ -167,6 +168,8 @@ class SSHTools:
 
         Parameters
         ----------
+        shell_script [str, 0d]
+        ip [str, 0d]
         """
         port = 22
         user = 'lcn'
@@ -263,7 +266,7 @@ class SSHTools:
         
         Returns
         ----------
-        flag [bool, 0d]: whether works are done
+        flag [bool, 0d]: whether work is done
         """
         flag = False
         finish = os.popen(command)
@@ -274,7 +277,7 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    from modules.data_transfer import MultiGridTransfer
+    from core.data_transfer import MultiGridTransfer
     from pymatgen.core.structure import Structure
     rwtools = ListRWTools()
     mul = MultiGridTransfer()
@@ -283,3 +286,4 @@ if __name__ == '__main__':
     pos = mul.put_into_grid(a.frac_coords, b.lattice.matrix, b.frac_coords, b.lattice.matrix)
     print(pos)
     rwtools.write_list2d('test/coor_in_grid.dat', b.frac_coords[pos])
+    

@@ -4,8 +4,9 @@ import argparse
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.utils import ListRWTools, SSHTools, system_echo
+from core.global_var import *
+from core.dir_path import *
+from core.utils import ListRWTools, SSHTools, system_echo
 from pymatgen.core.structure import Structure
 
 

@@ -10,13 +10,14 @@ from pymatgen.core.structure import Structure
 
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.data_transfer import Transfer
-from modules.utils import ListRWTools, SSHTools, system_echo
-from modules.predict import CrystalGraphConvNet, batch_balance
-from modules.predict import DataParallel, Normalizer
-from modules.predict import PPMData, get_loader
-from modules.initial import Initial
+from core.global_var import *
+from core.dir_path import *
+from core.data_transfer import Transfer
+from core.utils import ListRWTools, SSHTools, system_echo
+from core.predict import CrystalGraphConvNet, batch_balance
+from core.predict import DataParallel, Normalizer
+from core.predict import PPMData, get_loader
+from core.initial import Initial
 
 
 class Select(ListRWTools, SSHTools):

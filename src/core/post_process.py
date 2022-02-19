@@ -7,8 +7,9 @@ from pymatgen.symmetry.kpath import KPathSeek
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 sys.path.append(f'{os.getcwd()}/src')
-from modules.global_var import *
-from modules.utils import ListRWTools, SSHTools, system_echo
+from core.global_var import *
+from core.dir_path import *
+from core.utils import ListRWTools, SSHTools, system_echo
 
 
 class VASPoptimize(SSHTools, ListRWTools):
@@ -61,7 +62,9 @@ class VASPoptimize(SSHTools, ListRWTools):
                                 cp OUTCAR OUTCAR_$i
                                 rm WAVECAR CHGCAR
                             done
-                            if [ `cat CONTCAR|wc -l` -ge 8 ]; then
+                            line=`cat CONTCAR | wc -l`
+                            fail=`tail vasp-1.vasp | grep WARNING | wc -l`
+                            if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
                                 scp vasp-1.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
