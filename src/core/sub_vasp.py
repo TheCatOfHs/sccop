@@ -8,9 +8,9 @@ from core.dir_path import *
 from core.utils import ListRWTools, SSHTools, system_echo
 
 
-class SubVASP(ListRWTools, SSHTools):
+class ParallelSubVASP(ListRWTools, SSHTools):
     #submit vasp jobs
-    def __init__(self, dE=1e-3, repeat=2, sleep_time=1):
+    def __init__(self, dE=1e-3, repeat=2, sleep_time=0.1):
         self.dE = dE
         self.repeat = repeat
         self.sleep_time = sleep_time
@@ -77,7 +77,6 @@ class SubVASP(ListRWTools, SSHTools):
         ip = f'node{node}'
         local_vasp_out_path = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
         shell_script = f'''
-                        #!/bin/bash
                         cd /local/ccop/vasp
                         p={poscar}
                         mkdir $p
@@ -173,5 +172,5 @@ class SubVASP(ListRWTools, SSHTools):
     
     
 if __name__ == "__main__":
-    sub_vasp = SubVASP()
-    sub_vasp.sub_VASP_job(0)
+    vasp = ParallelSubVASP()
+    vasp.sub_VASP_job(0)

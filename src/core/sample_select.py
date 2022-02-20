@@ -17,7 +17,7 @@ from core.utils import ListRWTools, SSHTools, system_echo
 from core.predict import CrystalGraphConvNet, batch_balance
 from core.predict import DataParallel, Normalizer
 from core.predict import PPMData, get_loader
-from core.initialize import Initial
+from core.initialize import InitSampling
 
 
 class Select(ListRWTools, SSHTools):
@@ -445,7 +445,7 @@ class Select(ListRWTools, SSHTools):
         system_echo(f'CCOP optimize configurations: {num_poscars}')
 
 
-class OptimSelect(Select, Initial, Transfer, SSHTools):
+class OptimSelect(Select, InitSampling, Transfer, SSHTools):
     #Select structures from low level optimization
     def __init__(self, round):
         Select.__init__(self, round)

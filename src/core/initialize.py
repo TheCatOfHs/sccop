@@ -1,5 +1,6 @@
 import os, sys
 import time
+import random
 
 import numpy as np
 import pandas as pd
@@ -37,7 +38,6 @@ class UpdateNodes(SSHTools):
         """
         ip = f'node{node}'
         shell_script = f'''
-                        #!/bin/bash
                         cd /local
                         rm -rf ccop/
                         mkdir ccop/
@@ -67,7 +67,6 @@ class UpdateNodes(SSHTools):
         ip = f'node{node}'
         local_grid_prop_path = f'/local/ccop/{grid_prop_path}'
         shell_script = f'''
-                        #!/bin/bash
                         cd {local_grid_prop_path}
                         scp {gpu_node}:{local_grid_prop_path}/latt_vec.tar.gz .
                         tar -zxf latt_vec.tar.gz
@@ -88,9 +87,15 @@ class UpdateNodes(SSHTools):
         """
         latt_str = ' '.join(latt)
         shell_script = f'''
-                        #!/bin/bash
                         cd data/grid/property/
                         tar -zcf latt_vec.tar.gz {latt_str}
+                        '''
+        os.system(shell_script)
+    
+    def del_zip_latt(self):
+        shell_script = f'''
+                        cd data/grid/property/
+                        rm latt_vec.tar.gz
                         '''
         os.system(shell_script)
         
@@ -119,12 +124,10 @@ class InitSampling(GridDivide, UpdateNodes, MultiGridTransfer):
         while not self.is_done('', self.num_node):
             time.sleep(self.wait_time)
         self.remove_flag('.')
+        self.del_zip_latt()
         #structures generated randomly
-        (atom_pos_Rand, atom_type_Rand, grid_name_Rand) = \
-            self.Rand_generate(atom_type, grid_name, point_num)
-        atom_pos += atom_pos_Rand
-        atom_type += atom_type_Rand
-        grid_name += grid_name_Rand
+        (atom_pos, atom_type, grid_name) = \
+            self.add_sample_Rand(atom_pos, atom_type, grid_name, point_num)
         return atom_pos, atom_type, grid_name
     
     def CSPD_generate(self, component, ndensity, mindis):
@@ -147,33 +150,35 @@ class InitSampling(GridDivide, UpdateNodes, MultiGridTransfer):
                         '''
         os.system(shell_script)
     
-    def Rand_generate(self, atom_type, grid_name, point_num):
+    def add_sample_Rand(self, atom_pos, atom_type, grid_name, point_num):
         """
-        generate initial samples randomly
+        generate initial samples by CSPD and random
         
         Parameters
         ----------
+        atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
         point_num [int, 1d]: number of grid points
         
         Returns
         ----------
-        atom_pos_rand [int, 2d]: position of atoms randomly
-        atom_type_rand [int, 2d]: type of atoms
-        grid_name_rand [int, 1d]: grid name
+        atom_pos_mix [int, 2d]: position of atoms randomly
+        atom_type_mix [int, 2d]: type of atoms
+        grid_name_mix [int, 1d]: grid name
         """
-        atom_pos_rand, atom_type_rand, grid_name_rand = [], [], []
+        atom_pos_mix, atom_type_mix, grid_name_mix = [], [], []
         for i, grid in enumerate(grid_name):
             atom_num = len(atom_type[i])
             points = [j for j in range(point_num[i])]
-            for _ in range(num_initial):
-                pos = np.random.choice(points, atom_num, False)
-                atom_pos_rand.append(pos)
-                atom_type_rand.append(atom_type[i])
-                grid_name_rand.append(grid)
-        return atom_pos_rand, atom_type_rand, grid_name_rand
-
+            atom_pos_mix += [atom_pos[i]]
+            atom_type_mix += [atom_type[i]]
+            grid_name_mix += [grid_name[i]]
+            atom_pos_mix += [random.sample(points, atom_num) for _ in range(num_rand)]
+            atom_type_mix += [atom_type[i] for _ in range(num_rand)]
+            grid_name_mix += [grid for _ in range(num_rand)]
+        return atom_pos_mix, atom_type_mix, grid_name_mix
+    
     def structure_in_grid(self, recyc):
         """
         put structure into grid

@@ -1,15 +1,15 @@
 import os, sys
 import numpy as np
-import time
+import random
 
 from core.global_var import *
 from core.dir_path import *
 from core.initialize import InitSampling, UpdateNodes
-from core.grid_divide import MultiDivide, GridDivide
+from core.grid_divide import ParallelDivide, GridDivide
 from core.data_transfer import MultiGridTransfer
 from core.sample_select import Select, OptimSelect
-from core.sub_vasp import SubVASP
-from core.workers import MultiWorkers, Search
+from core.sub_vasp import ParallelSubVASP
+from core.search import ParallelWorkers, GeoCheck
 from core.predict import PPMData, PPModel
 from core.utils import ListRWTools, system_echo
 from core.post_process import PostProcess, VASPoptimize
@@ -25,91 +25,82 @@ def delete_duplicates():
     pass
 
 def main():
-    #TODO ccop program
-    pass
-
-
-if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-    
-    main()
-    
     init = InitSampling(component, ndensity, mindis)
     cpu_nodes = UpdateNodes()
     grid = GridDivide()
-    divide = MultiDivide()
+    divide = ParallelDivide()
     rwtools = ListRWTools()
     mul_transfer = MultiGridTransfer()
-    workers = MultiWorkers()
-    sub_vasp = SubVASP()
+    check = GeoCheck()
+    workers = ParallelWorkers()
+    vasp = ParallelSubVASP()
     
-    for recyc in range(num_recycle):
-        system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recyc}')
+    #Update cpu nodes
+    cpu_nodes.update()
+    
+    #Initialize storage
+    grid_store = []
+    pos_buffer, type_buffer, grid_buffer = [], [], []
+    train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
+    
+    for recycle in range(num_recycle):
+        system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
         
-        if recyc == 0:
-            #Update each node
-            cpu_nodes.update()
-            
-            #Initialize storage
-            grid_store = []
-            pos_buffer, type_buffer, grid_buffer = [], [], []
-            train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
-        
-        #Generate initial structures
-        atom_pos, atom_type, grid_init = init.generate(recyc, grid_store)
-        system_echo('Initial sample generate')
+        #Generate structures
+        atom_pos, atom_type, grid_name = init.generate(recycle)
+        grid_init = np.unique(grid_name)
+        system_echo('New initial samples generated')
         
         #Build grid
-        build = True
         grid_origin = grid_init
         grid_mutate = grid_init
         grid_store = np.concatenate((grid_store, grid_init))
-        if build:
-            divide.assign(grid_origin, grid_mutate)
-        grid_name = grid_origin
-        system_echo('Initial grid build')
+        divide.assign_to_cpu(grid_origin, grid_mutate)
+        system_echo('New grids have been built')
         
-        #Initial data
-        initial = True
-        worker = Search(0, 0)
-        if initial:
-            num_initial = 1000
-            for i in grid_init:
-                point_num = len(rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True))
-                grid_point = [i for i in range(point_num)]
-                atom_pos += [list(np.random.choice(grid_point, 8, False)) for _ in range(num_initial)]
-                atom_type += [[i for i in [29, 30, 6, 7] for _ in range(2)] for _ in range(num_initial)]
-                grid_name = np.concatenate((grid_name, [i for _ in range(num_initial)]))
-            order = np.argsort(grid_name)
-            atom_pos = [atom_pos[i] for i in order]
-            atom_type = [atom_type[i] for i in order]
-            grid_name = grid_name[order]
-            
-            #Geometry check
-            batch_nbr_dis = mul_transfer.find_batch_nbr_dis(atom_pos, grid_name)
-            check_near = [worker.near_check(i) for i in batch_nbr_dis]
-            check_overlay = [worker.overlay_check(i, len(i)) for i in atom_pos]
-            check = [i and j for i, j in zip(check_near, check_overlay)]
-            atom_pos_right, atom_type_right, grid_name_right = [], [], []
-            #TODO add number constrain
-            for i, correct in enumerate(check):
-                if correct:
-                    atom_pos_right.append(atom_pos[i])
-                    atom_type_right.append(atom_type[i])
-                    grid_name_right.append(grid_name[i])
-            grid_name_right = np.array(grid_name_right)
-            num_sample = len(grid_name_right)
-            idx = np.arange(num_sample)
-            system_echo(f'Sampling number: {num_sample}')
-
-            #Select samples
-            start = recyc * (num_round + 1)
-            select = Select(start)
-            select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
-
-            #VASP calculate
-            sub_vasp.sub_VASP_job(start)
+        #Geometry check
+        batch_nbr_dis = mul_transfer.find_nbr_dis(atom_pos, grid_name)
+        check_near = [check.near(i) for i in batch_nbr_dis]
+        check_overlay = [check.overlay(i, len(i)) for i in atom_pos]
+        check_result = [i and j for i, j in zip(check_near, check_overlay)]
+        atom_pos_right, atom_type_right, grid_name_right = [], [], []
+        check_num = len(check_result)
+        sample_num = np.ones(check_num)[check_result].sum()
+        sample_idx = np.arange(check_num)[check_result]
+        print(check_num)
+        print(sample_idx)
+        print(batch_nbr_dis[0])
+        if sample_num > num_initial:
+            CSPD_num = len(grid_init)
+            sample_CSPD = sample_idx[:CSPD_num]
+            sample_Rand = sample_idx[CSPD_num:]
+            sample_Rand = random.sample(sample_Rand, num_initial-CSPD_num)
+            sample_idx =  np.concatenate((sample_CSPD, sample_Rand))
+        for i in sample_idx:
+            atom_pos_right.append(atom_pos[i])
+            atom_type_right.append(atom_type[i])
+            grid_name_right.append(grid_name[i])
+        grid_name_right = np.array(grid_name_right)
+        num_sample = len(grid_name_right)
+        idx = np.arange(num_sample)
+        system_echo(f'Sampling number: {num_sample}')
         
+        #Select samples
+        start = recycle * (num_round+1)
+        select = Select(start)
+        select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
+
+        #VASP calculate
+        vasp.sub_VASP_job(start)
+
+    
+
+if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+
+    main()
+
+'''
         #CCOP optimize
         for round in range(start, start+num_round):
             #Data import
@@ -225,8 +216,8 @@ if __name__ == '__main__':
                 
                 mut_pos = [mul_transfer.put_into_grid(stru_frac[i], mut_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
                 batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
-                check_near = [worker.near_check(i) for i in batch_nbr_dis]
-                check_overlay = [worker.overlay_check(i, len(i)) for i in mut_pos]
+                check_near = [check.near(i) for i in batch_nbr_dis]
+                check_overlay = [check.overlay(i, len(i)) for i in mut_pos]
                 check = [i and j for i, j in zip(check_near, check_overlay)]
                 for i, correct in enumerate(check):
                     if correct:
@@ -275,3 +266,4 @@ if __name__ == '__main__':
     
     #Dielectric matrix
     post.run_dielectric()
+'''

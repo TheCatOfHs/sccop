@@ -16,14 +16,14 @@ parser.add_argument('--mutate', type=int)
 args = parser.parse_args()
 
 
-class MultiDivide(ListRWTools, SSHTools):
+class ParallelDivide(ListRWTools, SSHTools):
     #divide grid by each node
-    def __init__(self, sleep_time=1):
+    def __init__(self, wait_time=0.1):
         self.num_node = len(nodes)
-        self.sleep_time = sleep_time
+        self.wait_time = wait_time
         self.prop_path = f'/local/ccop/{grid_prop_path}'
     
-    def assign(self, grid_origin, grid_mutate):
+    def assign_to_cpu(self, grid_origin, grid_mutate):
         """
         send divide jobs to nodes and update nodes
         
@@ -34,26 +34,26 @@ class MultiDivide(ListRWTools, SSHTools):
         """
         num_grid = len(grid_mutate)
         node_assign = self.assign_node(num_grid)
-        
+        #generate grid and send back to gpu node
         for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
             self.sub_divide(origin, mutate, node)
-        while not self.is_done(num_grid):
-            time.sleep(self.sleep_time)
+        while not self.is_done(grid_prop_path, num_grid):
+            time.sleep(self.wait_time)
         self.zip_file_name(grid_mutate)
         self.remove_flag_on_gpu()
         system_echo(f'Lattice generate: {grid_mutate}')
-        
+        #update cpus
         for node in nodes:
             self.send_grid_to_cpu(node)
-        while not self.is_done(self.num_node*num_grid):
-            time.sleep(self.sleep_time)
+        while not self.is_done(grid_prop_path, self.num_node*num_grid):
+            time.sleep(self.wait_time)
         self.remove_flag_on_gpu()
         self.remove_flag_on_cpu()
         system_echo(f'Unzip grid file on CPUs')
-        
+        #unzip on gpu
         self.unzip_grid_on_gpu()
-        while not self.is_done(num_grid):
-            time.sleep(self.sleep_time)
+        while not self.is_done(grid_prop_path, num_grid):
+            time.sleep(self.wait_time)
         self.remove_zip_on_gpu()
         self.remove_flag_on_gpu()
         system_echo(f'Unzip grid file on GPU')
@@ -76,9 +76,8 @@ class MultiDivide(ListRWTools, SSHTools):
         file = ' '.join(file)
         options = f'--origin {origin} --mutate {mutate}'
         shell_script = f'''
-                        #!/bin/bash
                         cd /local/ccop/
-                        python src/modules/grid_divide.py {options}
+                        python src/core/grid_divide.py {options}
                         cd {grid_prop_path}
                         
                         touch FINISH-{mutate}                        
@@ -137,18 +136,6 @@ class MultiDivide(ListRWTools, SSHTools):
                         done
                         '''
         os.system(shell_script)
-    
-    def is_done(self, file_num):
-        """
-        If shell is completed, return True
-        
-        Returns
-        ----------
-        file_num [int, 0d]: number of file
-        """
-        command = f'ls -l {grid_prop_path} | grep FINISH | wc -l'
-        flag = self.check_num_file(command, file_num)
-        return flag
     
     def remove_flag_on_gpu(self): 
         """

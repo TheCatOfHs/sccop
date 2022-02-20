@@ -10,7 +10,7 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 3
+num_recycle = 1
 num_round = 10
 num_poscars = 30
 num_optims = 15
@@ -19,8 +19,8 @@ num_optims = 15
 component = 'Ga1N1Zn1O1'
 ndensity = 0.1 
 mindis = 1.8
-num_rand = 1000
-num_initial = 500
+num_rand = 100
+num_initial = 100
 
 #Training
 train_batchsize = 128
