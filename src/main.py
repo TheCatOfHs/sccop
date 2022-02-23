@@ -27,7 +27,7 @@ class CrystalOptimization(ListRWTools):
         self.check = GeoCheck()
         self.post = PostProcess()
         
-    def main(self, ):
+    def main(self):
         #Update cpu nodes
         self.cpu_nodes.update()
         #Initialize storage
@@ -73,11 +73,13 @@ class CrystalOptimization(ListRWTools):
                 if round == 0:
                     mutate = False
                 else:
+                    mutate = True
                     if np.mod(round, mut_freq) == 0:
-                        mutate = True
-                        grid_mutate, grid_store = self.lattice_mutate(grid_store)
+                        generate = True
                     else:
-                        mutate = False
+                        generate = False
+                    grid_store = self.lattice_mutate(generate, grid_store)
+                    grid_mutate = grid_store
                 #Initial search start point
                 paths_num = num_paths_min + num_paths_rand
                 init_pos, init_type, init_grid = \
@@ -101,7 +103,6 @@ class CrystalOptimization(ListRWTools):
             grid_buffer_2d = [[i] for i in train_grid]
             select.export(recycle, train_pos, train_type, grid_buffer_2d)
             system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
-
             #VASP optimize
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low()
@@ -109,10 +110,8 @@ class CrystalOptimization(ListRWTools):
         #Select optimized structures
         opt_slt = OptimSelect(start+num_round)
         opt_slt.optim_select()
-    
         #Optimize
         self.post.run_optimization()
-        
         #Property calculate
         self.property_calculate()
         
@@ -223,30 +222,31 @@ class CrystalOptimization(ListRWTools):
         train_energy += energy_select[add_num:]
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
     
-    def lattice_mutate(self, grid_store):
+    def lattice_mutate(self, generate, grid_store):
         """
         generate mutate lattice from training set
         
         Parameters
         ----------
-        mutate [bool, 0d]: whether do lattice mutate
+        generate [bool, 0d]: whether generate new lattice
         grid_store [int, 1d]: store of grid
         
         Returns
         ----------
-        grid_mutate [int, 1d]: name of mutate grids
+        grid_store [int, 1d]: storage of all grids
         """
         #generate mutate lattice grid
-        grid_num = len(grid_store)
-        replace = False
-        if num_mutate > grid_num:
-            replace = True
-        grid_origin = np.random.choice(grid_store, num_mutate, replace)
-        grid_mutate = np.arange(grid_num, grid_num+num_mutate)
-        grid_store = np.concatenate((grid_store, grid_mutate))
-        self.divide.assign_to_cpu(grid_origin, grid_mutate)
-        system_echo(f'Grid origin: {grid_origin}')
-        return grid_mutate, grid_store
+        if generate:
+            grid_num = len(grid_store)
+            replace = False
+            if num_mutate > grid_num:
+                replace = True
+            grid_new = np.arange(grid_num, grid_num+num_mutate)
+            grid_store = np.concatenate((grid_store, grid_new))
+            grid_origin = np.random.choice(grid_store, num_mutate, replace)
+            self.divide.assign_to_cpu(grid_origin, grid_new)
+            system_echo(f'Grid origin: {grid_origin}')
+        return grid_store
     
     def generate_search_point(self, paths_num, mutate, grid_mutate, 
                               train_pos, train_type, train_grid, train_energy):
@@ -330,7 +330,7 @@ class CrystalOptimization(ListRWTools):
             mut_frac = self.import_list2d(mut_frac_file, float, binary=True)
             mut_latt_vec = self.import_list2d(mut_latt_vec_file, float, binary=True)
             #put into mutate lattice
-            mut_pos += self.transfer.put_into_grid(stru_frac, mut_latt_vec, mut_frac, mut_latt_vec)
+            mut_pos += [self.transfer.put_into_grid(stru_frac, mut_latt_vec, mut_frac, mut_latt_vec)]
         return mut_pos
     
     def property_calculate(self):
