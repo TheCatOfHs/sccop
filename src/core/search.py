@@ -46,7 +46,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         num_paths [int, 0d]: number of search path
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
-        init_grid [int, 2d]: initial grid name
+        init_grid [int, 1d]: initial grid name
         """
         self.round = f'{round:03.0f}'
         self.sh_save_path = f'{search_path}/{self.round}'
@@ -89,7 +89,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         num_paths [int, 0d]: number of search path
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
-        init_grid [int, 2d]: initial grid name
+        init_grid [int, 1d]: initial grid name
         """
         if not os.path.exists(self.sh_save_path):
             os.mkdir(self.sh_save_path)

@@ -31,7 +31,7 @@ class CrystalOptimization(ListRWTools):
         #Update cpu nodes
         self.cpu_nodes.update()
         #Initialize storage
-        grid_store = np.array([])
+        grid_store = np.array([], dtype=int)
         train_pos, train_type, train_grid = [], [], []
         train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = [], [], [], []
 
@@ -233,7 +233,7 @@ class CrystalOptimization(ListRWTools):
         
         Returns
         ----------
-        grid_store [int, 1d]: storage of all grids
+        grid_store [int, 1d]: store of grid
         """
         #generate mutate lattice grid
         if generate:
