@@ -10,12 +10,12 @@ from core.utils import ListRWTools, SSHTools, system_echo
 
 class ParallelSubVASP(ListRWTools, SSHTools):
     #submit vasp jobs
-    def __init__(self, dE=1e-3, repeat=2, sleep_time=0.1):
+    def __init__(self, dE=1e-3, repeat=2, wait_time=0.1):
         self.dE = dE
         self.repeat = repeat
-        self.sleep_time = sleep_time
+        self.wait_time = wait_time
     
-    def sub_VASP_job(self, round):
+    def sub_job(self, round):
         """
         calculate POSCARs and return energys
         
@@ -34,12 +34,12 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         for i in range(self.repeat):
             os.mkdir(f'{vasp_out_path}/{round}-{i}')
             system_echo(f'Start VASP calculation---itersions: '
-                        f'{round}-{i}, numbers: {num_poscar}')
+                        f'{round}-{i}, number: {num_poscar}')
             self.sub_vasp_job(check_poscar, round, i)
             while not self.is_VASP_done(round, i, num_poscar):
-                time.sleep(self.sleep_time)
+                time.sleep(self.wait_time)
             system_echo(f'All job are completed---itersions: '
-                        f'{round}-{i}, numbers: {num_poscar}')
+                        f'{round}-{i}, number: {num_poscar}')
             if i > 0:
                 self.copy_true_file(round, i, true_E, vasp_out)
             true_E, false_E, vasp_out = self.get_energy(round, i)
@@ -47,7 +47,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
             num_poscar = len(check_poscar)
             if num_poscar == 0:
                 system_echo(f'VASP completed---itersions: '
-                            f'{round}-{i}, numbers: {num_poscar}')
+                            f'{round}-{i}, number: {num_poscar}')
                 break
     
     def sub_vasp_job(self, poscars, round, repeat):
@@ -168,9 +168,9 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                 last_true_file = f'{vasp_out_path}/{round}-{repeat-1}/{out}'
                 current_true_file = f'{vasp_out_path}/{round}-{repeat}/{out}'
                 shutil.copyfile(last_true_file, current_true_file)
-            system_echo(f'Copy true vasp out to next---true numbers: {len(true_out)}.')
+            system_echo(f'Copy true vasp out to next---true number: {len(true_out)}.')
     
     
 if __name__ == "__main__":
     vasp = ParallelSubVASP()
-    vasp.sub_VASP_job(0)
+    vasp.sub_job(0)

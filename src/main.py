@@ -1,11 +1,10 @@
-import os, sys
+import os
 import numpy as np
-import random
 
 from core.global_var import *
 from core.dir_path import *
 from core.initialize import InitSampling, UpdateNodes
-from core.grid_divide import ParallelDivide, GridDivide
+from core.grid_divide import ParallelDivide
 from core.data_transfer import MultiGridTransfer
 from core.sample_select import Select, OptimSelect
 from core.sub_vasp import ParallelSubVASP
@@ -15,255 +14,339 @@ from core.utils import ListRWTools, system_echo
 from core.post_process import PostProcess, VASPoptimize
 
 
-def convert():
-    #TODO pos, type, grid store in string
-    #e.g. 1 1 1 - 2 2 2 - 1
-    pass
-
-def delete_duplicates():
-    #TODO delete duplicates that are already in training set
-    pass
-
-def main():
-    init = InitSampling(component, ndensity, mindis)
-    cpu_nodes = UpdateNodes()
-    grid = GridDivide()
-    divide = ParallelDivide()
-    rwtools = ListRWTools()
-    mul_transfer = MultiGridTransfer()
-    check = GeoCheck()
-    workers = ParallelWorkers()
-    vasp = ParallelSubVASP()
-    
-    #Update cpu nodes
-    cpu_nodes.update()
-    
-    #Initialize storage
-    grid_store = []
-    pos_buffer, type_buffer, grid_buffer = [], [], []
-    train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys = [], [], [], []
-    
-    for recycle in range(num_recycle):
-        system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
+class CrystalOptimization(ListRWTools):
+    #crystal combinational optimization program
+    def __init__(self, component, ndensity, min_dis_CSPD):
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+        self.init = InitSampling(component, ndensity, min_dis_CSPD)
+        self.cpu_nodes = UpdateNodes()
+        self.divide = ParallelDivide()
+        self.transfer = MultiGridTransfer()
+        self.workers = ParallelWorkers()
+        self.vasp = ParallelSubVASP()
+        self.check = GeoCheck()
+        self.post = PostProcess()
         
-        #Generate structures
-        atom_pos, atom_type, grid_name = init.generate(recycle)
-        grid_init = np.unique(grid_name)
-        system_echo('New initial samples generated')
-        
-        #Build grid
-        grid_origin = grid_init
-        grid_mutate = grid_init
-        grid_store = np.concatenate((grid_store, grid_init))
-        divide.assign_to_cpu(grid_origin, grid_mutate)
-        system_echo('New grids have been built')
-        
-        #Geometry check
-        batch_nbr_dis = mul_transfer.find_nbr_dis(atom_pos, grid_name)
-        check_near = [check.near(i) for i in batch_nbr_dis]
-        check_overlay = [check.overlay(i, len(i)) for i in atom_pos]
-        check_result = [i and j for i, j in zip(check_near, check_overlay)]
-        atom_pos_right, atom_type_right, grid_name_right = [], [], []
-        check_num = len(check_result)
-        sample_num = np.ones(check_num)[check_result].sum()
-        sample_idx = np.arange(check_num)[check_result]
-        print(check_num)
-        print(sample_idx)
-        print(batch_nbr_dis[0])
-        if sample_num > num_initial:
-            CSPD_num = len(grid_init)
-            sample_CSPD = sample_idx[:CSPD_num]
-            sample_Rand = sample_idx[CSPD_num:]
-            sample_Rand = random.sample(sample_Rand, num_initial-CSPD_num)
-            sample_idx =  np.concatenate((sample_CSPD, sample_Rand))
-        for i in sample_idx:
-            atom_pos_right.append(atom_pos[i])
-            atom_type_right.append(atom_type[i])
-            grid_name_right.append(grid_name[i])
-        grid_name_right = np.array(grid_name_right)
-        num_sample = len(grid_name_right)
-        idx = np.arange(num_sample)
-        system_echo(f'Sampling number: {num_sample}')
-        
-        #Select samples
-        start = recycle * (num_round+1)
-        select = Select(start)
-        select.write_POSCARs(idx, atom_pos_right, atom_type_right, grid_name_right)
+    def main(self, ):
+        #Update cpu nodes
+        self.cpu_nodes.update()
+        #Initialize storage
+        grid_store = np.array([])
+        train_pos, train_type, train_grid = [], [], []
+        train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = [], [], [], []
 
-        #VASP calculate
-        vasp.sub_VASP_job(start)
+        for recycle in range(num_recycle):
+            system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
+            #Generate structures
+            atom_pos, atom_type, grid_name = self.init.generate(recycle)
+            grid_init = np.unique(grid_name)
+            system_echo('New initial samples generated')
+            #Write POSCARs
+            start = recycle * (num_round+1)
+            select = Select(start)
+            idx = np.arange(len(atom_pos))
+            select.write_POSCARs(idx, atom_pos, atom_type, grid_name)
+            #VASP calculate
+            self.vasp.sub_job(start)
 
-    
-
-if __name__ == '__main__':
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-
-    main()
-
-'''
-        #CCOP optimize
-        for round in range(start, start+num_round):
-            #Data import
-            energy_file = rwtools.import_list2d(f'{vasp_out_path}/Energy-{round:03.0f}.dat', str, numpy=True)
-            true_E = np.array(energy_file)[:,1]
-            true_E = [True if i=='True' else False for i in true_E]
-            energys = energy_file[:,2][true_E]
-            energys = [float(i) for i in energys]
-            
-            atom_pos = rwtools.import_list2d(f'{search_path}/{round:03.0f}/atom_pos_select.dat', int)
-            atom_type = rwtools.import_list2d(f'{search_path}/{round:03.0f}/atom_type_select.dat', int)
-            grid_name = rwtools.import_list2d(f'{search_path}/{round:03.0f}/grid_name_select.dat', int)
-            grid_name = np.ravel(grid_name)
-            atom_pos_right, atom_type_right, grid_name_right = [], [], []
-            for i, correct in enumerate(true_E):
-                if correct:
-                    atom_pos_right.append(atom_pos[i])
-                    atom_type_right.append(atom_type[i])
-                    grid_name_right.append(grid_name[i])
-            
-            #TODO Delete duplicates
-            #atom_pos_right, atom_type_right, grid_name_right = \
-            #    delete_duplicates(atom_pos_right, atom_type_right, grid_name_right)
-
-            num_poscars = len(energys)
-            num_add = int(num_poscars*0.6)
-            num_crys = num_add + len(train_energys)
-            num_last_batch = np.mod(num_crys, train_batchsize)
-            if 0 < num_last_batch < num_gpus:
-                num_add -= num_last_batch
-            system_echo(f'Training set: {num_crys}')       
-            atom_fea, nbr_fea, nbr_fea_idx = mul_transfer.batch(atom_pos_right, atom_type_right, grid_name_right)
-            system_echo(f'New add to training set: {len(atom_fea)}')
-            #Training data
-            pos_buffer += atom_pos_right[0:num_add]
-            type_buffer += atom_type_right[0:num_add]
-            grid_buffer += grid_name_right[0:num_add]
-            train_atom_fea += atom_fea[0:num_add]
-            train_nbr_fea += nbr_fea[0:num_add]
-            train_nbr_fea_idx += nbr_fea_idx[0:num_add]
-            train_energys += energys[0:num_add]
-            system_echo(f'Training set: {len(train_energys)}')
-            #Validation data
-            valid_atom_fea = atom_fea[num_add:]
-            valid_nbr_fea = nbr_fea[num_add:]
-            valid_nbr_fea_idx = nbr_fea_idx[num_add:]
-            valid_energys = energys[num_add:]
-
-            #Training
-            train = True
-            if train:
-                train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys)
-                valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
-                ppm = PPModel(round+1, train_data, valid_data, valid_data)
-                ppm.train_epochs()
-
-            #Train data added
-            train_atom_fea += atom_fea[num_add:]
-            train_nbr_fea += nbr_fea[num_add:]
-            train_nbr_fea_idx += nbr_fea_idx[num_add:]
-            train_energys += energys[num_add:]
-            pos_buffer += atom_pos_right[num_add:]
-            type_buffer += atom_type_right[num_add:]
-            grid_buffer += grid_name_right[num_add:]
-            
-            #Search
-            search = True
-            if search:
-                num_seed = 30
-                min_idx = np.argsort(train_energys)[:num_seed]
-                grid_pool = np.array(grid_buffer)[min_idx] 
-                all_idx = np.arange(len(train_energys))
+            #CCOP optimize
+            grid_store = np.concatenate((grid_store, grid_init))
+            for round in range(start, start+num_round):
+                #Data import
+                atom_pos, atom_type, grid_name, energy_select = \
+                    self.data_import(round)
+                #Check number of Training data
+                add_num, crys_num = self.check_num_train_data(energy_select, train_energy)
+                system_echo(f'Training set: {crys_num}  New add to training set: {add_num}')
+                #Train predict model
+                train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = \
+                    self.train_predict_model(round, add_num, atom_pos, atom_type, 
+                                             grid_name, energy_select, train_atom_fea, 
+                                             train_nbr_fea, train_nbr_fea_idx, train_energy)
+                #Update structure buffer
+                train_pos += atom_pos
+                train_type += atom_type
+                train_grid += grid_name
                 
                 #Generate mutate lattice grid
+                grid_mutate = []
                 if round == 0:
                     mutate = False
                 else:
                     if np.mod(round, mut_freq) == 0:
                         mutate = True
+                        grid_mutate, grid_store = self.lattice_mutate(grid_store)
                     else:
                         mutate = False
-                if mutate:
-                    num_grid = len(grid_store)
-                    grid_origin = np.random.choice(grid_pool, num_mutate)
-                    grid_mutate = np.arange(num_grid, num_grid+num_mutate)
-                    grid_store = np.concatenate((grid_store, grid_mutate))
-                    divide.assign(grid_origin, grid_mutate)
-                    system_echo(f'Grid origin: {grid_origin}')
-                
                 #Initial search start point
-                init_pos, init_type, init_grid = [], [], []
-                for _ in range(num_paths//2):
-                    seed = np.random.choice(min_idx)
-                    init_pos.append(pos_buffer[seed])
-                    init_type.append(type_buffer[seed])
-                    init_grid.append(grid_buffer[seed])
-                
-                for _ in range(num_paths//2):
-                    seed = np.random.choice(all_idx)
-                    init_pos.append(pos_buffer[seed])
-                    init_type.append(type_buffer[seed])
-                    init_grid.append(grid_buffer[seed])
-                
-                #Lattice mutate
-                #TODO clean up the below code
-                mut_counter = 0
-                mut_num = int(num_paths*mut_ratio)
-                mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
-                init_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in init_grid[:mut_num]]
-                stru_frac = [init_frac[i][init_pos[i]] for i in range(mut_num)]
-                mut_frac = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_frac_coor.bin', float, binary=True) for i in mut_latt]
-                mut_latt_vec = [rwtools.import_list2d(f'{grid_prop_path}/{i:03.0f}_latt_vec.bin', float, binary=True) for i in mut_latt]
-                
-                mut_pos = [mul_transfer.put_into_grid(stru_frac[i], mut_latt_vec[i], mut_frac[i], mut_latt_vec[i]) for i in range(mut_num)]
-                batch_nbr_dis = mul_transfer.find_batch_nbr_dis(mut_pos, mut_latt)
-                check_near = [check.near(i) for i in batch_nbr_dis]
-                check_overlay = [check.overlay(i, len(i)) for i in mut_pos]
-                check = [i and j for i, j in zip(check_near, check_overlay)]
-                for i, correct in enumerate(check):
-                    if correct:
-                        init_pos[i] = mut_pos[i]
-                        init_grid[i] = mut_latt[i]
-                        mut_counter += 1
-                system_echo(f'Lattice mutate number: {mut_counter}')
-                workers.search(round+1, num_paths, init_pos, init_type, init_grid)
-            
-            #Sample
-            atom_pos = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_pos.dat', int)
-            atom_type = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/atom_type.dat', int)
-            grid_name = rwtools.import_list2d(f'{search_path}/{round+1:03.0f}/grid_name.dat', int)
-            select = Select(round+1)
-            select.samples(atom_pos, atom_type, grid_name)
+                paths_num = num_paths_min + num_paths_rand
+                init_pos, init_type, init_grid = \
+                    self.generate_search_point(paths_num, mutate, grid_mutate, 
+                                               train_pos, train_type, train_grid, train_energy)
+                #Search on grid
+                self.workers.search(round+1, paths_num, init_pos, init_type, init_grid)
 
-            #VASP calculate
-            sub_vasp.sub_VASP_job(round+1)
+                #Select samples
+                file_head = f'{search_path}/{round+1:03.0f}'
+                atom_pos = self.import_list2d(f'{file_head}/atom_pos.dat', int)
+                atom_type = self.import_list2d(f'{file_head}/atom_type.dat', int)
+                grid_name = self.import_list2d(f'{file_head}/grid_name.dat', int)
+                select = Select(round+1)
+                select.samples(atom_pos, atom_type, grid_name)
+                #Single point ernergy calculate
+                self.vasp.sub_job(round+1)
+
+            #Export searched POSCARs
+            select = Select(start+num_round)
+            grid_buffer_2d = [[i] for i in train_grid]
+            select.export(recycle, train_pos, train_type, grid_buffer_2d)
+            system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
+
+            #VASP optimize
+            vasp = VASPoptimize(recycle)
+            vasp.run_optimization_low()
         
-        #Export searched POSCARS
-        select = Select(start+num_round)
-        grid_buffer_2d = [[i] for i in grid_buffer]
-        select.export(recyc, pos_buffer, type_buffer, grid_buffer_2d)
-        system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recyc}')
+        #Select optimized structures
+        opt_slt = OptimSelect(start+num_round)
+        opt_slt.optim_select()
+    
+        #Optimize
+        self.post.run_optimization()
+        
+        #Property calculate
+        self.property_calculate()
+        
+    def data_import(self, round):
+        """
+        import selected data from last round
+        
+        Parameters
+        ----------
+        round [int, 0d]: searching round
 
-        #VASP optimize
-        vasp = VASPoptimize(recyc)
-        vasp.run_optimization_low()
+        Returns
+        ----------
+        atom_pos_right [int, 2d]: position of atoms
+        atom_type_right [int, 2d]: type of atoms
+        grid_name_right [int, 1d]: name of grids
+        """
+        #select right energy configurations
+        file = f'{vasp_out_path}/Energy-{round:03.0f}.dat'
+        energy_file = self.import_list2d(file, str, numpy=True)
+        true_E = np.array(energy_file)[:,1]
+        true_E = [True if i=='True' else False for i in true_E]
+        energy_right = energy_file[:,2][true_E]
+        energy_right = [float(i) for i in energy_right]
+        #import structure information
+        head = f'{search_path}/{round:03.0f}'
+        atom_pos = self.import_list2d(f'{head}/atom_pos_select.dat', int)
+        atom_type = self.import_list2d(f'{head}/atom_type_select.dat', int)
+        grid_name = self.import_list2d(f'{head}/grid_name_select.dat', int)
+        grid_name = np.ravel(grid_name)
+        atom_pos_right, atom_type_right, grid_name_right = [], [], []
+        for i, correct in enumerate(true_E):
+            if correct:
+                atom_pos_right.append(atom_pos[i])
+                atom_type_right.append(atom_type[i])
+                grid_name_right.append(grid_name[i])
+        return atom_pos_right, atom_type_right, grid_name_right, energy_right
 
-    #Select optimized structures
-    opt_slt = OptimSelect(start+num_round)
-    opt_slt.optim_select()
-    
-    #Optimize
-    post = PostProcess()
-    post.run_optimization()
+    def check_num_train_data(self, energy_select, train_energy):
+        """
+        check number of train data assigned to gpus    
 
-    #Energy band
-    post.run_pbe_band()
+        Parameters
+        ----------
+        energy_select [float, 1d]: select energy last round
+        train_energy [float, 1d]: energy in train data
+
+        Returns
+        ----------
+        add_num [int, 0d]: number added to train data
+        crys_num [int, 0d]: number of added train data
+        """
+        poscar_num = len(energy_select)
+        add_num = int(poscar_num*0.6)
+        crys_num = add_num + len(train_energy)
+        last_batch_num = np.mod(crys_num, train_batchsize)
+        if 0 < last_batch_num < num_gpus:
+            add_num -= last_batch_num
+        return add_num, crys_num
+
+    def train_predict_model(self, round, add_num, atom_pos, atom_type, 
+                            grid_name, energy_select, train_atom_fea, 
+                            train_nbr_fea, train_nbr_fea_idx, train_energy):
+        """
+        train CGCNN as predict model
+        
+        Parameters
+        ----------
+        round [int, 0d]: seaching round
+        add_num [int, 0d]: number added to training set
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: name of grids
+        energy_select [float, 1d]: select energy last round
+        train_atom_fea [float, 3d]: atom feature
+        train_nbr_fea [float, 4d]: bond feature 
+        train_nbr_fea_idx [int, 3d]: neighbor index
+        train_energy [float, 1d]: train energy
+
+        Returns
+        ----------
+        train_atom_fea [float, 3d]: atom feature
+        train_nbr_fea [float, 4d]: bond feature
+        train_nbr_fea_idx [int, 3d]: neighbor index
+        train_energy [float, 1d]: train energy
+        """
+        #training data
+        atom_fea, nbr_fea, nbr_fea_idx = \
+            self.transfer.batch(atom_pos, atom_type, grid_name)
+        train_atom_fea += atom_fea[0:add_num]
+        train_nbr_fea += nbr_fea[0:add_num]
+        train_nbr_fea_idx += nbr_fea_idx[0:add_num]
+        train_energy += energy_select[0:add_num]
+        #validation data
+        valid_atom_fea = atom_fea[add_num:]
+        valid_nbr_fea = nbr_fea[add_num:]
+        valid_nbr_fea_idx = nbr_fea_idx[add_num:]
+        valid_energy = energy_select[add_num:]
+        #training model
+        train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy)
+        valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energy)
+        ppm = PPModel(round+1, train_data, valid_data, valid_data)
+        ppm.train_epochs()
+        #train data added
+        train_atom_fea += atom_fea[add_num:]
+        train_nbr_fea += nbr_fea[add_num:]
+        train_nbr_fea_idx += nbr_fea_idx[add_num:]
+        train_energy += energy_select[add_num:]
+        return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
     
-    #Phonon spectrum
-    post.run_phonon()
+    def lattice_mutate(self, grid_store):
+        """
+        generate mutate lattice from training set
+        
+        Parameters
+        ----------
+        mutate [bool, 0d]: whether do lattice mutate
+        grid_store [int, 1d]: store of grid
+        
+        Returns
+        ----------
+        grid_mutate [int, 1d]: name of mutate grids
+        """
+        #generate mutate lattice grid
+        grid_num = len(grid_store)
+        replace = False
+        if num_mutate > grid_num:
+            replace = True
+        grid_origin = np.random.choice(grid_store, num_mutate, replace)
+        grid_mutate = np.arange(grid_num, grid_num+num_mutate)
+        grid_store = np.concatenate((grid_store, grid_mutate))
+        self.divide.assign_to_cpu(grid_origin, grid_mutate)
+        system_echo(f'Grid origin: {grid_origin}')
+        return grid_mutate, grid_store
     
-    #Elastic matrix
-    post.run_elastic()
+    def generate_search_point(self, paths_num, mutate, grid_mutate, 
+                              train_pos, train_type, train_grid, train_energy):
+        """
+        generate initial searching points
+        
+        Parameters
+        ----------
+        paths_num [int, 0d]: number of searching path
+        mutate [bool, 0d]: whether do lattice mutate
+        grid_mutate [int, 1d]: name of mutate grid
+        train_pos [int, 2d]: position of training set
+        train_type [int, 2d]: type of training set
+        train_grid [int, 1d]: grid of training set
+        train_energy [float, 1d]: energy of training set
+        
+        Returns
+        ----------
+        init_pos [int, 2d]: position of initial points
+        init_type [int, 2d]: type of initial points
+        init_grid [int, 1d]: grid of initial points
+        """
+        all_idx = np.arange(len(train_energy))
+        min_idx = np.argsort(train_energy)[num_seed]
+        init_pos, init_type, init_grid = [], [], []
+        #greedy path
+        for _ in range(num_paths_min):
+            seed = np.random.choice(min_idx)
+            init_pos.append(train_pos[seed])
+            init_type.append(train_type[seed])
+            init_grid.append(train_grid[seed])
+        #random select path
+        for _ in range(num_paths_rand):
+            seed = np.random.choice(all_idx)
+            init_pos.append(train_pos[seed])
+            init_type.append(train_type[seed])
+            init_grid.append(train_grid[seed])
+        #lattice mutate
+        if mutate:
+            mut_counter = 0
+            mut_num = int(paths_num*mut_ratio)
+            mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
+            mut_pos = self.structure_mutate(mut_num, mut_latt, init_pos, init_grid)
+            #geometry check
+            batch_nbr_dis = self.transfer.find_nbr_dis(mut_pos, mut_latt)
+            check_near = [self.check.near(i) for i in batch_nbr_dis]
+            check_overlay = [self.check.overlay(i, len(i)) for i in mut_pos]
+            check = [i and j for i, j in zip(check_near, check_overlay)]
+            for i, correct in enumerate(check):
+                if correct:
+                    init_pos[i] = mut_pos[i]
+                    init_grid[i] = mut_latt[i]
+                    mut_counter += 1
+            system_echo(f'Lattice mutate number: {mut_counter}')
+        return init_pos, init_type, init_grid
     
-    #Dielectric matrix
-    post.run_dielectric()
-'''
+    def structure_mutate(self, mut_num, mut_latt, init_pos, init_grid):
+        """
+        put structure into mutate lattice and keep the relative order
+        
+        Parameters
+        ----------
+        mut_num [int, 0d]: number of mutate lattice
+        mut_latt [int, 1d]: name of mutate lattice
+        init_pos [int, 2d]: position of initial points
+        init_grid [int, 1d]: grid of initial points
+
+        Returns
+        ----------
+        mut_pos [int, 2d]: position of mutate structure
+        """
+        mut_pos = []
+        for i in range(mut_num):
+            #file name
+            init_frac_file = f'{grid_prop_path}/{init_grid[i]:03.0f}_frac_coor.bin'
+            mut_frac_file = f'{grid_prop_path}/{mut_latt[i]:03.0f}_frac_coor.bin'
+            mut_latt_vec_file = f'{grid_prop_path}/{mut_latt[i]:03.0f}_latt_vec.bin'
+            #import necessary file
+            init_frac = self.import_list2d(init_frac_file, float, binary=True)
+            stru_frac = init_frac[init_pos[i]]
+            mut_frac = self.import_list2d(mut_frac_file, float, binary=True)
+            mut_latt_vec = self.import_list2d(mut_latt_vec_file, float, binary=True)
+            #put into mutate lattice
+            mut_pos += self.transfer.put_into_grid(stru_frac, mut_latt_vec, mut_frac, mut_latt_vec)
+        return mut_pos
+    
+    def property_calculate(self):
+        """
+        calculate property of structures
+        """
+        #energy band
+        self.post.run_pbe_band()
+        #phonon spectrum
+        self.post.run_phonon()
+        #elastic matrix
+        self.post.run_elastic()
+        #dielectric matrix
+        self.post.run_dielectric()
+    
+    
+if __name__ == '__main__':
+    ccop = CrystalOptimization(component, ndensity, min_dis_CSPD)
+    ccop.main()

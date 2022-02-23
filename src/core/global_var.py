@@ -10,16 +10,17 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 1
+num_recycle = 3
 num_round = 10
+num_seed = 30
 num_poscars = 30
 num_optims = 15
 
 #Initial Samples
 component = 'Ga1N1Zn1O1'
 ndensity = 0.1 
-mindis = 1.8
-num_rand = 100
+min_dis_CSPD = 1.8
+num_rand = 10000
 num_initial = 100
 
 #Training
@@ -32,8 +33,9 @@ nbr_bond_fea_len = 41
 T = .1
 decay = .99
 steps = 300
-num_paths = 180
-min_bond = 1.8
+num_paths_min = 90
+num_paths_rand = 90
+min_bond = 1.6
 wait_time = 300
 
 #Sample Select

@@ -350,11 +350,11 @@ class Select(ListRWTools, SSHTools):
         idx [int, 1d, np]: index of select samples
         pos [int, 2d]: input position
         type [int, 2d]: input type
-        grid_name [int, 1d, np]: input grid name
+        grid_name [int, 1d]: input grid name
         """
         num_jobs = len(idx)
         node_assign = self.assign_node(num_jobs)
-        grid_slt = grid_name[idx]
+        grid_slt = np.array(grid_name)[idx]
         order = np.argsort(grid_slt)
         grid_order = grid_slt[order]
         idx_order = idx[order]

@@ -109,7 +109,6 @@ class ParallelDivide(ListRWTools, SSHTools):
         for i, file in enumerate(self.zip_file):
             ip = f'node{node}'
             shell_script = f'''
-                            #!/bin/bash
                             cd /local/ccop/{grid_prop_path}
                             scp {gpu_node}:{self.prop_path}/{file} .
                             tar -zxf {file}
@@ -127,7 +126,6 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         zip_file = ' '.join(self.zip_file)
         shell_script = f'''
-                        #!/bin/bash
                         cd {grid_prop_path}/
                         for i in {zip_file}
                         do
@@ -150,7 +148,6 @@ class ParallelDivide(ListRWTools, SSHTools):
         for node in nodes:
             ip = f'node{node}'
             shell_script = f'''
-                            #!/bin/bash
                             cd /local/ccop/{grid_prop_path}
                             rm FINISH*
                             '''

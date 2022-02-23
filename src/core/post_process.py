@@ -14,8 +14,8 @@ from core.utils import ListRWTools, SSHTools, system_echo
 
 class VASPoptimize(SSHTools, ListRWTools):
     #optimize structure by VASP
-    def __init__(self, recycle, sleep_time=1):
-        self.sleep_time = sleep_time
+    def __init__(self, recycle, wait_time=1):
+        self.wait_time = wait_time
         self.ccop_out_path = f'{ccop_out_path}-{recycle}'
         self.optim_strs_path = f'{init_strs_path}_{recycle+1}'
         self.energy_path = f'{vasp_out_path}/initial_strs_{recycle+1}'
@@ -76,11 +76,11 @@ class VASPoptimize(SSHTools, ListRWTools):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(self.optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         self.find_symmetry_structure(self.optim_strs_path)
         self.get_energy(self.energy_path)
         system_echo(f'All job are completed --- Optimization')
-        self.remove(self.optim_strs_path)
+        self.remove_flag(self.optim_strs_path)
 
     def find_symmetry_structure(self, path):
         """
@@ -128,8 +128,8 @@ class VASPoptimize(SSHTools, ListRWTools):
         
 class PostProcess(VASPoptimize):
     #process the crystals by VASP to relax the structures and calculate properties
-    def __init__(self, sleep_time=1):
-        self.sleep_time = sleep_time
+    def __init__(self, wait_time=1):
+        self.wait_time = wait_time
         self.ccop_out_path = f'/local/ccop/{ccop_out_path}'
         self.optim_strs_path = f'/local/ccop/{optim_strs_path}'
         self.dielectric_path = f'/local/ccop/{dielectric_path}'
@@ -201,10 +201,10 @@ class PostProcess(VASPoptimize):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         self.find_symmetry_structure(optim_strs_path)
         self.get_energy(energy_path)
-        self.remove(optim_strs_path)
+        self.remove_flag(optim_strs_path)
         poscars = sorted(os.listdir(optim_strs_path))
         num_optims = len(poscars)
         node_assign = self.assign_node(num_optims)
@@ -257,9 +257,9 @@ class PostProcess(VASPoptimize):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Electronic structure')
-        self.remove(optim_strs_path)
+        self.remove_flag(optim_strs_path)
         
     def run_phonon(self):
         '''
@@ -312,9 +312,9 @@ class PostProcess(VASPoptimize):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Phonon spectrum')
-        self.remove(optim_strs_path)
+        self.remove_flag(optim_strs_path)
     
     def run_elastic(self):
         """
@@ -353,9 +353,9 @@ class PostProcess(VASPoptimize):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Elastic modulous')
-        self.remove(optim_strs_path)
+        self.remove_flag(optim_strs_path)
     
     def run_dielectric(self):
         """
@@ -392,9 +392,9 @@ class PostProcess(VASPoptimize):
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
-            time.sleep(self.sleep_time)
+            time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Dielectric tensor')
-        self.remove(optim_strs_path)
+        self.remove_flag(optim_strs_path)
 
     def get_k_points(self, poscars, task):
         """

@@ -59,7 +59,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
             self.update_with_ssh(node)
         while not self.is_done(self.sh_save_path, len(nodes)):
             time.sleep(self.sleep_time)
-        self.remove(self.sh_save_path)
+        self.remove_flag(self.sh_save_path)
         system_echo('Successful update each node!')
         
         self.sub_job_to_workers(pos, type, job)
