@@ -97,7 +97,7 @@ class CrystalOptimization(ListRWTools):
                 select.samples(atom_pos, atom_type, grid_name)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
-
+            
             #Export searched POSCARs
             select = Select(start+num_round)
             grid_buffer_2d = [[i] for i in train_grid]
@@ -241,9 +241,9 @@ class CrystalOptimization(ListRWTools):
             replace = False
             if num_mutate > grid_num:
                 replace = True
+            grid_origin = np.random.choice(grid_store, num_mutate, replace)
             grid_new = np.arange(grid_num, grid_num+num_mutate)
             grid_store = np.concatenate((grid_store, grid_new))
-            grid_origin = np.random.choice(grid_store, num_mutate, replace)
             self.divide.assign_to_cpu(grid_origin, grid_new)
             system_echo(f'Grid origin: {grid_origin}')
         return grid_store

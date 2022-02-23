@@ -63,7 +63,7 @@ class VASPoptimize(SSHTools, ListRWTools):
                                 rm WAVECAR CHGCAR
                             done
                             line=`cat CONTCAR | wc -l`
-                            fail=`tail vasp-1.vasp | grep WARNING | wc -l`
+                            fail=`tail -50 vasp-1.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
                                 scp vasp-1.vasp {gpu_node}:{self.local_energy_path}/out-$p
@@ -119,6 +119,8 @@ class VASPoptimize(SSHTools, ListRWTools):
             for line in ct[-10:]:
                 if 'F=' in line:
                     energy = float(line.split()[2])
+                else:
+                    energy = 1e10
             cur_E = energy/atom_num
             system_echo(f'{out}, {cur_E:18.9f}')
             energys.append([out, cur_E])
