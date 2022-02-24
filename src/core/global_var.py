@@ -4,7 +4,7 @@ grain = [.5, .5, .5]
 
 #Mutate
 num_mutate = 6
-mut_ratio = 0.7
+mut_ratio = 0.8
 mut_freq = 3
 latt_mu = 0.
 latt_sigma = 0.2
@@ -36,7 +36,7 @@ steps = 300
 num_paths_min = 120
 num_paths_rand = 60
 min_bond = 1.6
-wait_time = 300
+wait_time = 240
 
 #Sample Select
 num_models = 5

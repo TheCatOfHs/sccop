@@ -1,4 +1,5 @@
 import os
+from xml.dom import minidom
 import numpy as np
 
 from core.global_var import *
@@ -69,25 +70,24 @@ class CrystalOptimization(ListRWTools):
                 train_grid += grid_name
                 
                 #Generate mutate lattice grid
-                grid_mutate = []
+                all_idx = np.arange(len(train_energy))
+                min_idx = np.argsort(train_energy)[:num_seed]
                 if round == 0:
                     mutate = False
+                    grid_mutate = grid_store
                 else:
                     mutate = True
                     if np.mod(round, mut_freq) == 0:
-                        generate = True
-                    else:
-                        generate = False
-                    grid_store = self.lattice_mutate(generate, grid_store)
-                    grid_mutate = grid_store
+                        grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
+                        grid_mutate, grid_store = self.lattice_mutate(grid_origin, grid_store)
                 #Initial search start point
                 paths_num = num_paths_min + num_paths_rand
                 init_pos, init_type, init_grid = \
-                    self.generate_search_point(paths_num, mutate, grid_mutate, 
-                                               train_pos, train_type, train_grid, train_energy)
+                    self.generate_search_point(min_idx, all_idx, paths_num, mutate, grid_mutate, 
+                                               train_pos, train_type, train_grid)
                 #Search on grid
                 self.workers.search(round+1, paths_num, init_pos, init_type, init_grid)
-
+                
                 #Select samples
                 file_head = f'{search_path}/{round+1:03.0f}'
                 atom_pos = self.import_list2d(f'{file_head}/atom_pos.dat', int)
@@ -97,7 +97,7 @@ class CrystalOptimization(ListRWTools):
                 select.samples(atom_pos, atom_type, grid_name)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
-            
+
             #Export searched POSCARs
             select = Select(start+num_round)
             grid_buffer_2d = [[i] for i in train_grid]
@@ -222,46 +222,43 @@ class CrystalOptimization(ListRWTools):
         train_energy += energy_select[add_num:]
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
     
-    def lattice_mutate(self, generate, grid_store):
+    def lattice_mutate(self, grid_origin, grid_store):
         """
         generate mutate lattice from training set
         
         Parameters
         ----------
-        generate [bool, 0d]: whether generate new lattice
+        grid_origin[int, 1d, np]: origin grid
         grid_store [int, 1d]: store of grid
         
         Returns
         ----------
+        grid_mutate [int, 1d, np]: mutate grid
         grid_store [int, 1d]: store of grid
         """
         #generate mutate lattice grid
-        if generate:
-            grid_num = len(grid_store)
-            replace = False
-            if num_mutate > grid_num:
-                replace = True
-            grid_origin = np.random.choice(grid_store, num_mutate, replace)
-            grid_new = np.arange(grid_num, grid_num+num_mutate)
-            grid_store = np.concatenate((grid_store, grid_new))
-            self.divide.assign_to_cpu(grid_origin, grid_new)
-            system_echo(f'Grid origin: {grid_origin}')
-        return grid_store
+        grid_num = len(grid_store)
+        grid_mutate = np.arange(grid_num, grid_num+num_mutate)
+        grid_store = np.concatenate((grid_store, grid_mutate))
+        self.divide.assign_to_cpu(grid_origin, grid_mutate)
+        system_echo(f'Grid origin: {grid_origin}')
+        return grid_mutate, grid_store
     
-    def generate_search_point(self, paths_num, mutate, grid_mutate, 
-                              train_pos, train_type, train_grid, train_energy):
+    def generate_search_point(self, min_idx, all_idx, paths_num, mutate, grid_mutate, 
+                              train_pos, train_type, train_grid):
         """
         generate initial searching points
         
         Parameters
         ----------
+        min_idx [int, 1d]: min energy index
+        all_idx [int, 1d]: all sample index
         paths_num [int, 0d]: number of searching path
         mutate [bool, 0d]: whether do lattice mutate
-        grid_mutate [int, 1d]: name of mutate grid
+        grid_mutate [int, 1d, np]: name of mutate grid
         train_pos [int, 2d]: position of training set
         train_type [int, 2d]: type of training set
         train_grid [int, 1d]: grid of training set
-        train_energy [float, 1d]: energy of training set
         
         Returns
         ----------
@@ -269,8 +266,6 @@ class CrystalOptimization(ListRWTools):
         init_type [int, 2d]: type of initial points
         init_grid [int, 1d]: grid of initial points
         """
-        all_idx = np.arange(len(train_energy))
-        min_idx = np.argsort(train_energy)[num_seed]
         init_pos, init_type, init_grid = [], [], []
         #greedy path
         for _ in range(num_paths_min):
