@@ -63,7 +63,7 @@ class VASPoptimize(SSHTools, ListRWTools):
                                 rm WAVECAR CHGCAR
                             done
                             line=`cat CONTCAR | wc -l`
-                            fail=`tail -30 vasp-1.vasp | grep WARNING | wc -l`
+                            fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
                                 scp vasp-1.vasp {gpu_node}:{self.local_energy_path}/out-$p

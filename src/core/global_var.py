@@ -4,7 +4,7 @@ grain = [.5, .5, .5]
 
 #Mutate
 num_mutate = 6
-mut_ratio = 0.8
+mut_ratio = 0.9
 mut_freq = 3
 latt_mu = 0.
 latt_sigma = 0.2
@@ -21,7 +21,7 @@ component = 'Ga1N1Zn1O1'
 ndensity = 0.1 
 min_dis_CSPD = 1.8
 num_rand = 10000
-num_initial = 100
+num_initial = 50
 
 #Training
 train_batchsize = 128
@@ -33,9 +33,9 @@ nbr_bond_fea_len = 41
 T = .1
 decay = .99
 steps = 300
-num_paths_min = 120
-num_paths_rand = 60
-min_bond = 1.6
+num_paths_min = 90
+num_paths_rand = 90
+min_bond = 1.8
 wait_time = 240
 
 #Sample Select

@@ -1,5 +1,4 @@
 import os
-from xml.dom import minidom
 import numpy as np
 
 from core.global_var import *
@@ -77,9 +76,12 @@ class CrystalOptimization(ListRWTools):
                     grid_mutate = grid_store
                 else:
                     mutate = True
+                    grid_rand = np.random.choice(train_grid, num_mutate)
+                    grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
                     if np.mod(round, mut_freq) == 0:
-                        grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
-                        grid_mutate, grid_store = self.lattice_mutate(grid_origin, grid_store)
+                        grid_store = self.lattice_mutate(grid_origin, grid_store)
+                    grid_mutate = np.concatenate((grid_origin, grid_rand))
+                    system_echo(f'Grid pool: {grid_mutate}')
                 #Initial search start point
                 paths_num = num_paths_min + num_paths_rand
                 init_pos, init_type, init_grid = \
@@ -87,7 +89,7 @@ class CrystalOptimization(ListRWTools):
                                                train_pos, train_type, train_grid)
                 #Search on grid
                 self.workers.search(round+1, paths_num, init_pos, init_type, init_grid)
-                
+
                 #Select samples
                 file_head = f'{search_path}/{round+1:03.0f}'
                 atom_pos = self.import_list2d(f'{file_head}/atom_pos.dat', int)
@@ -233,7 +235,6 @@ class CrystalOptimization(ListRWTools):
         
         Returns
         ----------
-        grid_mutate [int, 1d, np]: mutate grid
         grid_store [int, 1d]: store of grid
         """
         #generate mutate lattice grid
@@ -242,7 +243,7 @@ class CrystalOptimization(ListRWTools):
         grid_store = np.concatenate((grid_store, grid_mutate))
         self.divide.assign_to_cpu(grid_origin, grid_mutate)
         system_echo(f'Grid origin: {grid_origin}')
-        return grid_mutate, grid_store
+        return grid_store
     
     def generate_search_point(self, min_idx, all_idx, paths_num, mutate, grid_mutate, 
                               train_pos, train_type, train_grid):
