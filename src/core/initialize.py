@@ -230,32 +230,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
                 atom_pos_rand += [random.sample(points, atom_num)]
                 atom_type_rand += [atom_type[seed]]
         return atom_pos_rand, atom_type_rand, grid_name_rand
-    '''
-    def Rand_generate(self, atom_type, grid_name, point_num):
-        """
-        generate initial samples randomly
-        
-        Parameters
-        ----------
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: name of grids
-        point_num [int, 1d]: number of grid points
-        
-        Returns
-        ----------
-        atom_pos_rand [int, 2d]: position of atoms randomly
-        atom_type_rand [int, 2d]: type of atoms
-        grid_name_rand [int, 1d]: grid name
-        """
-        atom_pos_rand, atom_type_rand, grid_name_rand = [], [], []
-        for i, grid in enumerate(grid_name):
-            atom_num = len(atom_type[i])
-            points = [j for j in range(point_num[i])]
-            atom_pos_rand += [random.sample(points, atom_num) for _ in range(num_rand)]
-            atom_type_rand += [atom_type[i] for _ in range(num_rand)]
-            grid_name_rand += [grid for _ in range(num_rand)]
-        return atom_pos_rand, atom_type_rand, grid_name_rand
-    '''
+    
     def structure_in_grid(self, recyc):
         """
         put structure into grid
