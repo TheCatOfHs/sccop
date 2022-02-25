@@ -300,11 +300,12 @@ class PostProcess(VASPoptimize):
                             done
                                 
                             phonopy -f vasprun.xml-*
-                            phonopy band.conf
+                            phonopy --full-fc band.conf
                             phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
                             python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
                             scp phonon-$p.dat {gpu_node}:{self.phonon_path}/phonon-$p.dat
                             scp PHON.png {gpu_node}:{self.phonon_path}/phonon-$p.png
+                            scp FORCE_CONSTANTS {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_2ND-$p
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
@@ -314,6 +315,56 @@ class PostProcess(VASPoptimize):
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Phonon spectrum')
+        self.remove_flag(optim_strs_path)
+    
+    def run_3RD(self):
+        '''
+        calculate third order force constants of optimized configurations
+        '''
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        system_echo(f'Start VASP calculation --- Third Order Force Constants')
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            p={poscar}
+                            
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/ThirdOrder/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            unzip thirdorder-files.zip
+                            cp thirdorder-files/* .
+                                
+                            python2 thirdorder_vasp.py sow 2 2 2 -5
+                            n=`ls | grep 3RD.POSCAR. | wc -l`
+                            for i in `seq -f%03g 1 $n`
+                            do
+                                mkdir disp-$i
+                                cp INCAR KPOINTS POTCAR vdw* disp-$i/
+                                cp 3RD.POSCAR.$i disp-$i/POSCAR
+                                
+                                cd disp-$i/
+                                    DPT -v potcar
+                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                    rm CHG* WAVECAR
+                                cd ..
+                            done
+                            
+                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 2 -5
+                            scp FORCE_CONSTANTS_3RD {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
+                            '''
+            self.ssh_node(shell_script, ip)
+        while not self.is_done(optim_strs_path, num_poscar):
+            time.sleep(self.wait_time)
+        system_echo(f'All job are completed --- Third Order Force Constants')
         self.remove_flag(optim_strs_path)
     
     def run_elastic(self):
