@@ -20,6 +20,7 @@ python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy, pymatgen
 2. 声子谱(libs/VASP_inputs/Phonon), 需安装Phonopy, 运行完毕后会直接输出声子谱图(利用libs/scripts/plot-phonon-band.py)
 3. PBE能带(libs/VASP_inputs/ElectronicStructure), 运行完毕后会直接输出能带图(利用libs/scripts/plot-energy-band.py)
 4. 三阶力常数(libs/VASP_inputs/ThirdOrder)，需自行安装thirdorder库并zip打包后放进该目录内。运行完毕后会输出FORCE_CONSTANTS_3RD
+5. 热导率。需自行安装ShengBTE软件。需要用到声子谱计算输出的FORCE_CONSTANTS文件与三阶力常数文件FORCE_CONSTANTS_3RD。
 
 注：所有计算的布里渊区路径均由pymatgen生成
 依赖包：pymatgen seekpath
