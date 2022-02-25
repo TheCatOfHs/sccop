@@ -76,7 +76,7 @@ class CrystalOptimization(ListRWTools):
                     grid_mutate = grid_store
                 else:
                     mutate = True
-                    grid_rand = np.random.choice(train_grid, num_mutate)
+                    grid_rand = np.random.choice(grid_store, num_mutate)
                     grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
                     if np.mod(round, mut_freq) == 0:
                         grid_store = self.lattice_mutate(grid_origin, grid_store)
@@ -89,7 +89,7 @@ class CrystalOptimization(ListRWTools):
                                                train_pos, train_type, train_grid)
                 #Search on grid
                 self.workers.search(round+1, paths_num, init_pos, init_type, init_grid)
-
+                
                 #Select samples
                 file_head = f'{search_path}/{round+1:03.0f}'
                 atom_pos = self.import_list2d(f'{file_head}/atom_pos.dat', int)

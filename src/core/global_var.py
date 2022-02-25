@@ -21,7 +21,7 @@ component = 'Ga1N1Zn1O1'
 ndensity = 0.1 
 min_dis_CSPD = 1.8
 num_rand = 10000
-num_initial = 50
+num_initial = 100
 
 #Training
 train_batchsize = 128
