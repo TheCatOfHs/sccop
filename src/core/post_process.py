@@ -137,6 +137,7 @@ class PostProcess(VASPoptimize):
         self.energy_path = f'/local/ccop/{energy_path}'
         self.pbe_band_path = f'/local/ccop/{pbe_band_path}'
         self.phonon_path = f'/local/ccop/{phonon_path}'
+        self.thermalconductivity_path = f'/local/ccop/{thermalconductivity_path}'
         self.KPOINTS = f'/local/ccop/{KPOINTS_file}'
         self.bandconf = f'/local/ccop/{bandconf_file}'
         self.calculation_path = '/local/ccop/vasp'
@@ -153,6 +154,7 @@ class PostProcess(VASPoptimize):
             os.mkdir(energy_path)
             os.mkdir(pbe_band_path)
             os.mkdir(phonon_path)
+            os.mkdir(thermalconductivity_path)
 
     def run_optimization(self):
         '''
@@ -445,6 +447,59 @@ class PostProcess(VASPoptimize):
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Dielectric tensor')
+        self.remove_flag(optim_strs_path)
+    
+    def run_thermal_conductivity(self):
+        """
+        calculate boltzmann transport equation (BTE) to solve thermal conductivity
+        """
+        poscars = sorted(os.listdir(optim_strs_path))
+        num_poscar = len(poscars)
+        system_echo(f'Start VASP calculation --- Thermal Conductivity')
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            p={poscar}
+                            
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/ThermalConductivity/* .
+                            scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
+                            scp {gpu_node}:{self.dielectric_path}/dielectric-$p.dat dielectric.dat
+                            scp {gpu_node}:{self.dielectric_path}/born_charges-$p.dat born_charges.dat
+                            scp {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p FORCE_CONSTANTS_3RD
+                            scp {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_2ND-$p FORCE_CONSTANTS_2ND
+                                
+                            python create-CONTROL.py
+                            mkdir files
+                            mv FORCE_CONSTANTS_2ND FORCE_CONSTANTS_3RD CONTROL files/.
+                            for i in $(sqe 100 20 920)
+                            do
+                                mkdir $i
+                                cd $i
+                                cp ../files/* .
+                                sed -i "s|T-place|$i|g" CONTROL
+                                ~/opt/openmpi-2.0.2/bin/mpirun -np 48 ShengBTE
+                                cd ../
+                            done
+                            
+                            python get-kappa.py
+                            scp kappa.dat {gpu_node}:{self.thermalconductivity_path}/kappa-$p.dat
+                            scp 300/BTE.v {gpu_node}:{self.thermalconductivity_path}/BTE.v-$p.dat
+                            scp 300/BTE.qpoints {gpu_node}:{self.thermalconductivity_path}/BTE.qpoints-$p.dat
+                            scp 300/T300K/BTE.w {gpu_node}:{self.thermalconductivity_path}/BTE.w-$p.dat
+                            cd ../
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
+                            rm -rf $p FINISH-$p
+                            '''
+            self.ssh_node(shell_script, ip)
+        while not self.is_done(optim_strs_path, num_poscar):
+            time.sleep(self.wait_time)
+        system_echo(f'All job are completed --- Thermal Conductivity')
         self.remove_flag(optim_strs_path)
 
     def get_k_points(self, poscars, task):
