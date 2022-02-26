@@ -262,7 +262,7 @@ class PostProcess(VASPoptimize):
             time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Electronic structure')
         self.remove_flag(optim_strs_path)
-        
+    
     def run_phonon(self):
         '''
         calculate phonon spectrum of optimized configurations
@@ -338,16 +338,16 @@ class PostProcess(VASPoptimize):
                             cd $p
                             cp ../../{vasp_files_path}/ThirdOrder/* .
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
-                            unzip thirdorder-files.zip
+                            tar -zxf thirdorder-files.tar.gz
                             cp thirdorder-files/* .
 
                             python2 thirdorder_vasp.py sow 2 2 2 -5
-                            n=`ls | grep 3RD.POSCAR. | wc -l`
-                            for i in `seq -f%03g 1 $n`
+                            file=`ls | grep 3RD.POSCAR.`
+                            for i in $file
                             do
                                 mkdir disp-$i
                                 cp INCAR KPOINTS POTCAR vdw* disp-$i/
-                                cp 3RD.POSCAR.$i disp-$i/POSCAR
+                                cp $i disp-$i/POSCAR
                                 
                                 cd disp-$i/
                                     DPT -v potcar
@@ -472,11 +472,11 @@ class PostProcess(VASPoptimize):
                             scp {gpu_node}:{self.dielectric_path}/born_charges-$p.dat born_charges.dat
                             scp {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p FORCE_CONSTANTS_3RD
                             scp {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_2ND-$p FORCE_CONSTANTS_2ND
-                                
+                            
                             python create-CONTROL.py
                             mkdir files
                             mv FORCE_CONSTANTS_2ND FORCE_CONSTANTS_3RD CONTROL files/.
-                            for i in $(sqe 100 20 920)
+                            for i in $(seq 100 20 920)
                             do
                                 mkdir $i
                                 cd $i
@@ -570,12 +570,14 @@ class PostProcess(VASPoptimize):
     
     
 if __name__ == '__main__':
-    vasp = VASPoptimize(0)
-    vasp.run_optimization_low()
-    vasp.get_energy()
-    #post = PostProcess()
+    #vasp = VASPoptimize(0)
+    #vasp.run_optimization_low()
+    #vasp.get_energy()
+    post = PostProcess()
     #post.get_energy()
     #post.run_pbe_band()
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
+    post.run_3RD()
+    post.run_thermal_conductivity()

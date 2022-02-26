@@ -76,11 +76,9 @@ class CrystalOptimization(ListRWTools):
                     grid_mutate = grid_store
                 else:
                     mutate = True
-                    grid_rand = np.random.choice(grid_store, num_mutate)
                     grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
                     if np.mod(round, mut_freq) == 0:
-                        grid_store = self.lattice_mutate(grid_origin, grid_store)
-                    grid_mutate = np.concatenate((grid_origin, grid_rand))
+                        grid_mutate, grid_store = self.lattice_mutate(grid_origin, grid_store)
                     system_echo(f'Grid pool: {grid_mutate}')
                 #Initial search start point
                 paths_num = num_paths_min + num_paths_rand
@@ -99,7 +97,7 @@ class CrystalOptimization(ListRWTools):
                 select.samples(atom_pos, atom_type, grid_name)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
-
+            
             #Export searched POSCARs
             select = Select(start+num_round)
             grid_buffer_2d = [[i] for i in train_grid]
@@ -235,6 +233,7 @@ class CrystalOptimization(ListRWTools):
         
         Returns
         ----------
+        grid_mutate [int, 1d]: mutate grid
         grid_store [int, 1d]: store of grid
         """
         #generate mutate lattice grid
@@ -243,7 +242,7 @@ class CrystalOptimization(ListRWTools):
         grid_store = np.concatenate((grid_store, grid_mutate))
         self.divide.assign_to_cpu(grid_origin, grid_mutate)
         system_echo(f'Grid origin: {grid_origin}')
-        return grid_store
+        return grid_mutate, grid_store
     
     def generate_search_point(self, min_idx, all_idx, paths_num, mutate, grid_mutate, 
                               train_pos, train_type, train_grid):
@@ -341,6 +340,10 @@ class CrystalOptimization(ListRWTools):
         self.post.run_elastic()
         #dielectric matrix
         self.post.run_dielectric()
+        #3 order
+        self.post.run_3RD()
+        #thermal conductivity
+        self.post.run_thermal_conductivity()
     
     
 if __name__ == '__main__':

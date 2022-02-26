@@ -448,7 +448,7 @@ class Search(ListRWTools, GeoCheck):
         type [int, 1d]: type of atom after 1 SA step
         """
         flag = False
-        if value < -4.8:
+        if value < threshold:
             exchange = 0.5
         else:
             exchange = 0.01

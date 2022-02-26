@@ -36,6 +36,7 @@ steps = 300
 num_paths_min = 90
 num_paths_rand = 90
 min_bond = 1.8
+threshold = -4.8
 wait_time = 240
 
 #Sample Select
