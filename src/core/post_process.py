@@ -346,17 +346,17 @@ class PostProcess(VASPoptimize):
                             for i in $file
                             do
                                 mkdir disp-$i
-                                cp INCAR KPOINTS POTCAR vdw* disp-$i/
+                                cp INCAR KPOINTS disp-$i/
                                 cp $i disp-$i/POSCAR
                                 
                                 cd disp-$i/
                                     DPT -v potcar
                                     /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
                                     rm CHG* WAVECAR
-                                cd ..
+                                cd ../
                             done
                             
-                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 2 -5
+                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 2 -5 > log
                             scp FORCE_CONSTANTS_3RD {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p
                             cd ../
                             touch FINISH-$p
@@ -476,7 +476,7 @@ class PostProcess(VASPoptimize):
                             python create-CONTROL.py
                             mkdir files
                             mv FORCE_CONSTANTS_2ND FORCE_CONSTANTS_3RD CONTROL files/.
-                            for i in $(seq 100 20 920)
+                            for i in `seq 100 20 920`
                             do
                                 mkdir $i
                                 cd $i
@@ -494,7 +494,7 @@ class PostProcess(VASPoptimize):
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                            rm -rf $p FINISH-$p
+                            #rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
@@ -579,5 +579,5 @@ if __name__ == '__main__':
     #post.run_phonon()
     #post.run_elastic()
     #post.run_dielectric()
-    post.run_3RD()
+    #post.run_3RD()
     post.run_thermal_conductivity()

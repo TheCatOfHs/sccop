@@ -277,13 +277,9 @@ class SSHTools:
 
 
 if __name__ == '__main__':
-    from core.data_transfer import MultiGridTransfer
-    from pymatgen.core.structure import Structure
-    rwtools = ListRWTools()
-    mul = MultiGridTransfer()
-    a = Structure.from_file('test/POSCAR-08-133-133')
-    b = Structure.from_file('test/POSCAR_090')
-    pos = mul.put_into_grid(a.frac_coords, b.lattice.matrix, b.frac_coords, b.lattice.matrix)
-    print(pos)
-    rwtools.write_list2d('test/coor_in_grid.dat', b.frac_coords[pos])
-    
+    ssh = SSHTools()
+    shell_script = '''
+                    cd /local/ccop/vasp/POSCAR-08-133-133
+                    find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 2 -5 > log
+                   '''
+    ssh.ssh_node(shell_script, 'node133')
