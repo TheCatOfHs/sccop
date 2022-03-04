@@ -1,6 +1,6 @@
 #Grid
-cutoff = 6
-grain = [.5, .5, .5]
+cutoff = 7
+grain = [.5, .5, 1.]
 
 #Mutate
 num_mutate = 6
@@ -17,9 +17,10 @@ num_poscars = 30
 num_optims = 15
 
 #Initial Samples
-component = 'Ga1N1Zn1O1'
+component = 'B1C3'
 ndensity = 0.1 
-min_dis_CSPD = 1.8
+min_dis_CSPD = 1.4
+num_CSPD = 48
 num_rand = 10000
 num_initial = 100
 
@@ -35,9 +36,9 @@ decay = .99
 steps = 300
 num_paths_min = 90
 num_paths_rand = 90
-min_bond = 1.8
-threshold = -4.8
-wait_time = 240
+min_bond = 1.4
+threshold = -7.5
+wait_time = 600
 
 #Sample Select
 num_models = 5

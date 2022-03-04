@@ -16,9 +16,9 @@ from core.post_process import PostProcess, VASPoptimize
 
 class CrystalOptimization(ListRWTools):
     #crystal combinational optimization program
-    def __init__(self, component, ndensity, min_dis_CSPD):
+    def __init__(self, number, component, ndensity, min_dis_CSPD):
         os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-        self.init = InitSampling(component, ndensity, min_dis_CSPD)
+        self.init = InitSampling(number, component, ndensity, min_dis_CSPD)
         self.cpu_nodes = UpdateNodes()
         self.divide = ParallelDivide()
         self.transfer = MultiGridTransfer()
@@ -38,8 +38,7 @@ class CrystalOptimization(ListRWTools):
         for recycle in range(num_recycle):
             system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #Generate structures
-            atom_pos, atom_type, grid_name = self.init.generate(recycle)
-            grid_init = np.unique(grid_name)
+            atom_pos, atom_type, grid_name, grid_init = self.init.generate(recycle)
             system_echo('New initial samples generated')
             #Write POSCARs
             start = recycle * (num_round+1)
@@ -78,7 +77,7 @@ class CrystalOptimization(ListRWTools):
                     mutate = True
                     grid_origin = np.random.choice(np.array(train_grid)[min_idx], num_mutate)
                     if np.mod(round, mut_freq) == 0:
-                        grid_mutate, grid_store = self.lattice_mutate(grid_origin, grid_store)
+                        grid_mutate, grid_store = self.lattice_mutate(recycle, grid_origin, grid_store)
                     system_echo(f'Grid pool: {grid_mutate}')
                 #Initial search start point
                 paths_num = num_paths_min + num_paths_rand
@@ -97,7 +96,7 @@ class CrystalOptimization(ListRWTools):
                 select.samples(atom_pos, atom_type, grid_name)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
-            
+
             #Export searched POSCARs
             select = Select(start+num_round)
             grid_buffer_2d = [[i] for i in train_grid]
@@ -222,12 +221,13 @@ class CrystalOptimization(ListRWTools):
         train_energy += energy_select[add_num:]
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
     
-    def lattice_mutate(self, grid_origin, grid_store):
+    def lattice_mutate(self, recyc, grid_origin, grid_store):
         """
         generate mutate lattice from training set
         
         Parameters
         ----------
+        recyc [int, 0d]: recycle of searching
         grid_origin[int, 1d, np]: origin grid
         grid_store [int, 1d]: store of grid
         
@@ -237,10 +237,14 @@ class CrystalOptimization(ListRWTools):
         grid_store [int, 1d]: store of grid
         """
         #generate mutate lattice grid
+        if recyc > 0:
+            grain_loc = [.5, .5, .5]
+        else:
+            grain_loc = grain
         grid_num = len(grid_store)
         grid_mutate = np.arange(grid_num, grid_num+num_mutate)
         grid_store = np.concatenate((grid_store, grid_mutate))
-        self.divide.assign_to_cpu(grid_origin, grid_mutate)
+        self.divide.assign_to_cpu(grain_loc, grid_origin, grid_mutate)
         system_echo(f'Grid origin: {grid_origin}')
         return grid_mutate, grid_store
     
@@ -337,15 +341,17 @@ class CrystalOptimization(ListRWTools):
         #phonon spectrum
         self.post.run_phonon()
         #elastic matrix
-        self.post.run_elastic()
+        #self.post.run_elastic()
         #dielectric matrix
-        self.post.run_dielectric()
+        #self.post.run_dielectric()
         #3 order
-        self.post.run_3RD()
+        #self.post.run_3RD()
         #thermal conductivity
-        self.post.run_thermal_conductivity()
+        #self.post.run_thermal_conductivity()
     
     
 if __name__ == '__main__':
-    ccop = CrystalOptimization(component, ndensity, min_dis_CSPD)
+    ccop = CrystalOptimization(num_CSPD, component, ndensity, min_dis_CSPD)
     ccop.main()
+    #init = InitSampling(num_CSPD, component, ndensity, min_dis_CSPD)
+    #init.generate(1)

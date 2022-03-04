@@ -105,10 +105,10 @@ class UpdateNodes(SSHTools):
 
 class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, GeoCheck):
     #generate initial structures of ccop
-    def __init__(self, component, ndensity, min_dis):
+    def __init__(self, number, component, ndensity, min_dis):
         ParallelDivide.__init__(self)
         self.create_dir()
-        self.CSPD_generate(component, ndensity, min_dis)
+        self.CSPD_generate(number, component, ndensity, min_dis)
     
     def generate(self, recyc):
         """
@@ -124,9 +124,13 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
         """
+        if recyc > 0:
+            grain_loc = [.5, .5, .5]
+        else:
+            grain_loc = grain
         #transfer CSPD structures
         atom_pos, atom_type, grid_name, point_num, latt_file = \
-            self.structure_in_grid(recyc)
+            self.structure_in_grid(recyc, grain_loc)
         self.zip_latt_vec(latt_file)
         for node in nodes:
             self.copy_latt_to_nodes(node)
@@ -135,25 +139,21 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         self.remove_flag('.')
         self.del_zip_latt()
         #structures generated randomly
-        atom_pos_rand, atom_type_rand, grid_name_rand = \
-            self.Rand_generate(atom_type, grid_name, point_num)
+        atom_pos, atom_type, grid_name, opt_idx= \
+            self.add_random(atom_pos, atom_type, grid_name, point_num)
         #build grid
         grid_init = np.unique(grid_name)
         grid_origin = grid_init
         grid_mutate = grid_init
-        self.assign_to_cpu(grid_origin, grid_mutate)
+        self.assign_to_cpu(grain_loc, grid_origin, grid_mutate)
         system_echo('New grids have been built')
         #geometry check
-        atom_pos_rand, atom_type_rand, grid_name_rand = \
-            self.geo_constrain(atom_pos_rand, atom_type_rand, grid_name_rand)
-        #initial structures
-        atom_pos += atom_pos_rand
-        atom_type += atom_type_rand
-        grid_name += grid_name_rand
+        atom_pos, atom_type, grid_name = \
+            self.geo_constrain(atom_pos, atom_type, grid_name, opt_idx)
         system_echo(f'Sampling number: {len(atom_pos)}')    
-        return atom_pos, atom_type, grid_name
+        return atom_pos, atom_type, grid_name, grid_init
     
-    def geo_constrain(self, atom_pos, atom_type, grid_name):
+    def geo_constrain(self, atom_pos, atom_type, grid_name, opt_idx):
         """
         geometry constrain to reduce structures
         
@@ -162,28 +162,38 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
-
-        Returns:
+        opt_idx [int, 1d]: index of optimal samples
+        
+        Returns
         ----------
         atom_pos_right [int, 2d]: position of atoms after constrain
         atom_type_right [int, 2d]: type of atoms after constrain
         grid_name_right [int, 1d]: name of grids after constrain
         """
+        #check geometry of structure
         nbr_dis = self.find_nbr_dis(atom_pos, grid_name)
         check_near = [self.near(i) for i in nbr_dis]
-        atom_pos_right, atom_type_right, grid_name_right = [], [], []
-        check_num = len(check_near)
-        sample_num = np.ones(check_num)[check_near].sum()
-        sample_idx = list(np.arange(check_num)[check_near])
+        check_overlay = [self.overlay(i, len(i)) for i in atom_pos]
+        check = [i and j for i, j in zip(check_near, check_overlay)]
+        #get correct sample index
+        check_num = len(check)
+        sample_idx = np.arange(check_num)[check]
+        opt_idx = np.intersect1d(sample_idx, opt_idx)
+        #sampling correct random samples
+        sample_idx = np.setdiff1d(sample_idx, opt_idx)
+        sample_num = len(sample_idx)
         if sample_num > num_initial:
-            sample_idx = random.sample(sample_idx, num_initial)
+            sample_idx = np.random.choice(sample_idx, num_initial, replace=False)
+        sample_idx = np.concatenate((sample_idx, opt_idx))
+        #add right samples into buffer
+        atom_pos_right, atom_type_right, grid_name_right = [], [], []
         for i in sample_idx:
             atom_pos_right.append(atom_pos[i])
             atom_type_right.append(atom_type[i])
             grid_name_right.append(grid_name[i])
         return atom_pos_right, atom_type_right, grid_name_right
     
-    def CSPD_generate(self, component, ndensity, min_dis):
+    def CSPD_generate(self, number, component, ndensity, min_dis):
         """
         generate initial samples from CSPD
         
@@ -193,7 +203,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         ndensity [float, 0d]: density of atoms
         min_dis [float, 0d]: minimal distance between atoms
         """
-        options = f'--component {component} --ndensity {ndensity} --mindis {min_dis}'
+        options = f'--number {number} --component {component} --ndensity {ndensity} --mindis {min_dis}'
         shell_script = f'''
                         cd libs/ASG
                         tar -zxf CSPD.tar.gz
@@ -203,41 +213,49 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
                         '''
         os.system(shell_script)
     
-    def Rand_generate(self, atom_type, grid_name, point_num):
+    def add_random(self, atom_pos, atom_type, grid_name, point_num):
         """
-        generate initial samples randomly
+        add random samples
         
         Parameters
         ----------
+        atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
         point_num [int, 1d]: number of grid points
         
         Returns
         ----------
-        atom_pos_rand [int, 2d]: position of atoms randomly
-        atom_type_rand [int, 2d]: type of atoms
-        grid_name_rand [int, 1d]: grid name
+        atom_pos_new [int, 2d]: position of atoms randomly
+        atom_type_new [int, 2d]: type of atoms
+        grid_name_new [int, 1d]: grid name
+        opt_idx [int, 1d]: index of CSPD samples
         """
         grid_num = len(grid_name)
-        atom_pos_rand, atom_type_rand, grid_name_rand = [], [], []
+        opt_idx, atom_pos_new, atom_type_new, grid_name_new = [], [], [], []
         for i, grid in enumerate(grid_name):
+            atom_pos_new += [atom_pos[i]]
+            atom_type_new += [atom_type[i]]
+            grid_name_new += [grid_name[i]]
+            opt_idx += [len(atom_pos_new)-1]
+            #random sample
             points = [i for i in range(point_num[i])]
-            grid_name_rand += [grid for _ in range(num_rand)]
+            grid_name_new += [grid for _ in range(num_rand)]
             for _ in range(num_rand):
                 seed = random.randint(0, grid_num-1)
                 atom_num = len(atom_type[seed])
-                atom_pos_rand += [random.sample(points, atom_num)]
-                atom_type_rand += [atom_type[seed]]
-        return atom_pos_rand, atom_type_rand, grid_name_rand
+                atom_pos_new += [random.sample(points, atom_num)]
+                atom_type_new += [atom_type[seed]]
+        return atom_pos_new, atom_type_new, grid_name_new, opt_idx
     
-    def structure_in_grid(self, recyc):
+    def structure_in_grid(self, recyc, grain):
         """
         put structure into grid
         
         Parameters
         ----------
         recyc [int, 0d]: times of recycling
+        grain [float, 1d]: grain of grid
         
         Returns
         ----------
@@ -252,19 +270,22 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         file_name = os.listdir(init_path)
         atom_pos, atom_type, grid_name, point_num, latt_file = [], [], [], [], []
         for i, poscar in enumerate(file_name):
+            #import structure
             stru = Structure.from_file(f'{init_path}/{poscar}', sort=True)
             latt_vec = stru.lattice.matrix
-            file = f'{grid_num+i:03.0f}_latt_vec.bin'
-            self.write_list2d(f'{grid_prop_path}/{file}', latt_vec, binary=True)
             type = self.get_atom_number(stru)
             stru_frac = stru.frac_coords
             grid_frac = self.fraction_coor(grain, latt_vec)
             pos = self.put_into_grid(stru_frac, latt_vec, grid_frac, latt_vec)
-            num = len(grid_frac)
+            #write lattice file
+            file = f'{grid_num+i:03.0f}_latt_vec.bin'
+            self.write_list2d(f'{grid_prop_path}/{file}', latt_vec, binary=True)
+            #append to buffer
             atom_type.append(type)
             atom_pos.append(pos)
             latt_file.append(file)
             grid_name.append(grid_num+i)
+            num = len(grid_frac)
             point_num.append(num)
         return atom_pos, atom_type, grid_name, point_num, latt_file
     
@@ -392,19 +413,5 @@ class Pretrain(Transfer):
     
         
 if __name__ == '__main__':
-    init = InitSampling(component, ndensity, min_dis_CSPD)
-    cpu_nodes = UpdateNodes()
-    cpu_nodes.update()
-    (atom_pos, atom_type, grid_name) = init.generate(0)
-    print([len(i) for i in atom_pos])
-    print(len(grid_name))
-    '''
-    str = Structure.from_file(f'test/POSCAR-CCOP-0-0023-135', sort=True)
-    latt_vec = str.lattice.matrix
-    type = init.get_atom_number(str)
-    stru_frac = str.frac_coords
-    grid_frac = init.fraction_coor(grain, latt_vec)
-    pos = init.put_into_grid(stru_frac, latt_vec, grid_frac, latt_vec)
-    print(grid_frac[pos])
-    init.write_list2d('test/coor.dat', grid_frac[pos])
-    '''
+    init = InitSampling(num_CSPD, component, ndensity, min_dis_CSPD)
+    init.generate(1)

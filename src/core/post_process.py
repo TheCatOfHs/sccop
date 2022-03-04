@@ -494,14 +494,14 @@ class PostProcess(VASPoptimize):
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                            #rm -rf $p FINISH-$p
+                            rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         system_echo(f'All job are completed --- Thermal Conductivity')
         self.remove_flag(optim_strs_path)
-
+    
     def get_k_points(self, poscars, task):
         """
         search k path by Hinuma, Y., Pizzi, G., Kumagai, Y., Oba, F., & Tanaka, I. (2017)

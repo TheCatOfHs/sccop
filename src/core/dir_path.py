@@ -30,3 +30,6 @@ energy_path = f'{optim_vasp_path}/energy'
 pbe_band_path = f'{optim_vasp_path}/pbe_band'
 phonon_path = f'{optim_vasp_path}/phonon'
 thermalconductivity_path = f'{optim_vasp_path}/thermalconductivity'
+
+adsorp_strs_path = f'{poscar_path}/adsorp_strs'
+adsorp_energy_path = f'{vasp_out_path}/adsorp_strs'

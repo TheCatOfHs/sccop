@@ -11,6 +11,7 @@ from pymatgen.core.structure import Structure
 
 
 parser = argparse.ArgumentParser()
+parser.add_argument('--grain', type=float, nargs='+')
 parser.add_argument('--origin', type=int)
 parser.add_argument('--mutate', type=int)
 args = parser.parse_args()
@@ -23,12 +24,13 @@ class ParallelDivide(ListRWTools, SSHTools):
         self.wait_time = wait_time
         self.prop_path = f'/local/ccop/{grid_prop_path}'
     
-    def assign_to_cpu(self, grid_origin, grid_mutate):
+    def assign_to_cpu(self, grain, grid_origin, grid_mutate):
         """
         send divide jobs to nodes and update nodes
         
         Parameters
         ----------
+        grain [int, 1d]: grain of grid
         grid_origin [int, 1d]: name of origin grid 
         grid_mutate [int, 1d]: name of mutate grid 
         """
@@ -36,7 +38,7 @@ class ParallelDivide(ListRWTools, SSHTools):
         node_assign = self.assign_node(num_grid)
         #generate grid and send back to gpu node
         for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
-            self.sub_divide(origin, mutate, node)
+            self.sub_divide(grain, origin, mutate, node)
         while not self.is_done(grid_prop_path, num_grid):
             time.sleep(self.wait_time)
         self.zip_file_name(grid_mutate)
@@ -58,12 +60,13 @@ class ParallelDivide(ListRWTools, SSHTools):
         self.remove_flag_on_gpu()
         system_echo(f'Unzip grid file on GPU')
     
-    def sub_divide(self, origin, mutate, node):
+    def sub_divide(self, grain, origin, mutate, node):
         """
         SSH to target node and divide grid
 
         Parameters
         ----------
+        grain [float, 1d]: grain of grid
         origin [int, 0d]: name of origin grid
         mutate [int, 0d]: name of mutate grid
         node [int, 0d]: name of node
@@ -74,7 +77,8 @@ class ParallelDivide(ListRWTools, SSHTools):
                 f'{mutate:03.0f}_nbr_dis.bin',
                 f'{mutate:03.0f}_nbr_idx.bin']
         file = ' '.join(file)
-        options = f'--origin {origin} --mutate {mutate}'
+        grain_str = ' '.join([str(i) for i in grain])
+        options = f'--grain {grain_str} --origin {origin} --mutate {mutate}'
         shell_script = f'''
                         cd /local/ccop/
                         python src/core/grid_divide.py {options}
@@ -226,6 +230,7 @@ class GridDivide(ListRWTools):
         """
         norm = [np.linalg.norm(i) for i in latt_vec]
         n = [norm[i]//grain[i] for i in range(3)]
+        n = [1 if i==0 else i for i in n]
         grain_a, grain_b, grain_c = [1/i for i in n]
         coor = [[i, j, k] for i in np.arange(0, 1, grain_a)
                 for j in np.arange(0, 1, grain_b)
@@ -277,6 +282,7 @@ class GridDivide(ListRWTools):
         
 
 if __name__ == '__main__':
+    grain = args.grain
     grid_origin = args.origin
     grid_mutate = args.mutate
     

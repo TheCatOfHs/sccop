@@ -35,7 +35,7 @@ def read_POSCAR():
     # the number of all atoms
     atom_num = np.array([int(item) for item in poscar[6].split()])
     # the position of each atom
-    position = ['\t'.join(line.split()) for line in poscar[8:8+np.sum(atom_num)]]
+    position = ['\t'.join(line.split()[0:3]) for line in poscar[8:8+np.sum(atom_num)]]
     return (lattice, atom_name, atom_num, position)
 
 def read_diele(file_name):
@@ -66,7 +66,7 @@ def generate_CONTROL(born, lattice, atom_name, atom_num, diele, position):
     control = """&allocations
     nelements=%d,
     natoms=%d,
-    ngrid(:)=20 20 10
+    ngrid(:)=10 10 5
 &end
 &crystal
     lfactor=0.1,
