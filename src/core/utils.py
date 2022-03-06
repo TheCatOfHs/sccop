@@ -179,7 +179,7 @@ class SSHTools:
         ssh.connect(ip, port, user, password, timeout=1000)
         ssh.exec_command(shell_script)
         ssh.close()
-
+    
     def assign_node(self, num_jobs):
         """
         assign jobs to nodes

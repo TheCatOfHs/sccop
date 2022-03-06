@@ -6,8 +6,6 @@ import numpy as np
 import pandas as pd
 from pymatgen.core.structure import Structure
 
-from core.search import GeoCheck
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -125,9 +123,9 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         grid_name [int, 1d]: name of grids
         """
         if recyc > 0:
-            grain_loc = [.5, .5, .5]
+            grain_loc = grain_fine
         else:
-            grain_loc = grain
+            grain_loc = grain_coarse
         #transfer CSPD structures
         atom_pos, atom_type, grid_name, point_num, latt_file = \
             self.structure_in_grid(recyc, grain_loc)

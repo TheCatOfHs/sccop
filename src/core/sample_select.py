@@ -100,7 +100,7 @@ class Select(ListRWTools, SSHTools):
         pos = self.str_to_list2d(pos_str, int)
         type = self.str_to_list2d(type_str, int)
         num_crys = len(pos)
-        tuple = (pos, type, grid)
+        tuple = (pos, type, list(grid))
         batch_balance(num_crys, self.batch_size, tuple)
         return pos, type, grid
     

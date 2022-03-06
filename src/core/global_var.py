@@ -1,20 +1,21 @@
 #Grid
 cutoff = 7
-grain = [.5, .5, 1.]
+grain_coarse = [.5, .5, 5.]
+grain_fine = [.25, .25, 5.]
 
 #Mutate
 num_mutate = 6
 mut_ratio = 0.9
-mut_freq = 3
+mut_freq = 2
 latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 3
-num_round = 10
+num_recycle = 1
+num_round = 12
 num_seed = 30
-num_poscars = 30
-num_optims = 15
+num_poscars = 40
+num_optims = 20
 
 #Initial Samples
 component = 'B1C3'

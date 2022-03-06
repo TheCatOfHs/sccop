@@ -26,7 +26,7 @@ class CrystalOptimization(ListRWTools):
         self.vasp = ParallelSubVASP()
         self.check = GeoCheck()
         self.post = PostProcess()
-        
+    
     def main(self):
         #Update cpu nodes
         self.cpu_nodes.update()
@@ -238,9 +238,9 @@ class CrystalOptimization(ListRWTools):
         """
         #generate mutate lattice grid
         if recyc > 0:
-            grain_loc = [.5, .5, .5]
+            grain_loc = grain_fine
         else:
-            grain_loc = grain
+            grain_loc = grain_coarse
         grid_num = len(grid_store)
         grid_mutate = np.arange(grid_num, grid_num+num_mutate)
         grid_store = np.concatenate((grid_store, grid_mutate))

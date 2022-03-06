@@ -85,6 +85,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                         cp ../../{vasp_files_path}/SinglePointEnergy/* .
                         scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
                         DPT -v potcar
+                        #DPT --vdW optPBE
                         date > $p.out
                         /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
                         date >> $p.out
@@ -128,10 +129,10 @@ class ParallelSubVASP(ListRWTools, SSHTools):
             with open(VASP_output_file, 'r') as f:
                 ct = f.readlines()
             energy, state_line = 1e6, []
-            for line in ct[:10]:
+            for line in ct[:15]:
                 if 'POSCAR found :' in line:
                     atom_num = int(line.split()[-2])
-            for line in ct[-10:]:
+            for line in ct[-15:]:
                 if 'F=' in line:
                     energy = float(line.split()[2])
                 if 'DAV: ' in line:
