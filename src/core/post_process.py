@@ -3,10 +3,14 @@ import time
 import re
 import numpy as np
 
+from sklearn.cluster import DBSCAN
+
 from pymatgen.core.structure import Structure
-from pymatgen.symmetry.kpath import KPathSeek
+from pymatgen.core.lattice import Lattice
 from pymatgen.core.surface import SlabGenerator
+from pymatgen.symmetry.kpath import KPathSeek
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -83,7 +87,7 @@ class VASPoptimize(SSHTools, ListRWTools):
         system_echo(f'All jobs are completed --- Optimization')
         self.remove_flag(self.optim_strs_path)
 
-    def find_symmetry_structure(self, path):
+    def add_symmetry_to_structure(self, path):
         """
         find symmetry unit of structure
 
@@ -98,10 +102,11 @@ class VASPoptimize(SSHTools, ListRWTools):
             anal_stru = SpacegroupAnalyzer(stru)
             sym_stru = anal_stru.get_refined_structure()
             sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
-    
+            sym_stru.to(filename=f'{optim_strs_sym_path}/{i}', fmt='poscar')
+            
     def rotate_axis(self, path):
         """
-        rotate axis to make atoms in xy plane
+        rotate axis to make atoms in xy plane and add vaccum layer
         
         Parameters
         ----------
@@ -110,13 +115,23 @@ class VASPoptimize(SSHTools, ListRWTools):
         files = sorted(os.listdir(path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         for i in poscars:
+            #get miller index of atom plane
             stru = Structure.from_file(f'{path}/{i}')
-            coor = stru.frac_coords
-            coor_std = np.std(coor, axis=0)
-            axis = np.argsort(coor_std)[0]
-            miller_index = np.identity(3, dtype=int)[axis]
-            slab = SlabGenerator(stru, miller_index=miller_index, 
-                                 min_slab_size=0.1, min_vacuum_size=0.0, center_slab=True)
+            latt = Lattice(stru.lattice.matrix)
+            cartesian = stru.cart_coords
+            miller_index = latt.get_miller_index_from_coords(cartesian, round_dp=0)
+            #use atom distribution to get miller index
+            if sum(np.abs(miller_index)) > 10:
+                cluster_num = []
+                for coor in np.transpose(cartesian):
+                    clustering = DBSCAN(eps=.5, min_samples=1).fit(coor.reshape(-1,1))
+                    num = len(np.unique(clustering.labels_))
+                    cluster_num.append(num)
+                axis = np.argsort(cluster_num)[0]
+                miller_index = np.identity(3, dtype=int)[axis]
+            #generate slab poscar
+            slab = SlabGenerator(stru, miller_index=miller_index,
+                                 min_slab_size=.1, min_vacuum_size=15.0, center_slab=True)
             surface = slab.get_slab()
             surface.to(filename=f'{path}/{i}', fmt='poscar')
     
@@ -165,6 +180,7 @@ class PostProcess(VASPoptimize):
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
+            os.mkdir(optim_strs_sym_path)
         if not os.path.exists('vasp'):
             os.mkdir('vasp')
             os.mkdir(KPOINTS_file)
@@ -177,7 +193,7 @@ class PostProcess(VASPoptimize):
             os.mkdir(pbe_band_path)
             os.mkdir(phonon_path)
             os.mkdir(thermalconductivity_path)
-        
+    
     def run_optimization(self):
         '''
         optimize configurations from low to high level
@@ -226,7 +242,7 @@ class PostProcess(VASPoptimize):
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
-        self.find_symmetry_structure(optim_strs_path)
+        self.add_symmetry_to_structure(optim_strs_path)
         self.rotate_axis(optim_strs_path)
         self.get_energy(energy_path)
         self.remove_flag(optim_strs_path)
@@ -609,7 +625,7 @@ if __name__ == '__main__':
     #post.run_dielectric()
     #post.run_3RD()
     #post.run_thermal_conductivity()
-    #post.find_symmetry_structure('test/initial_strs_3')
+    #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
     
     

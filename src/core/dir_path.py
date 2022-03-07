@@ -8,6 +8,7 @@ grid_prop_path = 'data/grid/property'
 grid_poscar_path = 'data/grid/poscar'
 ccop_out_path = 'data/poscar/CCOP'
 optim_strs_path = 'data/poscar/optim_strs'
+optim_strs_sym_path = 'data/poscar/optim_strs_sym'
 init_strs_path = 'data/poscar/initial_strs'
 
 #DFT directory
@@ -31,6 +32,9 @@ pbe_band_path = f'{optim_vasp_path}/pbe_band'
 phonon_path = f'{optim_vasp_path}/phonon'
 thermalconductivity_path = f'{optim_vasp_path}/thermalconductivity'
 
-anode_strs_path = f'{poscar_path}/anode_strs'
-adsorp_strs_path = f'{poscar_path}/adsorp_strs'
-adsorp_energy_path = f'{vasp_out_path}/adsorp_strs'
+#Adsorp file
+adsorp_path = 'data/adsorp'
+anode_strs_path = f'{adsorp_path}/anode_strs'
+adsorp_strs_path = f'{adsorp_path}/adsorp_strs'
+adsorp_energy_path = f'{adsorp_path}/adsorp_energy'
+adsorp_analysis_path = f'{adsorp_path}/adsorp_analysis'

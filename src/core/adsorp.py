@@ -10,7 +10,6 @@ from core.utils import ListRWTools, SSHTools, system_echo
 
 from pymatgen.core.structure import Molecule, Structure
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder
-from pymatgen.core.surface import SlabGenerator
 
 
 class Adsorp(ListRWTools, SSHTools):
@@ -20,27 +19,76 @@ class Adsorp(ListRWTools, SSHTools):
         self.calculation_path = '/local/ccop/vasp'
         self.local_adsorp_strs_path = f'/local/ccop/{adsorp_strs_path}'
         self.local_adsorp_energy_path = f'/local/ccop/{adsorp_energy_path}'
-        if not os.path.exists(anode_strs_path):
+        if not os.path.exists(adsorp_path):
             os.mkdir(anode_strs_path)
             os.mkdir(adsorp_strs_path)
+            os.mkdir(adsorp_energy_path)
+            os.mkdir(adsorp_analysis_path)
     
-    def formation_energy(self, num_atom, energy_single, energy_compound):
+    def adsorp_sites(self, atom_num, single):
+        """
+
+        
+        Parameters
+        ----------
+        atom_num []: 
+        single []: 
+        """
+        files = sorted(os.listdir(adsorp_energy_path))
+        poscars = np.unique([i[4:21] for i in files])
+        for i in poscars:
+            compound = self.get_energy(f'{energy_path}/out-{i[:-4]}')
+            sites = self.adsorp_sites_coor(i)
+            form = self.formation_energy(i, atom_num, single, compound)
+            result = np.concatenate((sites, form), axis=1)
+            self.write_list2d(f'{adsorp_analysis_path}/{i}.dat', result)
+            system_echo(f'Adsorp sites analysis finished: {i}')
+    
+    def adsorp_sites_coor(self, poscar):
+        """
+        get cartesian coordinate of adsorp
+        
+        Parameters
+        ----------
+        poscar [str, 0d]: name of relax structure 
+
+        Returns
+        ----------
+        sites [float, 2d, np]: position of adsorbates
+        """
+        files = sorted(os.listdir(adsorp_strs_path))
+        pattern = f'{poscar}-[\w]*-[\w]*-[\w]*-Relax'
+        poscars = [i for i in files if re.match(pattern, i)]
+        sites = []
+        for i in poscars:
+            stru = Structure.from_file(f'{adsorp_strs_path}/{i}')
+            asf = AdsorbateSiteFinder(stru)
+            sites.append(asf.surface_sites[0].coords)
+        return np.array(sites)
+        
+    def formation_energy(self, poscar, atom_num, single, compound):
         """
         calculate formation energy
         
         Parameters
         ----------
-        num_atom []: 
-        energy_single []: 
-        energy_compound []: 
+        poscar [str, 0d]: name of poscar
+        atom_num [int, 0d]: number of adsorp atoms
+        energy_single [float, 0d]: energy of simple substance
+        energy_compound [float, 0d]: energy of compound
+        
+        Returns
+        ----------
+        formations [float, 2d, np]: formation energy
         """
-        energys = []
-        energy_adsorp = self.import_list2d(f'{adsorp_energy_path}/Energy.dat', str)
-        for i, e in enumerate(energy_adsorp):
-            formation = e - (num_atom*energy_single + energy_compound)
-            energys.append([formation])
-            system_echo(f'Formation Energy of POSCAR-{i:03.0f}:{formation}')
-        self.write_list2d(f'{adsorp_energy_path}/Energy_Formation.dat', energys)
+        files = sorted(os.listdir(adsorp_energy_path))
+        poscars = [i for i in files if re.match(f'out-{poscar}', i)]
+        formations = []
+        for i in poscars:
+            energy = self.get_energy(f'{adsorp_energy_path}/{i}')
+            delta_E = energy - (atom_num*single + compound)
+            formations.append(delta_E)
+        return np.transpose([formations])
     
     def relax(self, atom, scaling_mat):
         """
@@ -52,32 +100,26 @@ class Adsorp(ListRWTools, SSHTools):
         scaling_mat [int, 2d]: saclling matrix
         """
         self.select_poscar()
-        files = os.listdir(anode_strs_path)
+        files = sorted(os.listdir(anode_strs_path))
         for file in files:
             adsorp_names = self.generate_poscar(file, atom, scaling_mat)
             system_echo(f'adsorp poscar generate---{file}')
             self.run_optimization(adsorp_names)
             system_echo(f'adsorp structure relaxed---{file}')
-        self.get_energy(adsorp_energy_path)
-    
+        
     def select_poscar(self):
         """
         select poscar whose atoms in xy plane
         """
-        files = os.listdir(optim_strs_path)
+        files = sorted(os.listdir(optim_strs_path))
         for i in files:
-            if self.judge_frequency(f'{phonon_path}/{i}'):
-                stru = Structure.from_file(f'{optim_strs_path}/{i}')
-                coor = stru.frac_coords
-                coor_std = np.std(coor, axis=0)
-                axis = np.argsort(coor_std)[0]
-                if axis == 2:
-                    shutil.copy(f'{optim_strs_path}/{i}', 
-                                f'{anode_strs_path}')
+            if self.judge_frequency(f'{phonon_path}/phonon-{i}.dat'):
+                shutil.copy(f'{optim_strs_path}/{i}', f'{anode_strs_path}')
     
     def judge_frequency(self, file):
         """
-
+        judge negative frequency
+        
         Parameters
         ----------
         file [str, 0d]: name of file
@@ -95,7 +137,8 @@ class Adsorp(ListRWTools, SSHTools):
                 line = f.readline().strip()
                 ct = line.split()
                 if ct != []:
-                    if float(ct[1]) < 0:
+                    freq = float(ct[1])
+                    if  freq < -1:
                         counter += 1
                         if counter > 10:
                             flag = False
@@ -115,17 +158,14 @@ class Adsorp(ListRWTools, SSHTools):
         
         Returns
         ---------
-        adsorp_names [str, 1d]:
+        adsorp_names [str, 1d]: name of adsorp poscars
         """
-        #
-        stru = Structure.from_file(f'{anode_strs_path}/{file}')
-        slab = SlabGenerator(stru, miller_index=(0,0,1),
-                             min_slab_size=2.0, min_vacuum_size=15.0, center_slab=True)
-        surface = slab.get_slab()
+        #get adsorp structure
+        surface = Structure.from_file(f'{anode_strs_path}/{file}')
         asf = AdsorbateSiteFinder(surface)
         adsorbate = Molecule(atom, [[0, 0, 0]])
         ads_strus = asf.generate_adsorption_structures(adsorbate, scaling_mat)
-        #
+        #get name of adsorp job
         job_num = len(ads_strus)
         node_assign = self.assign_node(job_num)
         adsorp_names = []
@@ -142,7 +182,7 @@ class Adsorp(ListRWTools, SSHTools):
         
         Parameters
         ----------
-        files [str, 1d]:
+        files [str, 1d]: name of relax poscars
         '''
         num_poscar = len(files)
         for poscar in files:
@@ -187,33 +227,38 @@ class Adsorp(ListRWTools, SSHTools):
             self.ssh_node(shell_script, ip)
         while not self.is_done(adsorp_strs_path, num_poscar):
             time.sleep(self.wait_time)
-        self.get_energy(adsorp_energy_path)
         system_echo(f'All jobs are completed --- Optimization')
         self.remove_flag(adsorp_strs_path)
-        
-    def get_energy(self, path):
+    
+    def get_energy(self, file):
         """
-        generate energy file of vasp outputs directory
+        get energy of vasp output
         
         Parameters
         ----------
-        path [str, 0d]: energy file path
+        file [str, 0d]: name of energy file
         """
-        energys = []
-        vasp_out = os.listdir(f'{path}')
-        vasp_out = [i for i in vasp_out if re.match(r'out', i)]
-        vasp_out_order = sorted(vasp_out)
-        for out in vasp_out_order:
-            VASP_output_file = f'{path}/{out}'
-            with open(VASP_output_file, 'r') as f:
-                ct = f.readlines()
-            for line in ct[-10:]:
-                if 'F=' in line:
-                    energy = float(line.split()[2])
-            cur_E = energy
-            energys.append([out, cur_E])
-        self.write_list2d(f'{path}/Energy.dat', energys)
-
+        with open(file, 'r') as f:
+            ct = f.readlines()
+        for line in ct[-10:]:
+            if 'F=' in line:
+                energy = float(line.split()[2])
+        return energy
+    
+    def adsorp_sites_plot(self,):
+        import matplotlib.pyplot as plt
+        files = sorted(os.listdir(adsorp_analysis_path))
+        for i in files:
+            result = self.import_list2d(f'{adsorp_analysis_path}/{i}', float, numpy=True)
+            x, y, z, v = np.transpose(result)
+            plt.scatter(x, y, c=v)
+            plt.xlabel('x direction')
+            plt.ylabel('y direction')
+            plt.title(f'{i}')
+            plt.colorbar()
+            plt.savefig(f'{adsorp_analysis_path}/{i}.png', dpi=600)
+            plt.close('all')
+        
     
 class Battery(SSHTools):
     #calculate properties of battery
@@ -234,22 +279,45 @@ class Battery(SSHTools):
     
     
 if __name__ == '__main__':
-    #ads = Adsorp()
+    ads = Adsorp()
     #ads.relax([11], [[1,0,0],[0,1,0],[0,0,1]])
-    counter = 0
-    with open('test/phonon/phonon-POSCAR-01-131-131.dat', 'r') as f:
-        for i in range(2):
-            next(f)
-        for i in range(100):
-            a = f.readline().strip()
-            b = a.split()
-            if b != []:
-                print(float(b[1]))
-                if float(b[1]) < 0:
-                    counter += 1
-                    if counter > 5:
-                        break
+    #ads.adsorp_sites(1, -1.3156)
+    ads.adsorp_sites_plot()
+    '''
+    from pymatgen.core.lattice import Lattice
+    from pymatgen.core.surface import SlabGenerator
+    from sklearn.cluster import DBSCAN
     
+    def rotate_axis(path):
+        """
+        rotate axis to make atoms in xy plane
+        
+        Parameters
+        ----------
+        path [str, 0d]: structure save path
+        """
+        files = sorted(os.listdir(path))
+        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        for i in poscars:
+            stru = Structure.from_file(f'{path}/{i}')
+            latt = Lattice(stru.lattice.matrix)
+            miller_index = latt.get_miller_index_from_coords(stru.cart_coords, round_dp=0)
+            #
+            if sum(np.abs(miller_index)) > 10:
+                cluster_num = []
+                for coor in np.transpose(stru.cart_coords):
+                    clustering = DBSCAN(eps=.5, min_samples=1).fit(coor.reshape(-1,1))
+                    num = len(np.unique(clustering.labels_))
+                    cluster_num.append(num)
+                axis = np.argsort(cluster_num)[0]
+                miller_index = np.identity(3, dtype=int)[axis]
+            #
+            slab = SlabGenerator(stru, miller_index=miller_index,
+                                 min_slab_size=.1, min_vacuum_size=0.0, center_slab=True)
+            surface = slab.get_slab()
+            surface.to(filename=f'{i}', fmt='poscar')
+    rotate_axis('test')
+    '''
     '''
     from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
     import numpy as np
@@ -269,4 +337,3 @@ if __name__ == '__main__':
     print(surface)
     surface.to(filename='POSCAR-Slab-12-134-134', fmt='poscar')
     '''
-    

@@ -11,7 +11,7 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 1
+num_recycle = 2
 num_round = 12
 num_seed = 30
 num_poscars = 40
