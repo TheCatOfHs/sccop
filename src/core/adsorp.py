@@ -2,6 +2,9 @@ import os, sys, shutil
 import time
 import re
 import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import scale
+from torch import inverse
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -25,7 +28,7 @@ class Adsorp(ListRWTools, SSHTools):
             os.mkdir(adsorp_energy_path)
             os.mkdir(adsorp_analysis_path)
     
-    def adsorp_sites(self, atom_num, single):
+    def adsorp_sites_analysis(self, atom_num, single):
         """
 
         
@@ -59,13 +62,13 @@ class Adsorp(ListRWTools, SSHTools):
         files = sorted(os.listdir(adsorp_strs_path))
         pattern = f'{poscar}-[\w]*-[\w]*-[\w]*-Relax'
         poscars = [i for i in files if re.match(pattern, i)]
+        poscars = [i[:-6] for i in poscars]
         sites = []
         for i in poscars:
             stru = Structure.from_file(f'{adsorp_strs_path}/{i}')
-            asf = AdsorbateSiteFinder(stru)
-            sites.append(asf.surface_sites[0].coords)
+            sites.append(stru.cart_coords[-1])
         return np.array(sites)
-        
+    
     def formation_energy(self, poscar, atom_num, single, compound):
         """
         calculate formation energy
@@ -114,7 +117,7 @@ class Adsorp(ListRWTools, SSHTools):
         files = sorted(os.listdir(optim_strs_path))
         for i in files:
             if self.judge_frequency(f'{phonon_path}/phonon-{i}.dat'):
-                shutil.copy(f'{optim_strs_path}/{i}', f'{anode_strs_path}')
+                shutil.copy(f'{optim_strs_path}/{i}', anode_strs_path)
     
     def judge_frequency(self, file):
         """
@@ -244,21 +247,29 @@ class Adsorp(ListRWTools, SSHTools):
             if 'F=' in line:
                 energy = float(line.split()[2])
         return energy
-    
+
     def adsorp_sites_plot(self,):
-        import matplotlib.pyplot as plt
-        files = sorted(os.listdir(adsorp_analysis_path))
-        for i in files:
-            result = self.import_list2d(f'{adsorp_analysis_path}/{i}', float, numpy=True)
-            x, y, z, v = np.transpose(result)
-            plt.scatter(x, y, c=v)
-            plt.xlabel('x direction')
-            plt.ylabel('y direction')
-            plt.title(f'{i}')
-            plt.colorbar()
-            plt.savefig(f'{adsorp_analysis_path}/{i}.png', dpi=600)
-            plt.close('all')
         
+        files = sorted(os.listdir(adsorp_analysis_path))
+        poscars = [i[:-4] for i in files]
+        for i, dat in enumerate(files):
+            result = self.import_list2d(f'{adsorp_analysis_path}/{dat}', float, numpy=True)
+            slab = Structure.from_file(f'{anode_strs_path}/{poscars[i]}')
+            x, y, _, v = np.transpose(result)
+            figure = plt.figure()
+            ax = figure.add_subplot(1, 1, 1)
+            plt.scatter(x, y, c=v, s=50)
+            clb = plt.colorbar()
+            clb.ax.set_title('$\Delta$E/eV')
+            plot_slab(slab, ax, adsorption_sites=True)
+            plt.title(f'{poscars[i]}', fontsize=16)
+            ax.set_xlabel('x direction')
+            ax.set_ylabel('y direction')
+            plt.scatter(x, y, c=v, s=50)
+            plt.savefig(f'{adsorp_analysis_path}/{poscars[i]}.png', dpi=600)
+            plt.close('all')
+            break
+
     
 class Battery(SSHTools):
     #calculate properties of battery
@@ -279,10 +290,16 @@ class Battery(SSHTools):
     
     
 if __name__ == '__main__':
+    from pymatgen.analysis.adsorption import plot_slab
     ads = Adsorp()
     #ads.relax([11], [[1,0,0],[0,1,0],[0,0,1]])
-    #ads.adsorp_sites(1, -1.3156)
+    #ads.adsorp_sites_analysis(1, -1.3156)
     ads.adsorp_sites_plot()
+    #stru = Structure.from_file(f'{anode_strs_path}/POSCAR-04-131-131')
+    #fig = plt.figure()
+    #ax = fig.add_subplot(111)
+    #plot_slab(stru, ax, adsorption_sites=False)
+    #plt.show()
     '''
     from pymatgen.core.lattice import Lattice
     from pymatgen.core.surface import SlabGenerator

@@ -96,7 +96,7 @@ class CrystalOptimization(ListRWTools):
                 select.samples(atom_pos, atom_type, grid_name)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
-
+            
             #Export searched POSCARs
             select = Select(start+num_round)
             grid_buffer_2d = [[i] for i in train_grid]

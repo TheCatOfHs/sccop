@@ -39,7 +39,8 @@ class Select(ListRWTools, SSHTools):
         
     def samples(self, atom_pos, atom_type, grid_name):
         """
-        each configuration is unique by pos, type and grid
+        choose lowest energy structure in different clusters
+        each structure is unique by pos, type and grid
         atom_pos: atom positions in list
         atom_type: atom types in list
         grid_name: grid in np array
@@ -90,7 +91,7 @@ class Select(ListRWTools, SSHTools):
         reduce = np.array([i.split('-') for i in reduce])
         pos_str, type_str, grid_str = \
             reduce[:,0], reduce[:,1], reduce[:,2]
-       
+
         grid = self.str_to_list1d(grid_str, int)
         order  = np.argsort(grid)
         grid = np.array(grid)[order]
@@ -285,9 +286,9 @@ class Select(ListRWTools, SSHTools):
         crys_embedded [float, 2d, np]: redcued crystal vector
         """
         crys_embedded = TSNE(n_components=num_components, 
-                          learning_rate='auto', 
-                          init='random',
-                          random_state=0).fit_transform(crys_fea)
+                             learning_rate='auto', 
+                             init='random',
+                             random_state=0).fit_transform(crys_fea)
         return crys_embedded
     
     def cluster(self, crys_embedded, num_clusters):
@@ -452,28 +453,40 @@ class OptimSelect(Select, InitSampling, Transfer, SSHTools):
         Transfer.__init__(self, 0)
         self.elem_embed = self.import_list2d(
             atom_init_file, int, numpy=True)
+        if not os.path.exists(ccop_out_path):
+            os.mkdir(ccop_out_path)
     
     def optim_select(self):
         """
         select optimized structuers from initial_X
+        choose different structures in low energy configuration
         """
-        if not os.path.exists(ccop_out_path):
-            os.mkdir(ccop_out_path)
-        energys = []
+        #import optimized energy from each round
+        poscars, poscars_full, energys = [], [], []
         for i in range(num_recycle):
-            start_path = f'{init_strs_path}_{i+1}'
-            poscars = os.listdir(start_path)
-            for poscar in poscars:
-                source = f'{start_path}/{poscar}'
-                target = f'{ccop_out_path}/{poscar}'
-                shutil.copyfile(source, target)
-            energy_path = f'{vasp_out_path}/initial_strs_{i+1}/Energy.dat'
-            energy = self.import_list2d(energy_path, str, numpy=True)[:, 1]
+            round = f'initial_strs_{i+1}'
+            stru_path = f'{poscar_path}/{round}'
+            energy_file = f'{vasp_out_path}/{round}/Energy.dat'
+            energy_dat = self.import_list2d(energy_file, str, numpy=True)
+            poscar, energy = np.transpose(energy_dat)
+            poscar = [i[4:] for i in poscar]
+            poscars = np.concatenate((poscars, poscar))
+            full = [f'{stru_path}/{j}' for j in poscar]
+            poscars_full = np.concatenate((poscars_full, full))
             energys = np.concatenate((energys, energy))
         energys = np.array(energys, dtype='float32')
-        poscars = sorted(os.listdir(ccop_out_path))
-        self.num_crys = len(poscars)
-        
+        #filter structure by energy
+        energy_order = np.argsort(energys)
+        filter_num = int(len(energy_order)*ratio_round)
+        filter = energy_order[:filter_num]
+        poscars = poscars[filter]
+        poscars_full = poscars_full[filter]
+        energys = energys[filter]
+        #copy low energy structures from each round
+        for poscar in poscars_full:
+            shutil.copy(poscar, ccop_out_path)
+        num_crys = len(poscars)
+        #transfer poscar into input of PPM
         atom_feas, nbr_feas, nbr_fea_idxs = [], [], []
         for poscar in poscars:
             stru = Structure.from_file(f'{ccop_out_path}/{poscar}', sort=True)
@@ -484,14 +497,13 @@ class OptimSelect(Select, InitSampling, Transfer, SSHTools):
             atom_feas.append(atom_fea)
             nbr_feas.append(nbr_fea)
             nbr_fea_idxs.append(nbr_fea_idx)
-        
+        #load data and get crystal vectors
         data = PPMData(atom_feas, nbr_feas, nbr_fea_idxs, energys)
         loader = get_loader(data, 256, 0)
-        
         model_names = self.model_select()
         _, _, crys_mean = self.mean(model_names, loader)
-        idx_all = np.arange(self.num_crys)
-        
+        #select structures by crystal vectors
+        idx_all = np.arange(num_crys)
         crys_mean_all = crys_mean.cpu().numpy()
         crys_embedded = self.reduce(crys_mean_all)
         clusters = self.cluster(crys_embedded, num_optims)
@@ -499,7 +511,7 @@ class OptimSelect(Select, InitSampling, Transfer, SSHTools):
         idx_drop = np.setdiff1d(idx_all, idx_slt)
         for i in idx_drop:
             os.remove(f'{ccop_out_path}/{poscars[i]}')
-        
+        #write selected poscars
         poscars = sorted(os.listdir(ccop_out_path))
         node_assign = self.assign_node(num_optims)
         for i, poscar in enumerate(poscars):

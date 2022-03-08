@@ -191,6 +191,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                 repeat_counter += 1
                 time_counter = self.wait_time/2
                 system_echo(f'Failure searching jobs: {num_fail}')
+                break
             if repeat_counter == self.repeat:
                 break 
         self.unzip(exist_path)

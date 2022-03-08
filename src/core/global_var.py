@@ -1,7 +1,7 @@
 #Grid
 cutoff = 7
 grain_coarse = [.5, .5, 5.]
-grain_fine = [.25, .25, 5.]
+grain_fine = [.5, .5, 5.]
 
 #Mutate
 num_mutate = 6
@@ -14,8 +14,9 @@ latt_sigma = 0.2
 num_recycle = 2
 num_round = 12
 num_seed = 30
-num_poscars = 40
-num_optims = 20
+num_poscars = 30
+num_optims = 12
+ratio_round = 0.8
 
 #Initial Samples
 component = 'B1C3'
@@ -39,7 +40,7 @@ num_paths_min = 90
 num_paths_rand = 90
 min_bond = 1.4
 threshold = -7.5
-wait_time = 600
+wait_time = 300
 
 #Sample Select
 num_models = 5
