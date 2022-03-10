@@ -35,6 +35,7 @@ thermalconductivity_path = f'{optim_vasp_path}/thermalconductivity'
 #Adsorp file
 adsorp_path = 'data/adsorp'
 anode_strs_path = f'{adsorp_path}/anode_strs'
+anode_energy_path = f'{adsorp_path}/anode_energy'
 adsorp_strs_path = f'{adsorp_path}/adsorp_strs'
 adsorp_energy_path = f'{adsorp_path}/adsorp_energy'
 adsorp_analysis_path = f'{adsorp_path}/adsorp_analysis'

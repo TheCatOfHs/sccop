@@ -1,27 +1,27 @@
 #Grid
 cutoff = 7
-grain_coarse = [.5, .5, 5.]
-grain_fine = [.5, .5, 5.]
+grain_coarse = [.5, .5, 10.]
+grain_fine = [.25, .25, 10.]
 
 #Mutate
 num_mutate = 6
 mut_ratio = 0.9
-mut_freq = 2
+mut_freq = 3
 latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 2
-num_round = 12
-num_seed = 30
-num_poscars = 30
-num_optims = 12
+num_recycle = 3
+num_round = 10
+num_seed = 40
+num_poscars = 40
+num_optims = 18
 ratio_round = 0.8
 
 #Initial Samples
 component = 'B1C3'
 ndensity = 0.1 
-min_dis_CSPD = 1.4
+min_dis_CSPD = 1.2
 num_CSPD = 48
 num_rand = 10000
 num_initial = 100
@@ -38,8 +38,8 @@ decay = .99
 steps = 300
 num_paths_min = 90
 num_paths_rand = 90
-min_bond = 1.4
-threshold = -7.5
+min_bond = 1.2
+threshold = -8.
 wait_time = 300
 
 #Sample Select

@@ -157,7 +157,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                             scp {path}.tar.gz {gpu_node}:{local_sh_save_path}
                             touch FINISH-{path}
                             scp FINISH-{path} {gpu_node}:{local_sh_save_path}
-                            rm FINISH-{path} {pos} {type} {energy} {path}.tar.gz
+                            #rm FINISH-{path} {pos} {type} {energy} {path}.tar.gz
                         fi
                         '''
         self.ssh_node(shell_script, ip)
@@ -247,7 +247,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         for i in {zip_file}
                         do
                             tar -zxf $i
-                            rm $i
+                            #rm $i
                         done
                         '''
         os.system(shell_script)
@@ -271,34 +271,42 @@ class ParallelWorkers(ListRWTools, SSHTools):
         assign, grid = job[:,:3], job[:,3]
         sort = np.argsort(grid)
         assign, grid = assign[sort], grid[sort]
-        atom_pos, atom_type, grid_name = [], [], []
+        atom_pos, atom_type, grid_name, lack = [], [], [], []
         for i, item in enumerate(assign):
-            pos = self.read_result('pos', *tuple(item))
-            atom_pos += pos
-            type = self.read_result('type', *tuple(item))
-            atom_type += type
-            num_sample = len(type)
-            zeros = np.zeros((num_sample, 1))
-            grid_name.append(zeros + int(grid[i]))
+            pos_file = self.get_file_name('pos', *tuple(item))
+            type_file = self.get_file_name('type', *tuple(item))
+            if os.path.exists(pos_file):
+                pos = self.import_list2d(pos_file, int)
+                type = self.import_list2d(type_file, int)
+                atom_pos += pos
+                atom_type += type
+                num_sample = len(type)
+                zeros = np.zeros((num_sample, 1))
+                grid_name.append(zeros + int(grid[i]))
+            else:
+                lack.append(pos_file)
         grid_name = np.vstack(grid_name)
+        system_echo(f'Lack files: {lack}')
         return atom_pos, atom_type, grid_name
     
-    def read_result(self, file, round, path, node):
+    def get_file_name(self, name, round, path, node):
         """
         read result of each worker
         
         Parameters
         ----------
-        file [str, 0d]: file name of worker result
+        name [str, 0d]: name of search result
+        round [str, 0d]: round of searching
+        path [str, 0d]: path of searching
+        node [str, 0d]: node used to search
         
         Returns
         ----------
-        list [int, 2d]: position or type 
+        file [int, 2d]: name of search file 
         """
         file = f'{self.sh_save_path}/' \
-            f'{file}-{round.zfill(3)}-{path.zfill(3)}-{node}.dat'
-        list = self.import_list2d(file, int)
-        return list
+            f'{name}-{round.zfill(3)}-{path.zfill(3)}-{node}.dat'
+        return file
     
     def read_job(self):
         """

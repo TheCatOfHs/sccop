@@ -12,6 +12,7 @@ from core.search import ParallelWorkers, GeoCheck
 from core.predict import PPMData, PPModel
 from core.utils import ListRWTools, system_echo
 from core.post_process import PostProcess, VASPoptimize
+from core.adsorp import AdsorpSites
 
 
 class CrystalOptimization(ListRWTools):
@@ -112,7 +113,18 @@ class CrystalOptimization(ListRWTools):
         #Optimize
         self.post.run_optimization()
         #Property calculate
-        self.property_calculate()
+        #self.property_calculate()
+        
+        #Adsorp sites calculate
+        adsorp = AdsorpSites()
+        adsorp.get_slab()
+        if len(os.listdir(anode_strs_path)) > 0:
+            adsorp.relax([11], (1,1,1))
+            adsorp.sites_analysis(-1.3156)
+            adsorp.sites_plot()
+        else:
+            system_echo('No suitable adsorbates are found')
+        
         
     def data_import(self, round):
         """

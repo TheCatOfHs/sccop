@@ -6,6 +6,7 @@ import numpy as np
 import pandas as pd
 from pymatgen.core.structure import Structure
 
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -265,6 +266,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         """
         grid_num = self.count_latt_num()
         init_path = f'{init_strs_path}_{recyc}'
+        self.delete_depulicates(init_path)
         file_name = os.listdir(init_path)
         atom_pos, atom_type, grid_name, point_num, latt_file = [], [], [], [], []
         for i, poscar in enumerate(file_name):

@@ -4,6 +4,8 @@ import paramiko
 import pickle
 import numpy as np
 
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -180,6 +182,21 @@ class SSHTools:
         ssh.exec_command(shell_script)
         ssh.close()
     
+    def change_node_assign(self, path):
+        """
+        change assign of node of jobs
+
+        Parameters
+        ----------
+        path [str, 0d]: path of save directory 
+        """
+        poscars = sorted(os.listdir(path))
+        poscars_num = len(poscars)
+        node_assign = self.assign_node(poscars_num)
+        for i, poscar in enumerate(poscars):
+            os.rename(f'{path}/{poscar}', 
+                      f'{path}/{poscar[:-4]}-{node_assign[i]}')
+        
     def assign_node(self, num_jobs):
         """
         assign jobs to nodes
@@ -274,7 +291,32 @@ class SSHTools:
         if finish == file_num:
             flag = True
         return flag
-
+    
+    def delete_depulicates(self, path):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        path [str, 0d]: path of poscars
+        """
+        poscars = sorted(os.listdir(path))
+        poscars_num = len(poscars)
+        same_poscars = []
+        for i in range(poscars_num):
+            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
+            for j in range(i+1, poscars_num):
+                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_poscars.append(poscars[i])
+        same_poscars = np.unique(same_poscars)
+        for i in same_poscars:
+            os.remove(f'{path}/{i}')
+        system_echo(f'Delete same structures: {same_poscars}')
+    
 
 if __name__ == '__main__':
     ssh = SSHTools()

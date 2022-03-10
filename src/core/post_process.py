@@ -1,16 +1,10 @@
 import os, sys
 import time
 import re
-import numpy as np
-
-from sklearn.cluster import DBSCAN
 
 from pymatgen.core.structure import Structure
-from pymatgen.core.lattice import Lattice
-from pymatgen.core.surface import SlabGenerator
 from pymatgen.symmetry.kpath import KPathSeek
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -103,37 +97,6 @@ class VASPoptimize(SSHTools, ListRWTools):
             sym_stru = anal_stru.get_refined_structure()
             sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
             sym_stru.to(filename=f'{optim_strs_sym_path}/{i}', fmt='poscar')
-            
-    def rotate_axis(self, path):
-        """
-        rotate axis to make atoms in xy plane and add vaccum layer
-        
-        Parameters
-        ----------
-        path [str, 0d]: structure save path
-        """
-        files = sorted(os.listdir(path))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
-        for i in poscars:
-            #get miller index of atom plane
-            stru = Structure.from_file(f'{path}/{i}')
-            latt = Lattice(stru.lattice.matrix)
-            cartesian = stru.cart_coords
-            miller_index = latt.get_miller_index_from_coords(cartesian, round_dp=0)
-            #use atom distribution to get miller index
-            if sum(np.abs(miller_index)) > 10:
-                cluster_num = []
-                for coor in np.transpose(cartesian):
-                    clustering = DBSCAN(eps=.5, min_samples=1).fit(coor.reshape(-1,1))
-                    num = len(np.unique(clustering.labels_))
-                    cluster_num.append(num)
-                axis = np.argsort(cluster_num)[0]
-                miller_index = np.identity(3, dtype=int)[axis]
-            #generate slab poscar
-            slab = SlabGenerator(stru, miller_index=miller_index,
-                                 min_slab_size=.1, min_vacuum_size=15.0, center_slab=True)
-            surface = slab.get_slab()
-            surface.to(filename=f'{path}/{i}', fmt='poscar')
     
     def get_energy(self, path):
         """
@@ -161,8 +124,8 @@ class VASPoptimize(SSHTools, ListRWTools):
             energys.append([out, cur_E])
         self.write_list2d(f'{path}/Energy.dat', energys)
         system_echo(f'Energy file generated successfully!')
-        
-        
+
+    
 class PostProcess(VASPoptimize):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, wait_time=1):
@@ -243,15 +206,10 @@ class PostProcess(VASPoptimize):
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         self.add_symmetry_to_structure(optim_strs_path)
-        self.rotate_axis(optim_strs_path)
         self.get_energy(energy_path)
         self.remove_flag(optim_strs_path)
-        poscars = sorted(os.listdir(optim_strs_path))
-        num_optims = len(poscars)
-        node_assign = self.assign_node(num_optims)
-        for i, poscar in enumerate(poscars):
-            os.rename(f'{optim_strs_path}/{poscar}', 
-                      f'{optim_strs_path}/{poscar}-{node_assign[i]}')
+        self.delete_depulicates(optim_strs_path)
+        self.change_node_assign(optim_strs_path)
         system_echo(f'All jobs are completed --- Optimization')
     
     def run_pbe_band(self):
@@ -326,7 +284,7 @@ class PostProcess(VASPoptimize):
                             scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
                             #DPT --vdW optPBE
                             
-                            phonopy -d --dim="4 4 1"
+                            phonopy -d --dim="3 3 1"
                             n=`ls | grep POSCAR- | wc -l`
                             for i in `seq -f%03g 1 $n`
                             do
@@ -352,7 +310,7 @@ class PostProcess(VASPoptimize):
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                            #rm -rf $p FINISH-$p
+                            rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
@@ -588,7 +546,7 @@ class PostProcess(VASPoptimize):
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
                                 [[' = '] for i in range(5)], 
-                                [['XXX'], ['4 4 1'], [band], [band_label], ['write']]] # output the file by columns
+                                [['XXX'], ['3 3 1'], [band], [band_label], ['write']]] # output the file by columns
                 self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
@@ -627,37 +585,7 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    
-    
-    stru = Structure.from_file('POSCAR-CCOP-0-0007-132')
-    anal_stru = SpacegroupAnalyzer(stru)
-    sym_stru = anal_stru.get_refined_structure()
-    sym_stru.to(filename=f'POSCAR-Sym-0-0007-132', fmt='poscar')
-    print(stru)
-    print(sym_stru)
-    
-    post = PostProcess()
-    structure = Structure.from_file('POSCAR-Slab-12-134-134')
-    k_path = KPathSeek(structure)
-    points, labels = k_path.get_kpoints(line_density=1, coords_are_cartesian=False)
-    labels = post.convert_special_k_labels(labels, ['GAMMA', 'SIGMA_0', 'LAMBDA_0', 'DELTA_0'], ['\Gamma', '\Sigma', '\Lambda', '\Delta'])
-    while '' in labels:
-        points.pop(labels.index(''))
-        labels.remove('')
-    phonon_points = [[[points[0], labels[0]]]]
-    for i in range(1, len(labels)-2, 2):    # find the continuous bands
-        phonon_points[-1].append([points[i], labels[i]])
-        if labels[i] != labels[i+1]:
-            phonon_points.append([[points[i+1], labels[i+1]]])
-    phonon_points[-1].append([points[-1], labels[-1]])
-    band, band_label = '', ''
-    for i, continuous_path in enumerate(phonon_points): # convert each continuous band to the required format
-        for point in continuous_path:   # e.g. 0.0 0.5 0.5  0.5 0.5 0.5  0.0 0.5 0.0,  0.0 0.0 0.0  0.5 0.0 0.0
-            band += '  {0}'.format(' '.join([f'{item:.3f}' for item in point[0]]))
-            band_label += ' ${0}$'.format(point[1])
-        band = band if i == len(phonon_points)-1 else band + ','
-    band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
-                    [[' = '] for i in range(5)], 
-                    [['XXX'], ['4 4 1'], [band], [band_label], ['write']]] # output the file by columns
-    post.write_list2d_columns(f'band.conf', band_conf, ['{0}', '{0}', '{0}'])  
-  
+    a = [[1,2], [3,4]]
+    for i in a:
+        print((a))
+        print(tuple(a))
