@@ -1,6 +1,7 @@
 import os, sys
 import time
 import re
+import numpy as np
 
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.kpath import KPathSeek
@@ -9,10 +10,11 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
+from core.search import GeoCheck
 from core.utils import ListRWTools, SSHTools, system_echo
 
 
-class VASPoptimize(SSHTools, ListRWTools):
+class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
     #optimize structure by VASP
     def __init__(self, recycle, wait_time=1):
         self.wait_time = wait_time
@@ -77,10 +79,12 @@ class VASPoptimize(SSHTools, ListRWTools):
             self.ssh_node(shell_script, ip)
         while not self.is_done(self.optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
+        self.remove_flag(self.optim_strs_path)
+        self.delete_same_poscars(self.optim_strs_path)
+        self.delete_energy_files(self.optim_strs_path, self.energy_path)
         self.get_energy(self.energy_path)
         system_echo(f'All jobs are completed --- Optimization')
-        self.remove_flag(self.optim_strs_path)
-
+        
     def add_symmetry_to_structure(self, path):
         """
         find symmetry unit of structure
@@ -98,6 +102,21 @@ class VASPoptimize(SSHTools, ListRWTools):
             sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
             sym_stru.to(filename=f'{optim_strs_sym_path}/{i}', fmt='poscar')
     
+    def delete_energy_files(self, poscar_path, energy_path):
+        """
+        delete duplicate energy files
+
+        Parameters
+        ----------
+        poscar_path [str, 0d]: poscars path
+        energy_path [str, 0d]: energy file path
+        """
+        poscars = os.listdir(poscar_path)
+        out = [i[4:] for i in os.listdir(energy_path)]
+        del_poscars = np.setdiff1d(out, poscars)
+        for i in del_poscars:
+            os.remove(f'{energy_path}/out-{i}')
+        
     def get_energy(self, path):
         """
         generate energy file of vasp outputs directory
@@ -126,7 +145,7 @@ class VASPoptimize(SSHTools, ListRWTools):
         system_echo(f'Energy file generated successfully!')
 
     
-class PostProcess(VASPoptimize):
+class PostProcess(VASPoptimize, GeoCheck):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
@@ -206,10 +225,10 @@ class PostProcess(VASPoptimize):
         while not self.is_done(optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         self.add_symmetry_to_structure(optim_strs_path)
-        self.get_energy(energy_path)
         self.remove_flag(optim_strs_path)
-        self.delete_depulicates(optim_strs_path)
+        self.delete_same_poscars(optim_strs_path)
         self.change_node_assign(optim_strs_path)
+        self.get_energy(energy_path)
         system_echo(f'All jobs are completed --- Optimization')
     
     def run_pbe_band(self):
@@ -585,7 +604,11 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    a = [[1,2], [3,4]]
-    for i in a:
-        print((a))
-        print(tuple(a))
+    def delete_energy_file(poscar_path, energy_path):
+        poscars = os.listdir(poscar_path)
+        out = [i[4:] for i in os.listdir(energy_path)]
+        del_poscars = np.setdiff1d(out, poscars)
+        for i in del_poscars:
+            os.remove(f'{energy_path}/out-{i}')
+        print(del_poscars)
+    delete_energy_file('test1', 'test2')

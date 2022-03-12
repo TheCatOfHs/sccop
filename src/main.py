@@ -116,6 +116,7 @@ class CrystalOptimization(ListRWTools):
         #self.property_calculate()
         
         #Adsorp sites calculate
+        system_echo('Begin Adsorp Sites Calculate')
         adsorp = AdsorpSites()
         adsorp.get_slab()
         if len(os.listdir(anode_strs_path)) > 0:

@@ -3,12 +3,14 @@ import time
 import re
 import numpy as np
 import matplotlib.pyplot as plt
-from sklearn.cluster import DBSCAN
+from sklearn.cluster import KMeans
+from collections import Counter
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Molecule, Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder, plot_slab
+from sympy import cartes
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -37,84 +39,100 @@ class AdsorpSites(ListRWTools, SSHTools):
     
     def get_slab(self):
         """
-        optimize slab configurations
+        generate slab structure
         """
+        #calculate phonon spectrum
+        self.rotate_axis(optim_strs_path, 0, 2)
+        self.change_node_assign(optim_strs_path)
+        self.post.run_phonon()
         #get and optimize slab structures
         poscars = sorted(os.listdir(optim_strs_path))
-        self.rotate_axis(optim_strs_path, 10)
+        self.rotate_axis(optim_strs_path, 15)
         self.run_optimization(poscars, 1, optim_strs_path, 
                               self.local_optim_strs_path, 
                               self.local_anode_energy_path)
+        #choose dynamic stable structures
         for i in poscars:
             os.remove(f'{optim_strs_path}/{i}')
-        #reorient z axis
-        self.rotate_axis(optim_strs_path, 0)
         poscars_relax = sorted(os.listdir(optim_strs_path))
         for i in poscars_relax:
             os.rename(f'{optim_strs_path}/{i}',
                       f'{optim_strs_path}/{i[:-6]}')
-        #calculate phonon spectrum
-        self.change_node_assign(optim_strs_path)
-        self.post.run_phonon()
-    
-    def rotate_axis(self, path, vacuum_size):
+        self.rotate_axis(optim_strs_path, 0)
+        self.select_poscar()
+
+    def rotate_axis(self, path, vacuum_size, repeat=1):
         """
         rotate axis to make atoms in xy plane and add vaccum layer
         
         Parameters
         ----------
-        path [str, 0d]: structure save path
+        path [str, 0d]: optimized structure save path
+        vaccum_size [float, 0d]: size of vaccum layer
+        repeat [int, 0d]:
         """
         files = sorted(os.listdir(path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
-        for i in poscars:
-            #get miller index of atom plane
-            stru = Structure.from_file(f'{path}/{i}')
-            latt = Lattice(stru.lattice.matrix)
-            cartesian = stru.cart_coords
-            miller_index = latt.get_miller_index_from_coords(cartesian, round_dp=0)
-            #use atom distribution to get miller index
-            if sum(np.abs(miller_index)) > 10:
-                cluster_num = []
-                for coor in np.transpose(cartesian):
-                    clustering = DBSCAN(eps=.5, min_samples=1).fit(coor.reshape(-1,1))
-                    num = len(np.unique(clustering.labels_))
-                    cluster_num.append(num)
-                axis = np.argsort(cluster_num)[0]
-                miller_index = np.identity(3, dtype=int)[axis]
-            #generate slab poscar
-            slab = SlabGenerator(stru, miller_index=miller_index,
-                                 min_slab_size=.1, min_vacuum_size=vacuum_size, center_slab=True)
-            surface = slab.get_slab()
-            surface.to(filename=f'{path}/{i}', fmt='poscar')
+        for _ in range(repeat):
+            for i in poscars:
+                #import structure
+                stru = Structure.from_file(f'{path}/{i}')
+                latt = Lattice(stru.lattice.matrix)
+                cart_coor = stru.cart_coords
+                frac_coor = stru.frac_coords
+                #calculate miller index
+                miller_index = self.get_miller_index(latt, cart_coor, frac_coor)
+                #generate slab poscar
+                slab = SlabGenerator(stru, miller_index=miller_index, min_slab_size=.1,
+                                     min_vacuum_size=vacuum_size, center_slab=True)
+                surface = slab.get_slab()
+                surface.to(filename=f'{path}/{i}', fmt='poscar')
     
-    def relax(self, atom, repeat):
+    def get_miller_index(self, lattice, cart_coor, frac_coor):
         """
-        optimize adsorbate structures
+        find coplanar atoms
         
         Parameters
         ----------
-        atom [int, 1d]: adsorbate atom
-        repeat [int, tuple]: size of supercell
-        """
-        self.select_poscar()
-        files = sorted(os.listdir(anode_strs_path))
-        for file in files:
-            #generate adsorp poscars
-            adsorps = self.generate_poscar(file, atom, repeat)
-            system_echo(f'adsorp poscar generate --- {file}')
-            #optimize adsorp poscars
-            monitor_path = f'{adsorp_strs_path}/{file}'
-            local_strs_path = f'{self.local_adsorp_strs_path}/{file}' 
-            local_energy_path = f'{self.local_adsorp_energy_path}/{file}'
-            os.mkdir(f'{adsorp_energy_path}/{file}')
-            self.run_optimization(adsorps, 1, monitor_path, 
-                                  local_strs_path, local_energy_path)
-            system_echo(f'adsorp structure relaxed --- {file}')
+        lattice [obj]: lattice object of structure
+        cart_coor [float, 2d, np]: cartesian coordinate
+        frac_coor [float, 2d, np]: fraction coordinate
 
+        Returns
+        ----------
+        miller_index [float, 1d]: miller index of atom plane
+        """
+        #assume all atoms are coplanar
+        volume = 0
+        vectors = cart_coor - cart_coor[0]
+        vec1, vec2 = vectors[1:3]
+        normal = np.cross(vec1, vec2)
+        for i in vectors:
+            volume += np.abs(np.dot(normal, i))
+        if volume < .2:
+            flag = False
+            miller_index = lattice.get_miller_index_from_coords(cart_coor, round_dp=0)
+        else:
+            flag = True
+        #if atoms are distributed on two plane
+        if flag:
+            stds = []
+            for coor in np.transpose(frac_coor):
+                kmeans = KMeans(2, random_state=0).fit(coor.reshape(-1,1))
+                clusters = kmeans.labels_
+                order = np.argsort(clusters)
+                sort_coor = coor[order]
+                a_num = dict(Counter(clusters))[0]
+                a_std = np.std(sort_coor[:a_num])
+                b_std = np.std(sort_coor[a_num:])
+                stds.append(a_std + b_std)
+            std_min = np.argsort(stds)[0]
+            miller_index = np.identity(3, dtype=int)[std_min]
+        return miller_index
+    
     def select_poscar(self):
         """
-        select poscar whose atoms in xy plane
+        select poscar that is dynamic stable
         """
         files = sorted(os.listdir(optim_strs_path))
         for i in files:
@@ -152,6 +170,29 @@ class AdsorpSites(ListRWTools, SSHTools):
         else:
             flag = False
         return flag
+    
+    def relax(self, atom, repeat):
+        """
+        optimize adsorbate structures
+        
+        Parameters
+        ----------
+        atom [int, 1d]: adsorbate atom
+        repeat [int, tuple]: size of supercell
+        """
+        files = sorted(os.listdir(anode_strs_path))
+        for file in files:
+            #generate adsorp poscars
+            adsorps = self.generate_poscar(file, atom, repeat)
+            system_echo(f'adsorp poscar generate --- {file}')
+            #optimize adsorp poscars
+            monitor_path = f'{adsorp_strs_path}/{file}'
+            local_strs_path = f'{self.local_adsorp_strs_path}/{file}' 
+            local_energy_path = f'{self.local_adsorp_energy_path}/{file}'
+            os.mkdir(f'{adsorp_energy_path}/{file}')
+            self.run_optimization(adsorps, 1, monitor_path, 
+                                  local_strs_path, local_energy_path)
+            system_echo(f'adsorp structure relaxed --- {file}')
     
     def generate_poscar(self, file, atom, repeat):
         """
@@ -393,6 +434,7 @@ class Battery(SSHTools):
     
 if __name__ == '__main__':
     adsorp = AdsorpSites()
+    #adsorp.rotate_axis('test', 0, 2)
     adsorp.get_slab()
     if len(os.listdir(anode_strs_path)) > 0:
         adsorp.relax([11], (1,1,1))

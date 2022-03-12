@@ -5,6 +5,8 @@ import torch
 import argparse
 from functools import reduce
 
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -401,6 +403,31 @@ class GeoCheck:
         else:
             return False
     
+    def delete_same_poscars(self, path):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        path [str, 0d]: path of poscars
+        """
+        poscars = sorted(os.listdir(path))
+        poscars_num = len(poscars)
+        same_poscars = []
+        for i in range(poscars_num):
+            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
+            for j in range(i+1, poscars_num):
+                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_poscars.append(poscars[i])
+        same_poscars = np.unique(same_poscars)
+        for i in same_poscars:
+            os.remove(f'{path}/{i}')
+        system_echo(f'Delete same structures: {same_poscars}')
+        
     
 class Search(ListRWTools, GeoCheck):
     #Searching on PES by machine-learned potential
@@ -434,7 +461,7 @@ class Search(ListRWTools, GeoCheck):
         type_buffer.append(type_1)
         energy_buffer.append([value_1])
         for _ in range(steps):
-            pos_2, type_2 = self.step(pos_1, type_1, value_1)
+            pos_2, type_2 = self.step(pos_1, type_1)
             value_2 = self.predict(pos_2, type_2)
             if self.metropolis(value_1, value_2, self.T):
                 pos_1 = pos_2
@@ -447,9 +474,14 @@ class Search(ListRWTools, GeoCheck):
         self.save(pos_buffer, type_buffer,
                   energy_buffer, path, node)
     
-    def step(self, pos, type, value):
+    def step(self, pos, type):
         """
         modify atom position under the geometry constrain
+        
+        Parameters
+        ----------
+        pos [int, 1d]: inital position of atom
+        type [int, 1d]: initial type of atom
         
         Returns
         ----------
@@ -457,28 +489,28 @@ class Search(ListRWTools, GeoCheck):
         type [int, 1d]: type of atom after 1 SA step
         """
         flag = False
-        if value < threshold:
-            exchange = 0.5
-        else:
-            exchange = 0.01
-        num_atom = len(pos)
+        atom_num = len(pos)
         while not flag:
+            #generate actions
             new_pos = pos.copy()
-            if np.random.rand() < exchange:
-                actions = self.exchange_action(type)
-                num_actions = len(actions)
-                idx = np.random.randint(0, num_actions)
-                idx_1, idx_2 = actions[idx]
+            nbr_dis = self.transfer.grid_nbr_dis[new_pos]
+            nbr_idx = self.transfer.grid_nbr_idx[new_pos]
+            idx = np.random.randint(0, atom_num)
+            actions_mv = self.action_filter(idx, nbr_dis, nbr_idx)
+            actions_ex = self.exchange_action(type)
+            replace_ex = [-1 for _ in actions_ex]
+            actions = np.concatenate((actions_mv, replace_ex))
+            #exchange atoms or move atom
+            point = np.random.choice(actions)
+            if point == -1:
+                actions_num = len(actions_ex)
+                idx = np.random.randint(0, actions_num)
+                idx_1, idx_2 = actions_ex[idx]
                 new_pos[idx_1], new_pos[idx_2] = \
                     new_pos[idx_2], new_pos[idx_1]
             else:
-                nbr_dis = self.transfer.grid_nbr_dis[new_pos]
-                nbr_idx = self.transfer.grid_nbr_idx[new_pos]
-                idx = np.random.randint(0, num_atom)
-                actions= self.action_filter(idx, nbr_dis, nbr_idx)
-                point = np.random.choice(actions)
-                new_pos[idx] = point
-            flag = self.overlay(new_pos, num_atom)
+                new_pos[idx] = point    
+            flag = self.overlay(new_pos, atom_num)
         return new_pos, type.copy()
     
     def exchange_action(self, type):

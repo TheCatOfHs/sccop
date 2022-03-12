@@ -179,8 +179,8 @@ class Select(ListRWTools, SSHTools):
         
         Returns
         ----------
-        mean_pred [float, 2d, tensor]: mean of predict
-        std_pred [float, 2d, tensor]: std of predict
+        mean_pred [float, 1d, tensor]: mean of predict
+        std_pred [float, 1d, tensor]: std of predict
         crys_mean [float, 2d, tensor]: mean of crystal feature
         """
         model_pred, crys_fea = [], []
@@ -414,7 +414,7 @@ class Select(ListRWTools, SSHTools):
     def export(self, recycle, atom_pos, atom_type, grid_name):
         """
         export configurations after ccop
-
+        
         Parameters
         ----------
         recycle [int, 0d]: recycle times
@@ -422,18 +422,29 @@ class Select(ListRWTools, SSHTools):
         atom_type [int, 2d]: type of atom
         grid_name [int, 2d]: name of grid
         """
+        #delete duplicates in searching samples
         self.num_crys = len(atom_pos)
         system_echo(f'Training set---sample number: {self.num_crys}')
         atom_pos, atom_type, grid_name = \
             self.delete_duplicates(atom_pos, atom_type, grid_name)
         self.num_crys = len(atom_pos)
         system_echo(f'Delete duplicates---sample number: {self.num_crys}')
+        #predict energy and calculate crystal vector
         loader = self.dataloader(atom_pos, atom_type, grid_name)
         model_names = self.model_select()
         mean_pred, _, crys_mean = self.mean(model_names, loader)
         idx_all = np.arange(self.num_crys)
         mean_pred_all = mean_pred.cpu().numpy()
         crys_mean_all = crys_mean.cpu().numpy()
+        #filter structure by energy
+        energy_order = np.argsort(mean_pred_all)
+        filter_num = int(len(energy_order)*ratio_round)
+        filter = energy_order[:filter_num]
+        idx_all = idx_all[filter]
+        mean_pred_all = mean_pred_all[filter]
+        crys_mean_all = crys_mean_all[filter]
+        system_echo(f'Energy filter---sample number: {len(idx_all)}')
+        #export poscars
         crys_embedded = self.reduce(crys_mean_all)
         clusters = self.cluster(crys_embedded, num_poscars)
         idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
@@ -443,7 +454,7 @@ class Select(ListRWTools, SSHTools):
         if not os.path.exists(self.poscar_save_path):
             os.mkdir(self.poscar_save_path)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
-        system_echo(f'CCOP optimize configurations: {num_poscars}')
+        system_echo(f'CCOP optimize structures: {num_poscars}')
 
 
 class OptimSelect(Select, InitSampling, Transfer, SSHTools):
