@@ -48,7 +48,7 @@ class Transfer(ListRWTools):
         atom_fea [int, 2d, np]: atom feature
         """
         return self.elem_embed[atom_type]
-
+    
     def find_nbr_dis(self, atom_pos):
         """
         cutoff by n neighboring atoms

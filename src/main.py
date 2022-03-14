@@ -120,9 +120,11 @@ class CrystalOptimization(ListRWTools):
         adsorp = AdsorpSites()
         adsorp.get_slab()
         if len(os.listdir(anode_strs_path)) > 0:
-            adsorp.relax([11], (1,1,1))
+            adsorp.relax(11, (1,1,1))
             adsorp.sites_analysis(-1.3156)
+            adsorp.cluster_sites()
             adsorp.sites_plot()
+            adsorp.sites_plot(cluster=False)
         else:
             system_echo('No suitable adsorbates are found')
         

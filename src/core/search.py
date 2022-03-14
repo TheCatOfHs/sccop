@@ -426,7 +426,8 @@ class GeoCheck:
         same_poscars = np.unique(same_poscars)
         for i in same_poscars:
             os.remove(f'{path}/{i}')
-        system_echo(f'Delete same structures: {same_poscars}')
+        same_poscars_str = ' '.join(same_poscars)
+        system_echo(f'Delete same structures: {same_poscars_str}')
         
     
 class Search(ListRWTools, GeoCheck):

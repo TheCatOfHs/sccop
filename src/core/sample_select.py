@@ -3,24 +3,24 @@ import re
 import shutil
 import torch
 import numpy as np
+
 from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 from pymatgen.core.structure import Structure
 
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
+from core.utils import *
 from core.data_transfer import Transfer
-from core.utils import ListRWTools, SSHTools, system_echo
 from core.predict import CrystalGraphConvNet, batch_balance
 from core.predict import DataParallel, Normalizer
 from core.predict import PPMData, get_loader
 from core.initialize import InitSampling
 
 
-class Select(ListRWTools, SSHTools):
+class Select(ListRWTools, SSHTools, ClusterTools):
     #Select training samples by active learning
     def __init__(self, round,
                  batch_size=1024, num_workers=0):
@@ -307,41 +307,6 @@ class Select(ListRWTools, SSHTools):
                         random_state=0).fit(crys_embedded)
         return kmeans.labels_
     
-    def min_in_cluster(self, idx, mean_pred, clusters):
-        """
-        select lowest energy sample in each cluster
-
-        Parameters
-        ----------
-        idx [int, 1d, np]: index of samples in input
-        mean_pred [float, 1d, np]: average prediction
-        clusters [int, 1d, np]: cluster labels of samples
-        
-        Returns
-        ----------
-        idx_slt [int, 1d, np]: index of select samples
-        """
-        order = np.argsort(clusters)
-        sort_idx = idx[order]
-        sort_mean_pred = mean_pred[order]
-        sort_clusters = clusters[order]
-        min_idx, min_pred = 0, 1e10
-        last_cluster = sort_clusters[0]
-        idx_slt = []
-        for i, cluster in enumerate(sort_clusters):
-            if cluster == last_cluster:
-                pred = sort_mean_pred[i]
-                if min_pred > pred:
-                    min_idx = sort_idx[i]
-                    min_pred = pred                     
-            else:
-                idx_slt.append(min_idx)
-                last_cluster = cluster
-                min_idx = sort_idx[i]
-                min_pred = sort_mean_pred[i]
-        idx_slt.append(min_idx)
-        return np.array(idx_slt)
-    
     def write_POSCARs(self, idx, pos, type, grid_name):
         """
         write POSCAR files and corresponding pos, type file
@@ -414,7 +379,7 @@ class Select(ListRWTools, SSHTools):
     def export(self, recycle, atom_pos, atom_type, grid_name):
         """
         export configurations after ccop
-        
+
         Parameters
         ----------
         recycle [int, 0d]: recycle times
@@ -455,7 +420,12 @@ class Select(ListRWTools, SSHTools):
             os.mkdir(self.poscar_save_path)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize structures: {num_poscars}')
-
+        #export training set
+        os.mkdir(f'{record_path}/{recycle}')
+        self.write_list2d(f'{record_path}/{recycle}/atom_pos.dat', atom_pos)
+        self.write_list2d(f'{record_path}/{recycle}/atom_type.dat', atom_type)
+        self.write_list2d(f'{record_path}/{recycle}/grid_name.dat', grid_name)
+        
 
 class OptimSelect(Select, InitSampling, Transfer, SSHTools):
     #Select structures from low level optimization

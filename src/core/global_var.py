@@ -15,7 +15,7 @@ num_recycle = 3
 num_round = 10
 num_seed = 40
 num_poscars = 40
-num_optims = 18
+num_optims = 12
 ratio_round = 0.8
 
 #Initial Samples
@@ -25,6 +25,7 @@ min_dis_CSPD = 1.2
 num_CSPD = 48
 num_rand = 10000
 num_initial = 100
+maxatomn = 20
 
 #Training
 train_batchsize = 128

@@ -6,7 +6,6 @@ import numpy as np
 import pandas as pd
 from pymatgen.core.structure import Structure
 
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -139,7 +138,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         self.del_zip_latt()
         #structures generated randomly
         atom_pos, atom_type, grid_name, opt_idx= \
-            self.add_random(atom_pos, atom_type, grid_name, point_num)
+            self.add_random(recyc, atom_pos, atom_type, grid_name, point_num)
         #build grid
         grid_init = np.unique(grid_name)
         grid_origin = grid_init
@@ -213,12 +212,13 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         os.system(shell_script)
         self.delete_same_poscars(f'{poscar_path}/initial_strs_0')
         
-    def add_random(self, atom_pos, atom_type, grid_name, point_num):
+    def add_random(self, recyc, atom_pos, atom_type, grid_name, point_num):
         """
         add random samples
         
         Parameters
         ----------
+        recyc [int, 0d]: times of recyclings
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
@@ -231,21 +231,24 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         grid_name_new [int, 1d]: grid name
         opt_idx [int, 1d]: index of CSPD samples
         """
-        grid_num = len(grid_name)
+        #type pool with various number of atoms
+        type_pool = self.import_list2d(f'{record_path}/{recyc}/atom_type.dat', int)
+        type_num = len(type_pool)
+        #CSPD samples with random samples
         opt_idx, atom_pos_new, atom_type_new, grid_name_new = [], [], [], []
         for i, grid in enumerate(grid_name):
             atom_pos_new += [atom_pos[i]]
             atom_type_new += [atom_type[i]]
             grid_name_new += [grid_name[i]]
             opt_idx += [len(atom_pos_new)-1]
-            #random sample
+            #sampling on different grids
             points = [i for i in range(point_num[i])]
             grid_name_new += [grid for _ in range(num_rand)]
             for _ in range(num_rand):
-                seed = random.randint(0, grid_num-1)
-                atom_num = len(atom_type[seed])
+                seed = random.randint(0, type_num-1)
+                atom_num = len(type_pool[seed])
                 atom_pos_new += [random.sample(points, atom_num)]
-                atom_type_new += [atom_type[seed]]
+                atom_type_new += [type_pool[seed]]
         return atom_pos_new, atom_type_new, grid_name_new, opt_idx
     
     def structure_in_grid(self, recyc, grain):
@@ -319,6 +322,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         os.mkdir(model_path)
         os.mkdir(search_path)
         os.mkdir(vasp_out_path)
+        os.mkdir(record_path)
         os.mkdir(grid_path)
         os.mkdir(grid_poscar_path)
         os.mkdir(grid_prop_path)

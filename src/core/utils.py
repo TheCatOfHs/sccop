@@ -290,6 +290,47 @@ class SSHTools:
             flag = True
         return flag
     
+    
+class ClusterTools:
+    #
+    def __init__(self):
+        pass
+    
+    def min_in_cluster(self, idx, value, clusters):
+        """
+        select lowest value sample in each cluster
+
+        Parameters
+        ----------
+        idx [int, 1d, np]: index of samples in input
+        value [float, 1d, np]: average prediction
+        clusters [int, 1d, np]: cluster labels of samples
+        
+        Returns
+        ----------
+        idx_slt [int, 1d, np]: index of select samples
+        """
+        order = np.argsort(clusters)
+        sort_idx = idx[order]
+        sort_value = value[order]
+        sort_clusters = clusters[order]
+        min_idx, min_value = 0, 1e10
+        last_cluster = sort_clusters[0]
+        idx_slt = []
+        for i, cluster in enumerate(sort_clusters):
+            if cluster == last_cluster:
+                pred = sort_value[i]
+                if min_value > pred:
+                    min_idx = sort_idx[i]
+                    min_value = pred                     
+            else:
+                idx_slt.append(min_idx)
+                last_cluster = cluster
+                min_idx = sort_idx[i]
+                min_value = sort_value[i]
+        idx_slt.append(min_idx)
+        return np.array(idx_slt)
+    
 
 if __name__ == '__main__':
     ssh = SSHTools()
