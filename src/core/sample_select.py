@@ -7,7 +7,6 @@ import numpy as np
 from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
-from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -17,7 +16,6 @@ from core.data_transfer import Transfer
 from core.predict import CrystalGraphConvNet, batch_balance
 from core.predict import DataParallel, Normalizer
 from core.predict import PPMData, get_loader
-from core.initialize import InitSampling
 
 
 class Select(ListRWTools, SSHTools, ClusterTools):
@@ -421,33 +419,53 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize structures: {num_poscars}')
         #export training set
-        os.mkdir(f'{record_path}/{recycle}')
-        self.write_list2d(f'{record_path}/{recycle}/atom_pos.dat', atom_pos)
-        self.write_list2d(f'{record_path}/{recycle}/atom_type.dat', atom_type)
-        self.write_list2d(f'{record_path}/{recycle}/grid_name.dat', grid_name)
+        os.mkdir(f'{record_path}/{recycle+1}')
+        self.write_list2d(f'{record_path}/{recycle+1}/atom_pos.dat', atom_pos)
+        self.write_list2d(f'{record_path}/{recycle+1}/atom_type.dat', atom_type)
+        self.write_list2d(f'{record_path}/{recycle+1}/grid_name.dat', np.transpose([grid_name]))
         
 
-class OptimSelect(Select, InitSampling, Transfer, SSHTools):
+class OptimSelect(ListRWTools, SSHTools, ClusterTools):
     #Select structures from low level optimization
-    def __init__(self, round):
-        Select.__init__(self, round)
-        Transfer.__init__(self, 0)
-        self.elem_embed = self.import_list2d(
-            atom_init_file, int, numpy=True)
+    def __init__(self):
         if not os.path.exists(ccop_out_path):
             os.mkdir(ccop_out_path)
     
     def optim_select(self):
         """
         select optimized structuers from initial_X
-        choose different structures in low energy configuration
+        select top k minimal energy structures
         """
         #import optimized energy from each round
+        poscars, poscars_full, energys = self.collect()
+        #copy poscars in each round
+        for poscar in poscars_full:
+            shutil.copy(poscar, ccop_out_path)
+        index, drop = self.delete_same_names(ccop_out_path, poscars)
+        #delete duplicates
+        if len(drop) > 0:
+            for poscar in poscars[drop]:
+                os.remove(f'{ccop_out_path}/{poscar}')
+        #select top k poscars
+        energys = energys[index]
+        poscars = poscars[index]
+        order = np.argsort(energys)
+        for poscar in poscars[order[num_optims:]]:
+            os.remove(f'{ccop_out_path}/{poscar}')
+        #write selected poscars
+        self.change_node_assign(ccop_out_path)
+        select_energy = energys[order[:num_optims]]
+        system_echo(f'Optimize configurations: {select_energy}')
+    
+    def collect(self):
+        """
+        collect poscars and corresponding energys from each recycle
+        """
         poscars, poscars_full, energys = [], [], []
         for i in range(num_recycle):
-            round = f'initial_strs_{i+1}'
-            stru_path = f'{poscar_path}/{round}'
-            energy_file = f'{vasp_out_path}/{round}/Energy.dat'
+            recyc = f'initial_strs_{i+1}'
+            stru_path = f'{poscar_path}/{recyc}'
+            energy_file = f'{vasp_out_path}/{recyc}/Energy.dat'
             energy_dat = self.import_list2d(energy_file, str, numpy=True)
             poscar, energy = np.transpose(energy_dat)
             poscar = [i[4:] for i in poscar]
@@ -456,50 +474,8 @@ class OptimSelect(Select, InitSampling, Transfer, SSHTools):
             poscars_full = np.concatenate((poscars_full, full))
             energys = np.concatenate((energys, energy))
         energys = np.array(energys, dtype='float32')
-        #filter structure by energy
-        energy_order = np.argsort(energys)
-        filter_num = int(len(energy_order)*ratio_round)
-        filter = energy_order[:filter_num]
-        poscars = poscars[filter]
-        poscars_full = poscars_full[filter]
-        energys = energys[filter]
-        #copy low energy structures from each round
-        for poscar in poscars_full:
-            shutil.copy(poscar, ccop_out_path)
-        num_crys = len(poscars)
-        #transfer poscar into input of PPM
-        atom_feas, nbr_feas, nbr_fea_idxs = [], [], []
-        for poscar in poscars:
-            stru = Structure.from_file(f'{ccop_out_path}/{poscar}', sort=True)
-            atom_type = self.get_atom_number(stru)
-            atom_fea = self.atom_initializer(atom_type)
-            nbr_fea_idx, nbr_dis = self.near_property(stru, cutoff, near=self.nbr)
-            nbr_fea = self.expand(nbr_dis)
-            atom_feas.append(atom_fea)
-            nbr_feas.append(nbr_fea)
-            nbr_fea_idxs.append(nbr_fea_idx)
-        #load data and get crystal vectors
-        data = PPMData(atom_feas, nbr_feas, nbr_fea_idxs, energys)
-        loader = get_loader(data, 256, 0)
-        model_names = self.model_select()
-        _, _, crys_mean = self.mean(model_names, loader)
-        #select structures by crystal vectors
-        idx_all = np.arange(num_crys)
-        crys_mean_all = crys_mean.cpu().numpy()
-        crys_embedded = self.reduce(crys_mean_all)
-        clusters = self.cluster(crys_embedded, num_optims)
-        idx_slt = self.min_in_cluster(idx_all, energys, clusters)
-        idx_drop = np.setdiff1d(idx_all, idx_slt)
-        for i in idx_drop:
-            os.remove(f'{ccop_out_path}/{poscars[i]}')
-        #write selected poscars
-        poscars = sorted(os.listdir(ccop_out_path))
-        node_assign = self.assign_node(num_optims)
-        for i, poscar in enumerate(poscars):
-            os.rename(f'{ccop_out_path}/{poscar}', 
-                      f'{ccop_out_path}/POSCAR-{i+1:02.0f}-{node_assign[i]}')
-        system_echo(f'Optimize configurations: {num_optims}')
-        
+        return poscars, poscars_full, energys
+    
     
 class FeatureExtractNet(CrystalGraphConvNet):
     #Calculate crys_fea
@@ -542,5 +518,6 @@ if __name__ == '__main__':
     end = time.time()
     print(end - start)
     '''
-    opt_slt = OptimSelect(1)
+    num_recycle = 2
+    opt_slt = OptimSelect()
     opt_slt.optim_select()

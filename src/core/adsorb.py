@@ -21,23 +21,23 @@ from core.post_process import PostProcess
 from core.search import GeoCheck
 
 
-class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
-    #Find unequal adsorption sites and calculate formation energy
+class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
+    #Find unequal adsorbtion sites and calculate formation energy
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
         self.calculation_path = '/local/ccop/vasp'
         self.local_optim_strs_path = f'/local/ccop/{optim_strs_path}'
         self.local_anode_energy_path = f'/local/ccop/{anode_energy_path}'
-        self.local_adsorp_strs_path = f'/local/ccop/{adsorp_strs_path}'
-        self.local_adsorp_energy_path = f'/local/ccop/{adsorp_energy_path}'
+        self.local_adsorb_strs_path = f'/local/ccop/{adsorb_strs_path}'
+        self.local_adsorb_energy_path = f'/local/ccop/{adsorb_energy_path}'
         self.post = PostProcess()
-        if not os.path.exists(adsorp_path):
-            os.mkdir(adsorp_path)
+        if not os.path.exists(adsorb_path):
+            os.mkdir(adsorb_path)
             os.mkdir(anode_strs_path)
             os.mkdir(anode_energy_path)
-            os.mkdir(adsorp_strs_path)
-            os.mkdir(adsorp_energy_path)
-            os.mkdir(adsorp_analysis_path)
+            os.mkdir(adsorb_strs_path)
+            os.mkdir(adsorb_energy_path)
+            os.mkdir(adsorb_analysis_path)
     
     def get_slab(self):
         """
@@ -45,8 +45,7 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         """
         #calculate phonon spectrum
         self.rotate_axis(optim_strs_path, 0, 2)
-        self.change_node_assign(optim_strs_path)
-        self.post.run_phonon()
+        #self.post.run_phonon()
         #get and optimize slab structures
         poscars = sorted(os.listdir(optim_strs_path))
         self.rotate_axis(optim_strs_path, 15)
@@ -54,6 +53,7 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                               self.local_optim_strs_path, 
                               self.local_anode_energy_path)
         #choose dynamic stable structures
+        '''
         for i in poscars:
             os.remove(f'{optim_strs_path}/{i}')
         poscars_relax = sorted(os.listdir(optim_strs_path))
@@ -62,7 +62,8 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                       f'{optim_strs_path}/{i[:-6]}')
         self.rotate_axis(optim_strs_path, 0)
         self.select_poscar()
-
+        '''
+        
     def rotate_axis(self, path, vacuum_size, repeat=1):
         """
         rotate axis to make atoms in xy plane and add vaccum layer
@@ -162,7 +163,7 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                 for _ in range(1000):
                     line = f.readline().strip()
                     ct = line.split()
-                    if ct != []:
+                    if len(ct) != 0:
                         freq = float(ct[1])
                         if freq < -.5:
                             counter += 1
@@ -184,34 +185,34 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         """
         files = sorted(os.listdir(anode_strs_path))
         for file in files:
-            #generate adsorp poscars
-            adsorps = self.generate_poscar(file, atom, repeat)
-            system_echo(f'adsorp poscar generate --- {file}')
-            #optimize adsorp poscars
-            monitor_path = f'{adsorp_strs_path}/{file}'
-            local_strs_path = f'{self.local_adsorp_strs_path}/{file}' 
-            local_energy_path = f'{self.local_adsorp_energy_path}/{file}'
-            os.mkdir(f'{adsorp_energy_path}/{file}')
-            self.run_optimization(adsorps, 1, monitor_path, 
+            #generate adsorb poscars
+            adsorbs = self.generate_poscar(file, atom, repeat)
+            system_echo(f'adsorb poscar generate --- {file}')
+            #optimize adsorb poscars
+            monitor_path = f'{adsorb_strs_path}/{file}'
+            local_strs_path = f'{self.local_adsorb_strs_path}/{file}' 
+            local_energy_path = f'{self.local_adsorb_energy_path}/{file}'
+            os.mkdir(f'{adsorb_energy_path}/{file}')
+            self.run_optimization(adsorbs, 1, monitor_path, 
                                   local_strs_path, local_energy_path)
-            system_echo(f'adsorp structure relaxed --- {file}')
+            system_echo(f'adsorb structure relaxed --- {file}')
     
     def generate_poscar(self, file, atom, repeat):
         """
-        generate adsorp POSCARs according to 
+        generate adsorb POSCARs according to 
         Montoya, J.H., Persson, K.A. A npj Comput Mater 3, 14 (2017). 
         
         Parameters
         ----------
-        file [str, 0d]: name of adsorped file
+        file [str, 0d]: name of adsorbed file
         atom [int, 1d]: atom number of adsorbate
         repeat [int, tuple]: size of supercell
         
         Returns
         ---------
-        adsorp_names [str, 1d]: name of adsorp poscars
+        adsorb_names [str, 1d]: name of adsorb poscars
         """
-        #get adsorp structure
+        #get adsorb structure
         surface = Structure.from_file(f'{anode_strs_path}/{file}')
         slab = SlabGenerator(surface, miller_index=(0,0,1),
                              min_slab_size=.1, min_vacuum_size=0, center_slab=True)
@@ -220,25 +221,25 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         adsorbate = Molecule([atom], [[0, 0, 0]])
         ads_strus_one_site = asf.generate_adsorption_structures(adsorbate, repeat=repeat)
         ads_strus_two_site = asf.adsorb_both_surfaces(adsorbate, repeat=repeat)
-        #get name of adsorp job
+        #get name of adsorb job
         one_num = len(ads_strus_one_site)
         two_num = len(ads_strus_two_site)
         node_assign = self.assign_node(one_num+two_num)
-        adsorp_names = []
-        #adsorp from one side
-        os.mkdir(f'{adsorp_strs_path}/{file}')
+        adsorb_names = []
+        #adsorb from one side
+        os.mkdir(f'{adsorb_strs_path}/{file}')
         for i, poscar in enumerate(ads_strus_one_site):
             node = node_assign[i]
-            name = f'{file}-Adsorp-One-{i:03.0f}-{node}'
-            poscar.to(filename=f'{adsorp_strs_path}/{file}/{name}', fmt='poscar')
-            adsorp_names.append(name)
-        #adsorp from both sides
+            name = f'{file}-adsorb-One-{i:03.0f}-{node}'
+            poscar.to(filename=f'{adsorb_strs_path}/{file}/{name}', fmt='poscar')
+            adsorb_names.append(name)
+        #adsorb from both sides
         for i, poscar in enumerate(ads_strus_two_site):
             node = node_assign[i+one_num]
-            name = f'{file}-Adsorp-Two-{i:03.0f}-{node}'
-            poscar.to(filename=f'{adsorp_strs_path}/{file}/{name}', fmt='poscar')
-            adsorp_names.append(name)
-        return adsorp_names
+            name = f'{file}-adsorb-Two-{i:03.0f}-{node}'
+            poscar.to(filename=f'{adsorb_strs_path}/{file}/{name}', fmt='poscar')
+            adsorb_names.append(name)
+        return adsorb_names
     
     def run_optimization(self, files, times, monitor_path, 
                          local_strs_path, local_energy_path):
@@ -264,12 +265,12 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            cp ../../{vasp_files_path}/Optimization/* .
+                            cp ../../{vasp_files_path}/Adsorb/* .
                             scp {gpu_node}:{local_strs_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            DPT --vdW optPBE
                             for i in {opt_times}
                             do
                                 cp INCAR_$i INCAR
@@ -286,7 +287,7 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                             fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{local_strs_path}/$p-Relax
-                                scp vasp-1.vasp {gpu_node}:{local_energy_path}/out-$p
+                                scp vasp-{opt_times}.vasp {gpu_node}:{local_energy_path}/out-$p
                             fi
                             cd ../
                             
@@ -300,48 +301,52 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         system_echo(f'All jobs are completed --- Optimization')
         self.remove_flag(monitor_path)
     
-    def sites_analysis(self, single):
+    def sites_analysis(self, single, repeat):
         """
-        position of adsorp sites and formation energy
+        position of adsorb sites and formation energy
         
         Parameters
         ----------
-        single [float, 0d]: energy of simple substance 
+        single [float, 0d]: energy of simple substance
+        repeat [int, tuple]: size of supercell 
         """
-        poscars = sorted(os.listdir(adsorp_energy_path))
+        ratio = reduce(lambda x, y: x*y, repeat)
+        poscars = sorted(os.listdir(adsorb_energy_path))
+        pattern = 'POSCAR-[\w]*-[\w]*-[\w]*'
+        poscars = [i for i in poscars if not re.match(pattern, i)]
         for side in ['One', 'Two']:
             if side == 'One':
                 atom_num = 1
             else:
                 atom_num = 2
             for i in poscars:
-                compound = self.get_energy(f'{anode_energy_path}/out-{i}')
+                compound = ratio*self.get_energy(f'{anode_energy_path}/out-{i}')
                 sites = self.sites_coor(side, i)
                 form = self.formation_energy(side, i, atom_num, single, compound)
                 result = np.concatenate((sites, form), axis=1)
-                self.write_list2d(f'{adsorp_analysis_path}/{i}-{side}.dat', result)
-        system_echo(f'Adsorp sites analysis finished: {i}')
+                self.write_list2d(f'{adsorb_analysis_path}/{i}-{side}.dat', result)
+                system_echo(f'adsorb sites analysis finished: {i}')
     
     def sites_coor(self, side, poscar):
         """
-        get cartesian coordinate of adsorp
+        get cartesian coordinate of adsorb
         
         Parameters
         ----------
-        side [str, 0d]: adsorp side
+        side [str, 0d]: adsorb side
         poscar [str, 0d]: name of relax structure 
 
         Returns
         ----------
         sites [float, 2d, np]: position of adsorbates
         """
-        files = sorted(os.listdir(f'{adsorp_strs_path}/{poscar}'))
+        files = sorted(os.listdir(f'{adsorb_strs_path}/{poscar}'))
         pattern = f'{poscar}-[\w]*-{side}-[\w]*-[\w]*-Relax'
         poscars = [i for i in files if re.match(pattern, i)]
-        poscars = [i[:-6] for i in poscars]
+        #poscars = [i[:-6] for i in poscars]
         names, sites = [], []
         for i in poscars:
-            stru = Structure.from_file(f'{adsorp_strs_path}/{poscar}/{i}')
+            stru = Structure.from_file(f'{adsorb_strs_path}/{poscar}/{i}')
             sites.append(stru.cart_coords[-1])
             names.append([i])
         return np.concatenate((names, sites), axis=1)
@@ -352,9 +357,9 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         
         Parameters
         ----------
-        side [str, 0d]: adsorp side
+        side [str, 0d]: adsorb side
         poscar [str, 0d]: name of poscar
-        atom_num [int, 0d]: number of adsorp atoms
+        atom_num [int, 0d]: number of adsorb atoms
         energy_single [float, 0d]: energy of simple substance
         energy_compound [float, 0d]: energy of compound
         
@@ -362,12 +367,12 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
         ----------
         formations [float, 2d, np]: formation energy
         """
-        files = sorted(os.listdir(f'{adsorp_energy_path}/{poscar}'))
+        files = sorted(os.listdir(f'{adsorb_energy_path}/{poscar}'))
         pattern = f'out-{poscar}-[\w]*-{side}-[\w]*-[\w]*'
         poscars = [i for i in files if re.match(pattern, i)]
         formations = []
         for i in poscars:
-            energy = self.get_energy(f'{adsorp_energy_path}/{poscar}/{i}')
+            energy = self.get_energy(f'{adsorb_energy_path}/{poscar}/{i}')
             delta_E = energy - (atom_num*single + compound)
             formations.append(delta_E)
         return np.transpose([formations])
@@ -389,56 +394,67 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
 
     def cluster_sites(self, max_sites=4):
         """
-        cluster adsorp sites by cartesian coordinates 
-        and choose the lowest energy sites as adsorp site
+        cluster adsorb sites by cartesian coordinates 
+        and choose the lowest energy sites as adsorb site
         
         Parameters
         ----------
         max_sites [int, 0d]: max number of clusters
         """
-        poscars = sorted(os.listdir(adsorp_energy_path))
+        poscars = sorted(os.listdir(adsorb_energy_path))
+        pattern = 'POSCAR-[\w]*-[\w]*-[\w]*'
+        poscars = [i for i in poscars if not re.match(pattern, i)]
         for side in ['One', 'Two']:
             for poscar in poscars:
-                #cluster adsorp sites
-                file = f'{adsorp_analysis_path}/{poscar}-{side}.dat'
+                #cluster adsorb sites
+                file = f'{adsorb_analysis_path}/{poscar}-{side}.dat'
                 sites = self.import_list2d(file, str, numpy=True)
+                #delete duplicates
+                path = f'{adsorb_strs_path}/{poscar}'
+                index, _ = self.delete_same_names(path, sites[:,0])
+                sites = sites[index]
+                #cluster sites
                 coors = np.array(sites[:,1:3], dtype=float)
+                if len(coors) < max_sites:
+                    max_sites = len(coors)
                 kmeans = KMeans(max_sites, random_state=0).fit(coors)
                 clusters = kmeans.labels_
                 idx_all = np.arange(len(clusters))
                 values = np.array(sites[:,-1], dtype=float)
                 idx = self.min_in_cluster(idx_all, values, clusters)
                 cluster_sites = sites[idx]
-                #export adsorp sites
+                #export adsorb sites
                 v = values[idx]
                 energy_order = np.argsort(v)
                 cluster_sites_order = cluster_sites[energy_order]
-                file = f'{adsorp_analysis_path}/{poscar}-{side}-Cluster.dat'
+                file = f'{adsorb_analysis_path}/{poscar}-{side}-Cluster.dat'
                 self.write_list2d(file, cluster_sites_order)
-    
+
     def sites_plot(self, cluster=True):
         """
-        plot formation energy of each adsorp site
+        plot formation energy of each adsorb site
         """
         if cluster:
             notation = '-Cluster'
         else:
             notation = ''
-        poscars = sorted(os.listdir(adsorp_energy_path))
+        poscars = sorted(os.listdir(adsorb_energy_path))
+        pattern = 'POSCAR-[\w]*-[\w]*-[\w]*'
+        poscars = [i for i in poscars if not re.match(pattern, i)]
         for side in ['One', 'Two']:
             for poscar in poscars:
                 #import data
-                file = f'{adsorp_analysis_path}/{poscar}-{side}{notation}.dat'
+                file = f'{adsorb_analysis_path}/{poscar}-{side}{notation}.dat'
                 sites = self.import_list2d(file, str, numpy=True)[:,1:]
                 x, y, _, v = np.transpose(np.array(sites, dtype=float))
-                #plot adsorp sites
+                #plot adsorb sites
                 figure = plt.figure()
                 ax = figure.add_subplot(1, 1, 1)
                 cm = plt.cm.get_cmap('jet')
-                plt.scatter(x, y, c=v, cmap=cm, s=80, marker='x', zorder=1000)
+                plt.scatter(x, y, c=v, cmap=cm, s=160, marker='x', zorder=1000)
                 #plot adsorbate
                 slab = Structure.from_file(f'{anode_strs_path}/{poscar}')
-                plot_slab(slab, ax, adsorption_sites=False)
+                plot_slab(slab, ax, adsorption_sites=False, repeat=3)
                 #appearance of figure
                 plt.title(f'{poscar}', fontsize=16)
                 ax.set_xlabel('x direction')
@@ -446,15 +462,15 @@ class AdsorpSites(ListRWTools, SSHTools, ClusterTools):
                 clb = plt.colorbar()
                 clb.ax.set_title('$\Delta$E/eV')
                 #export figure
-                file = f'{adsorp_analysis_path}/{poscar}-{side}{notation}.png'
+                file = f'{adsorb_analysis_path}/{poscar}-{side}{notation}.png'
                 plt.savefig(file, dpi=600)
                 plt.close('all')
 
 
-class MultiAdsorpSites(AdsorpSites, GeoCheck):
+class MultiAdsorbSites(AdsorbSites, GeoCheck):
     #
     def __init__(self):
-        AdsorpSites.__init__(self)
+        AdsorbSites.__init__(self)
     
     def generate_poscar(self, file, side, atom, repeat):
         """
@@ -463,18 +479,18 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
         Parameters
         ----------
         file [str, 0d]: file name of poscar
-        side [str, 0d]: adsorp side
+        side [str, 0d]: adsorb side
         atom [int, 0d]: atomic number of adsorbate
         repeat [int, tuple]: size of supercell
         """
         #get filling order
-        dat = f'{adsorp_analysis_path}/{file}-{side}-Cluster.dat'
+        dat = f'{adsorb_analysis_path}/{file}-{side}-Cluster.dat'
         cluster_sites = self.import_list2d(dat, str, numpy=True)
         poscars = cluster_sites[:,0]
         poscars_seq = self.filling_order(poscars)
         ratio = reduce(lambda x, y: x*y, repeat)
         #make directory of filled poscar
-        fill_path = f'{adsorp_strs_path}/{file}-{side}-Fill'
+        fill_path = f'{adsorb_strs_path}/{file}-{side}-Fill'
         if not os.path.exists(fill_path):
             os.mkdir(fill_path)
         for path, poscars in enumerate(poscars_seq):
@@ -483,12 +499,12 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
             #add atom by filling order
             sites_seq = []
             for poscar in poscars:
-                adsorp_coor = []
-                stru = Structure.from_file(f'{adsorp_strs_path}/{file}/{poscar}')
+                adsorb_coor = []
+                stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
                 for i, number in enumerate(stru.atomic_numbers):
                     if number == atom:
-                        adsorp_coor.append(stru.frac_coords[i])
-                seq = self.filling_sites(adsorp_coor, repeat)
+                        adsorb_coor.append(stru.frac_coords[i])
+                seq = self.filling_sites(adsorb_coor, repeat)
                 sites_seq += seq
             #export filling poscars
             for sites in sites_seq:
@@ -508,7 +524,7 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
         
         Parameters
         ----------
-        poscars [str, 1d]: poscar of adsorp sites
+        poscars [str, 1d]: poscar of adsorb sites
 
         Returns
         ----------
@@ -535,12 +551,11 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
         divide = [1/i for i in repeat]
         a, b, c = [[j for j in np.arange(0, 1, i)] for i in divide]
         dispalce = [i for i in itertools.product(a, b, c)]
-        coor_in_supercell = [i/repeat for i in frac_coor]
         #filling sites
         sites_seq = []
         for dis in dispalce:
             seq = []
-            for coor in coor_in_supercell:
+            for coor in frac_coor:
                 seq.append(coor + dis)
             sites_seq.append(seq)
         return sites_seq
@@ -557,69 +572,47 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
         files = sorted(os.listdir(anode_strs_path))
         for file in files:
             for side in ['One', 'Two']:
-                #generate adsorp poscars
-                adsorps = self.generate_poscar(file, side, atom, repeat)
-                system_echo(f'adsorp poscar generate --- {file}')
-                #optimize adsorp poscars
-                monitor_path = f'{adsorp_strs_path}/{file}-{side}-Fill'
-                local_strs_path = f'{self.local_adsorp_strs_path}/{file}-{side}-Fill' 
-                local_energy_path = f'{self.local_adsorp_energy_path}/{file}-{side}-Fill'
-                os.mkdir(f'{adsorp_energy_path}/{file}-{side}-Fill')
-                self.run_optimization(adsorps, 1, monitor_path, 
+                #generate adsorb poscars
+                adsorbs = self.generate_poscar(file, side, atom, repeat)
+                system_echo(f'adsorb poscar generate --- {file}')
+                #optimize adsorb poscars
+                monitor_path = f'{adsorb_strs_path}/{file}-{side}-Fill'
+                local_strs_path = f'{self.local_adsorb_strs_path}/{file}-{side}-Fill' 
+                local_energy_path = f'{self.local_adsorb_energy_path}/{file}-{side}-Fill'
+                os.mkdir(f'{adsorb_energy_path}/{file}-{side}-Fill')
+                self.run_optimization(adsorbs, 1, monitor_path, 
                                       local_strs_path, local_energy_path)
-            system_echo(f'adsorp structure relaxed --- {file}')
+            system_echo(f'adsorb structure relaxed --- {file}')
     
-    def sites_analysis(self, single):
+    def analysis(self, single, repeat):
         """
-        position of adsorp sites and formation energy
+        position of adsorb sites and formation energy
         
         Parameters
         ----------
         single [float, 0d]: energy of simple substance 
+        repeat [int, tuple]: size of supercell
         """
-        poscars = sorted(os.listdir(adsorp_energy_path))
+        ratio = reduce(lambda x, y: x*y, repeat)
+        poscars = sorted(os.listdir(adsorb_energy_path))
+        pattern = 'POSCAR-[\w]*-[\w]*-[\w]*'
+        poscars = [i for i in poscars if not re.match(pattern, i)]
         for side in ['One', 'Two']:
-            if side == 'One':
-                atom_num = 1
-            else:
-                atom_num = 2
             for i in poscars:
-                compound = self.get_energy(f'{anode_energy_path}/out-{i}')
-                form = self.formation_energy(side, i, atom_num, single, compound)
-                atom_ratio = self.get_ratio(side, i)
-                result = np.concatenate((atom_ratio, form), axis=1)
-                self.write_list2d(f'{adsorp_analysis_path}/{i}-{side}.dat', result)
-        system_echo(f'Adsorp sites analysis finished: {i}')
-
-    def get_ratio(self, side, poscar):
-        """
-
-        Parameters
-        ----------
-        side [str, 0d]: adsorp side One or Two
-        poscar [str, 0d]: name of poscar
-
-        Returns
-        ----------
-        atom_ratios [float, 2d, np]: ratio of adsorbate
-        """
-        poscars = sorted(os.listdir(f'{adsorp_energy_path}/{poscar}-{side}-Fill'))
-        atom_ratios = []
-        for i in poscars:
-            atom_num, ratio = i.split('-')[-3:-1]
-            atom_ratio = float(atom_num)/float(ratio)
-            atom_ratios.append(atom_ratio)
-        return np.transpose([atom_ratios])
+                compound = ratio*self.get_energy(f'{anode_energy_path}/out-{i}')
+                form = self.formation_energy(side, i, single, compound)
+                self.write_list2d(f'{adsorb_analysis_path}/{i}-{side}-Coverage.dat', form)
+                system_echo(f'adsorb sites analysis finished: {i}')
     
-    def formation_energy(self, side, poscar, atom_num, single, compound):
+    def formation_energy(self, side, poscar, single, compound):
         """
         calculate formation energy
         
         Parameters
         ----------
-        side [str, 0d]: adsorp side
+        side [str, 0d]: adsorb side
         poscar [str, 0d]: name of poscar
-        atom_num [int, 0d]: number of adsorp atoms
+        atom_num [int, 0d]: number of adsorb atoms
         energy_single [float, 0d]: energy of simple substance
         energy_compound [float, 0d]: energy of compound
         
@@ -627,14 +620,35 @@ class MultiAdsorpSites(AdsorpSites, GeoCheck):
         ----------
         formations [float, 2d, np]: formation energy
         """
-        poscars = sorted(os.listdir(f'{adsorp_energy_path}/{poscar}-{side}-Fill'))
-        formations = []
+        poscars = sorted(os.listdir(f'{adsorb_energy_path}/{poscar}-{side}-Fill'))
+        atom_ratios, formations, capacities, ocvs = [], [], [], []
         for i in poscars:
-            energy = self.get_energy(f'{adsorp_energy_path}/{poscar}/{i}')
+            #
+            atom_num, ratio = i.split('-')[-3:-1]
+            atom_num = float(atom_num)
+            ratio = float(ratio)
+            atom_ratio = atom_num/ratio/2
+            atom_ratios.append([atom_ratio])
+            #
+            energy = self.get_energy(f'{adsorb_energy_path}/{poscar}-{side}-Fill/{i}')
             delta_E = energy - (atom_num*single + compound)
-            formations.append(delta_E)
-        return np.transpose([formations])
+            formations.append([delta_E])
+            #
+            capacity = (atom_ratio*26.81*1e3)/46.8/2
+            capacities.append([capacity])
+            #
+            ocv = -delta_E/atom_num
+            ocvs.append([ocv])
+        result = np.concatenate((atom_ratios, formations, capacities, ocvs), axis=1)
+        result = sorted(result, key=lambda x: x[0])
+        return result
 
+
+class NEBSolver():
+    #
+    def __init__(self):
+        pass 
+    
 
 class Battery(SSHTools):
     #calculate properties of battery
@@ -655,17 +669,67 @@ class Battery(SSHTools):
     
     
 if __name__ == '__main__':
+    repeat = (2,2,1)
+    adsorb = AdsorbSites()
+    adsorb.get_slab()
     '''
-    adsorp = AdsorpSites()
-    adsorp.get_slab()
     if len(os.listdir(anode_strs_path)) > 0:
-        adsorp.relax(11, (1,1,1))
-        adsorp.sites_analysis(-1.3156)
-        adsorp.cluster_sites()
-        adsorp.sites_plot()
-        adsorp.sites_plot(cluster=False)
+        #adsorb.relax(11, repeat)
+        adsorb.sites_analysis(-1.3156, repeat)
+        adsorb.cluster_sites()
+        adsorb.sites_plot()
+        adsorb.sites_plot(cluster=False)
+        
+        multi_adsorb = MultiAdsorbSites()
+        multi_adsorb.relax(11, repeat)
+        multi_adsorb.analysis(-1.3156, repeat)
     else:
         system_echo('No suitable adsorbates are found')
     '''
-    multi_adsorp = MultiAdsorpSites()
-    multi_adsorp.relax(11, (2,2,1))
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    '''
+    from pymatgen.core.structure import Structure
+    from pymatgen.io.vasp.outputs import Chgcar, Outcar
+    from pymatgen.analysis.path_finder import ChgcarPotential, NEBPathfinder
+    from pymatgen.analysis.transition_state import NEBAnalysis
+    
+    poscar = Structure.from_file('test/POSCAR')
+    start = Structure.from_file('test/POSCAR_1')
+    end = Structure.from_file('test/POSCAR_2')
+    chgcar = Chgcar(poscar, {'total':np.array([[[1]]]), 'diff':np.array([[0,0,0]])})
+    potential = ChgcarPotential(chgcar.from_file('test/CHGCAR')).get_v()
+    neb = NEBPathfinder(start, end, [-1], potential, n_images=20)
+    for i, image in enumerate(neb.images):
+        image.to(filename=f'test/NEB_path/POSCAR-NEB-{i:02.0f}', fmt='poscar')
+    neb.plot_images('test/NEB_path/POSCAR-NEB')
+    
+    file = os.listdir('test/NEB_output')
+    contcars = [i for i in file if i[0]=='C']
+    outcars = [i for i in file if i[0]=='O']
+    strus, outs = [], []
+    for i in contcars:
+        strus.append(Structure.from_file(f'test/NEB_output/{i}'))
+    for i in outcars:
+        outs.append(Outcar(f'test/NEB_output/{i}'))
+    neb_analyzer = NEBAnalysis.from_outcars(outs, strus)
+    neb_plot = neb_analyzer.get_plot()
+    neb_plot.savefig('test/NEB_output/NEB.png', dpi=300)
+    '''

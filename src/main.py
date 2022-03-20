@@ -1,4 +1,5 @@
 import os
+import random
 import numpy as np
 
 from core.global_var import *
@@ -12,7 +13,7 @@ from core.search import ParallelWorkers, GeoCheck
 from core.predict import PPMData, PPModel
 from core.utils import ListRWTools, system_echo
 from core.post_process import PostProcess, VASPoptimize
-from core.adsorp import AdsorpSites
+from core.adsorb import AdsorbSites, MultiAdsorbSites
 
 
 class CrystalOptimization(ListRWTools):
@@ -81,11 +82,11 @@ class CrystalOptimization(ListRWTools):
                         grid_mutate, grid_store = self.lattice_mutate(recycle, grid_origin, grid_store)
                     system_echo(f'Grid pool: {grid_mutate}')
                 #Initial search start point
-                paths_num = num_paths_min + num_paths_rand
                 init_pos, init_type, init_grid = \
-                    self.generate_search_point(min_idx, all_idx, paths_num, mutate, grid_mutate, 
+                    self.generate_search_point(min_idx, all_idx, mutate, grid_mutate, 
                                                train_pos, train_type, train_grid)
                 #Search on grid
+                paths_num = len(init_grid)
                 self.workers.search(round+1, paths_num, init_pos, init_type, init_grid)
                 
                 #Select samples
@@ -108,27 +109,31 @@ class CrystalOptimization(ListRWTools):
             vasp.run_optimization_low()
         
         #Select optimized structures
-        opt_slt = OptimSelect(start+num_round)
+        opt_slt = OptimSelect()
         opt_slt.optim_select()
         #Optimize
         self.post.run_optimization()
         #Property calculate
         #self.property_calculate()
         
-        #Adsorp sites calculate
-        system_echo('Begin Adsorp Sites Calculate')
-        adsorp = AdsorpSites()
-        adsorp.get_slab()
+        #adsorb sites calculate
+        system_echo('Begin Adsorb Sites Calculate')
+        repeat = (2, 2, 1)
+        adsorb = AdsorbSites()
+        adsorb.get_slab()
         if len(os.listdir(anode_strs_path)) > 0:
-            adsorp.relax(11, (1,1,1))
-            adsorp.sites_analysis(-1.3156)
-            adsorp.cluster_sites()
-            adsorp.sites_plot()
-            adsorp.sites_plot(cluster=False)
+            adsorb.relax(11, repeat)
+            adsorb.sites_analysis(-1.3156, repeat)
+            adsorb.cluster_sites()
+            adsorb.sites_plot()
+            adsorb.sites_plot(cluster=False)
+            
+            multi_adsorb = MultiAdsorbSites()
+            multi_adsorb.relax(11, repeat)
+            multi_adsorb.analysis(-1.3156, repeat)
         else:
             system_echo('No suitable adsorbates are found')
-        
-        
+      
     def data_import(self, round):
         """
         import selected data from last round
@@ -263,7 +268,7 @@ class CrystalOptimization(ListRWTools):
         system_echo(f'Grid origin: {grid_origin}')
         return grid_mutate, grid_store
     
-    def generate_search_point(self, min_idx, all_idx, paths_num, mutate, grid_mutate, 
+    def generate_search_point(self, min_idx, all_idx, mutate, grid_mutate, 
                               train_pos, train_type, train_grid):
         """
         generate initial searching points
@@ -272,7 +277,6 @@ class CrystalOptimization(ListRWTools):
         ----------
         min_idx [int, 1d]: min energy index
         all_idx [int, 1d]: all sample index
-        paths_num [int, 0d]: number of searching path
         mutate [bool, 0d]: whether do lattice mutate
         grid_mutate [int, 1d, np]: name of mutate grid
         train_pos [int, 2d]: position of training set
@@ -286,24 +290,30 @@ class CrystalOptimization(ListRWTools):
         init_grid [int, 1d]: grid of initial points
         """
         init_pos, init_type, init_grid = [], [], []
+        greed_pos, greed_type, greed_grid = [], [], []
+        rand_pos, rand_type, rand_grid = [], [], []
         #greedy path
         for _ in range(num_paths_min):
             seed = np.random.choice(min_idx)
-            init_pos.append(train_pos[seed])
-            init_type.append(train_type[seed])
-            init_grid.append(train_grid[seed])
+            greed_pos.append(train_pos[seed])
+            greed_type.append(train_type[seed])
+            greed_grid.append(train_grid[seed])
         #random select path
         for _ in range(num_paths_rand):
             seed = np.random.choice(all_idx)
-            init_pos.append(train_pos[seed])
-            init_type.append(train_type[seed])
-            init_grid.append(train_grid[seed])
-        #lattice mutate
+            rand_pos.append(train_pos[seed])
+            rand_type.append(train_type[seed])
+            rand_grid.append(train_grid[seed])
+        init_pos += greed_pos + rand_pos
+        init_type += greed_type + rand_type
+        init_grid += greed_grid + rand_grid
+        #mutate
         if mutate:
+            #lattice mutate
             mut_counter = 0
-            mut_num = int(paths_num*mut_ratio)
+            mut_num = int(len(greed_grid)*mut_ratio)
             mut_latt = sorted(np.random.choice(grid_mutate, mut_num))
-            mut_pos = self.structure_mutate(mut_num, mut_latt, init_pos, init_grid)
+            mut_pos = self.structure_mutate(mut_num, mut_latt, greed_pos, greed_grid)
             #geometry check
             batch_nbr_dis = self.transfer.find_nbr_dis(mut_pos, mut_latt)
             check_near = [self.check.near(i) for i in batch_nbr_dis]
@@ -311,11 +321,102 @@ class CrystalOptimization(ListRWTools):
             check = [i and j for i, j in zip(check_near, check_overlay)]
             for i, correct in enumerate(check):
                 if correct:
-                    init_pos[i] = mut_pos[i]
-                    init_grid[i] = mut_latt[i]
+                    init_pos.append(mut_pos[i])
+                    init_type.append(greed_type[i])
+                    init_grid.append(mut_latt[i])
                     mut_counter += 1
-            system_echo(f'Lattice mutate number: {mut_counter}')
+            system_echo(f'Lattice mutate: {mut_counter}')
+            #atom number mutate
+            nber_pos, nber_type, nber_grid = self.atom_number_mutate(train_type, train_grid)
+            system_echo(f'Atom number mutate: {len(nber_grid)}')
+            #atom order mutate
+            order_pos, order_type, order_grid = self.atom_order_mutate(greed_pos, greed_type, greed_grid)
+            system_echo(f'Atom order mutate: {len(order_grid)}')
+            #initial searching points
+            init_pos += nber_pos + order_pos
+            init_type += nber_type + order_type
+            init_grid += nber_grid + order_grid
         return init_pos, init_type, init_grid
+    
+    def atom_order_mutate(self, greed_pos, greed_type, greed_grid):
+        """
+        varying order of atomic position
+        
+        Parameters
+        ----------
+        greed_pos [int, 2d]: greedy position 
+        greed_type [int, 2d]: greedy type
+        greed_grid [int, 1d]: greedy grid
+        
+        Returns
+        ----------
+        order_pos [int, 2d]: shuffle position
+        order_type [int, 2d]: type of atoms
+        order_grid [int, 1d]: grid name
+        """
+        order_pos, order_type, order_grid = [], [], []
+        idx = [i for i in range(len(greed_grid))]
+        for _ in range(num_paths_order):
+            seed = np.random.choice(idx)
+            pos = greed_pos[seed].copy()
+            np.random.shuffle(pos)
+            order_pos.append(list(pos))
+            order_type.append(greed_type[seed])
+            order_grid.append(greed_grid[seed])
+        return order_pos, order_type, order_grid
+    
+    def atom_number_mutate(self, train_type, train_grid):
+        """
+        varying atom number in different grids
+        
+        Parameters
+        ----------
+        train_type [int, 2d]: type of training set
+        train_grid [int, 1d]: grid of training set
+
+        Returns
+        ----------
+        atom_pos_right [int, 2d]: position of atoms after constrain
+        atom_type_right [int, 2d]: type of atoms after constrain
+        grid_name_right [int, 1d]: name of grids after constrain
+        """
+        type_pool = train_type
+        type_num = len(type_pool)
+        atom_pos, atom_type, grid_name = [], [], []
+        grid_pool = np.unique(train_grid)
+        if len(grid_pool) > 20:
+            grid_pool = np.random.choice(grid_pool, 20, replace=False)
+        for i, grid in enumerate(grid_pool):
+            #sampling on different grids
+            prefix = f'{grid_prop_path}/{grid:03.0f}'
+            frac_coor = self.import_list2d(f'{prefix}_frac_coor.bin', float, binary=True)
+            point_num = len(frac_coor)
+            points = [i for i in range(point_num)]
+            grid_name += [grid for _ in range(num_rand)]
+            for _ in range(num_rand):
+                seed = random.randint(0, type_num-1)
+                atom_num = len(type_pool[seed])
+                atom_pos += [random.sample(points, atom_num)]
+                atom_type += [type_pool[seed]]
+        #check geometry of structure
+        nbr_dis = self.transfer.find_nbr_dis(atom_pos, grid_name)
+        check_near = [self.check.near(i) for i in nbr_dis]
+        check_overlay = [self.check.overlay(i, len(i)) for i in atom_pos]
+        check = [i and j for i, j in zip(check_near, check_overlay)]
+        #get correct sample index
+        check_num = len(check)
+        sample_idx = np.arange(check_num)[check]
+        #sampling correct random samples
+        sample_num = len(sample_idx)
+        if sample_num > num_paths_atom:
+            sample_idx = np.random.choice(sample_idx, num_paths_atom, replace=False)
+        #add right samples into buffer
+        atom_pos_right, atom_type_right, grid_name_right = [], [], []
+        for i in sample_idx:
+            atom_pos_right.append(atom_pos[i])
+            atom_type_right.append(atom_type[i])
+            grid_name_right.append(grid_name[i])
+        return atom_pos_right, atom_type_right, grid_name_right
     
     def structure_mutate(self, mut_num, mut_latt, init_pos, init_grid):
         """
@@ -368,5 +469,3 @@ class CrystalOptimization(ListRWTools):
 if __name__ == '__main__':
     ccop = CrystalOptimization(num_CSPD, component, ndensity, min_dis_CSPD)
     ccop.main()
-    #init = InitSampling(num_CSPD, component, ndensity, min_dis_CSPD)
-    #init.generate(1)

@@ -4,6 +4,8 @@ import paramiko
 import pickle
 import numpy as np
 
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -331,6 +333,35 @@ class ClusterTools:
         idx_slt.append(min_idx)
         return np.array(idx_slt)
     
+    def delete_same_names(self, path, poscars):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        path [str, 0d]: path of poscars
+        poscars [str, 1d]: name of poscars
+        
+        Returns
+        ----------
+        index [int, 1d, np]: index of different poscars
+        """
+        poscars_num = len(poscars)
+        same_poscars = []
+        for i in range(poscars_num):
+            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
+            for j in range(i+1, poscars_num):
+                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_poscars.append(i)
+        same_poscars = np.unique(same_poscars)
+        all_index = [i for i in range(poscars_num)]
+        index = np.setdiff1d(all_index, same_poscars)
+        return index, same_poscars
+
 
 if __name__ == '__main__':
     ssh = SSHTools()

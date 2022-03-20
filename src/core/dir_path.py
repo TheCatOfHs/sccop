@@ -33,10 +33,10 @@ pbe_band_path = f'{optim_vasp_path}/pbe_band'
 phonon_path = f'{optim_vasp_path}/phonon'
 thermalconductivity_path = f'{optim_vasp_path}/thermalconductivity'
 
-#Adsorp file
-adsorp_path = 'data/adsorp'
-anode_strs_path = f'{adsorp_path}/anode_strs'
-anode_energy_path = f'{adsorp_path}/anode_energy'
-adsorp_strs_path = f'{adsorp_path}/adsorp_strs'
-adsorp_energy_path = f'{adsorp_path}/adsorp_energy'
-adsorp_analysis_path = f'{adsorp_path}/adsorp_analysis'
+#adsorb file
+adsorb_path = 'data/adsorb'
+anode_strs_path = f'{adsorb_path}/anode_strs'
+anode_energy_path = f'{adsorb_path}/anode_energy'
+adsorb_strs_path = f'{adsorb_path}/adsorb_strs'
+adsorb_energy_path = f'{adsorb_path}/adsorb_energy'
+adsorb_analysis_path = f'{adsorb_path}/adsorb_analysis'

@@ -51,7 +51,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            DPT --vdW optPBE
                             for i in 1
                             do
                                 cp INCAR_$i INCAR
@@ -198,7 +198,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            DPT --vdW optPBE
                             for i in 2 3
                             do
                                 cp INCAR_$i INCAR
@@ -301,7 +301,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             cp ../../{vasp_files_path}/Phonon/* .
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                             scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
-                            #DPT --vdW optPBE
+                            DPT --vdW optPBE
                             
                             phonopy -d --dim="3 3 1"
                             n=`ls | grep POSCAR- | wc -l`
@@ -520,7 +520,7 @@ class PostProcess(VASPoptimize, GeoCheck):
             time.sleep(self.wait_time)
         system_echo(f'All jobs are completed --- Thermal Conductivity')
         self.remove_flag(optim_strs_path)
-
+    
     def get_k_points(self, poscars, task):
         """
         search k path by Hinuma, Y., Pizzi, G., Kumagai, Y., Oba, F., & Tanaka, I. (2017)
@@ -594,7 +594,7 @@ if __name__ == '__main__':
     #vasp = VASPoptimize(0)
     #vasp.run_optimization_low()
     #vasp.get_energy()
-    #post = PostProcess()
+    post = PostProcess()
     #post.get_energy()
     #post.run_pbe_band()
     #post.run_phonon()
@@ -604,11 +604,4 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    def delete_energy_file(poscar_path, energy_path):
-        poscars = os.listdir(poscar_path)
-        out = [i[4:] for i in os.listdir(energy_path)]
-        del_poscars = np.setdiff1d(out, poscars)
-        for i in del_poscars:
-            os.remove(f'{energy_path}/out-{i}')
-        print(del_poscars)
-    delete_energy_file('test1', 'test2')
+    post.get_k_points(['POSCAR-CCOP-2-0030-136'], 'phonon')

@@ -188,7 +188,11 @@ class GridDivide(ListRWTools):
         if mutate:
             delta = np.identity(3) + self.strain_mat()
             latt_vec = np.dot(delta, latt_vec)
+            latt_vec = self.lattice_check(latt_vec)
             system_echo('Lattice mutate!')
+        #add vacuum layer to structure
+        if add_vacuum:
+            latt_vec = self.add_vacuum(latt_vec)
         frac_coor = self.fraction_coor(grain, latt_vec)
         self.write_grid_POSCAR(latt_vec, frac_coor)
         stru = Structure.from_file(self.poscar)
@@ -216,6 +220,42 @@ class GridDivide(ListRWTools):
         strain = np.clip(gauss_sym, -1, 1)
         return strain
     
+    def lattice_check(self, latt_vec):
+        """
+        make lattice look normal
+        
+        Parameters
+        ----------
+        latt_vec [float, 2d, np]: lattice vector
+
+        Returns
+        ----------
+        latt_vec [float, 2d, np]: modified vector
+        """
+        norms = [np.linalg.norm(i) for i in latt_vec]
+        mat = 2 * np.identity(3)
+        for i, norm in enumerate(norms):
+            if norm < 2:
+                latt_vec[i] += mat[i]    
+        return latt_vec
+    
+    def add_vacuum(self, latt_vec):
+        """
+        add vacuum layer
+        
+        Parameters
+        ----------
+        latt_vec [float, 2d, np]: lattice vector
+
+        Returns
+        ----------
+        latt_vec [float, 2d, np]: modified vector
+        """
+        norm = np.linalg.norm(latt_vec[-1])
+        if norm < 10:
+            latt_vec[-1] += [0., 0., 10.]
+        return latt_vec
+    
     def fraction_coor(self, grain, latt_vec):
         """
         fraction coordinate of grid
@@ -228,8 +268,8 @@ class GridDivide(ListRWTools):
         ----------
         coor [float, 2d]: fraction coordinate of grid
         """
-        norm = [np.linalg.norm(i) for i in latt_vec]
-        n = [norm[i]//grain[i] for i in range(3)]
+        norms = [np.linalg.norm(i) for i in latt_vec]
+        n = [norms[i]//grain[i] for i in range(3)]
         n = [1 if i==0 else i for i in n]
         grain_a, grain_b, grain_c = [1/i for i in n]
         coor = [[i, j, k] for i in np.arange(0, 1, grain_a)

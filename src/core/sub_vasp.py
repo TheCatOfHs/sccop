@@ -85,7 +85,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                         cp ../../{vasp_files_path}/SinglePointEnergy/* .
                         scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
                         DPT -v potcar
-                        #DPT --vdW optPBE
+                        DPT --vdW optPBE
                         date > $p.out
                         /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
                         date >> $p.out

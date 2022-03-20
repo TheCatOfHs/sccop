@@ -201,7 +201,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         ndensity [float, 0d]: density of atoms
         min_dis [float, 0d]: minimal distance between atoms
         """
-        options = f'--number {number} --component {component} --ndensity {ndensity} --mindis {min_dis}'
+        options = f'--component {component} --ndensity {ndensity} --mindis {min_dis}'
         shell_script = f'''
                         cd libs/ASG
                         tar -zxf CSPD.tar.gz
@@ -210,7 +210,16 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
                         rm CSPD.db
                         '''
         os.system(shell_script)
-        self.delete_same_poscars(f'{poscar_path}/initial_strs_0')
+        #delete extra samples
+        dir = f'{poscar_path}/initial_strs_0'
+        self.delete_same_poscars(dir)
+        poscar = os.listdir(dir)
+        poscar_num = len(poscar)
+        if poscar_num > number:
+            remove_num = poscar_num - number
+            index = np.random.choice(np.arange(poscar_num), remove_num, replace=False)
+            for i in index:
+                os.remove(f'{dir}/{poscar[i]}')
         
     def add_random(self, recyc, atom_pos, atom_type, grid_name, point_num):
         """
@@ -232,7 +241,10 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         opt_idx [int, 1d]: index of CSPD samples
         """
         #type pool with various number of atoms
-        type_pool = self.import_list2d(f'{record_path}/{recyc}/atom_type.dat', int)
+        if recyc == 0:
+            type_pool = atom_type
+        else:
+            type_pool = self.import_list2d(f'{record_path}/{recyc}/atom_type.dat', int)
         type_num = len(type_pool)
         #CSPD samples with random samples
         opt_idx, atom_pos_new, atom_type_new, grid_name_new = [], [], [], []
