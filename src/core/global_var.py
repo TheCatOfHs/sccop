@@ -12,12 +12,11 @@ latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 3
-num_round = 10
+num_recycle = 5
+num_round = 2
 num_seed = 40
 num_poscars = 40
 num_optims = 12
-ratio_round = 0.5
 
 #Initial Samples
 component = 'B1C3'
@@ -47,7 +46,7 @@ wait_time = 300
 
 #Sample Select
 num_models = 5
-num_components = 2
+num_components = 3
 num_clusters = 60
 ratio_min_energy = 0.5
 ratio_max_std = 0.5

@@ -244,7 +244,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         if recyc == 0:
             type_pool = atom_type
         else:
-            type_pool = self.import_list2d(f'{record_path}/{recyc}/atom_type.dat', int)
+            type_pool = self.import_list2d(f'{record_path}/{recyc-1}/atom_type.dat', int)
         type_num = len(type_pool)
         #CSPD samples with random samples
         opt_idx, atom_pos_new, atom_type_new, grid_name_new = [], [], [], []

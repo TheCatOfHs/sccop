@@ -136,7 +136,7 @@ class ListRWTools:
         
         Returns
         ----------
-        list_str [str, 0d]: string of list2d
+        list_str [str, 1d]: string of list2d
         """
         list_str = [' '.join(self.list1d_to_str(line, style)) 
                     for line in list]

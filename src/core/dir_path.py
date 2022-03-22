@@ -40,3 +40,6 @@ anode_energy_path = f'{adsorb_path}/anode_energy'
 adsorb_strs_path = f'{adsorb_path}/adsorb_strs'
 adsorb_energy_path = f'{adsorb_path}/adsorb_energy'
 adsorb_analysis_path = f'{adsorb_path}/adsorb_analysis'
+
+neb_path = f'{adsorb_path}/neb_path'
+neb_analysis_path = f'{adsorb_path}/neb_analysis'

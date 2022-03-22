@@ -95,14 +95,13 @@ class CrystalOptimization(ListRWTools):
                 atom_type = self.import_list2d(f'{file_head}/atom_type.dat', int)
                 grid_name = self.import_list2d(f'{file_head}/grid_name.dat', int)
                 select = Select(round+1)
-                select.samples(atom_pos, atom_type, grid_name)
+                select.samples(atom_pos, atom_type, grid_name, train_pos, train_type, train_grid)
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1)
             
             #Export searched POSCARs
             select = Select(start+num_round)
-            grid_buffer_2d = [[i] for i in train_grid]
-            select.export(recycle, train_pos, train_type, grid_buffer_2d)
+            select.export(recycle, train_pos, train_type, train_energy, train_grid)
             system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #VASP optimize
             vasp = VASPoptimize(recycle)
@@ -133,7 +132,7 @@ class CrystalOptimization(ListRWTools):
             multi_adsorb.analysis(-1.3156, repeat)
         else:
             system_echo('No suitable adsorbates are found')
-      
+    
     def data_import(self, round):
         """
         import selected data from last round

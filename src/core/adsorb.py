@@ -12,6 +12,9 @@ from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Molecule, Structure
 from pymatgen.core.surface import SlabGenerator
 from pymatgen.analysis.adsorption import AdsorbateSiteFinder, plot_slab
+from pymatgen.io.vasp.outputs import Chgcar, Outcar
+from pymatgen.analysis.path_finder import ChgcarPotential, NEBPathfinder
+from pymatgen.analysis.transition_state import NEBAnalysis
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -44,26 +47,17 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         generate slab structure
         """
         #calculate phonon spectrum
-        self.rotate_axis(optim_strs_path, 0, 2)
-        #self.post.run_phonon()
+        self.rotate_axis(optim_strs_path, 15)
+        self.rotate_axis(optim_strs_path, 0)
+        self.post.run_phonon()
         #get and optimize slab structures
         poscars = sorted(os.listdir(optim_strs_path))
-        self.rotate_axis(optim_strs_path, 15)
-        self.run_optimization(poscars, 1, optim_strs_path, 
-                              self.local_optim_strs_path, 
-                              self.local_anode_energy_path)
+        self.run_SinglePointEnergy(poscars, optim_strs_path, 
+                                   self.local_optim_strs_path, 
+                                   self.local_anode_energy_path)
         #choose dynamic stable structures
-        '''
-        for i in poscars:
-            os.remove(f'{optim_strs_path}/{i}')
-        poscars_relax = sorted(os.listdir(optim_strs_path))
-        for i in poscars_relax:
-            os.rename(f'{optim_strs_path}/{i}',
-                      f'{optim_strs_path}/{i[:-6]}')
-        self.rotate_axis(optim_strs_path, 0)
         self.select_poscar()
-        '''
-        
+    
     def rotate_axis(self, path, vacuum_size, repeat=1):
         """
         rotate axis to make atoms in xy plane and add vaccum layer
@@ -241,22 +235,22 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
             adsorb_names.append(name)
         return adsorb_names
     
-    def run_optimization(self, files, times, monitor_path, 
+    def run_optimization(self, poscars, times, monitor_path, 
                          local_strs_path, local_energy_path):
         """
         optimize configurations
         
         Parameters
         ----------
-        files [str, 1d]: name of relax poscars
+        poscars [str, 1d]: name of poscars
         times [int, 0d]: number of optimize times
         monitor_path [str, 0d]: path of FINISH flags
         local_strs_path [str, 0d]: structure path in GPU node
         local_energy_path [str, 0d]: energy path in GPU node
         """
         opt_times = ' '.join([str(i) for i in range(1, times+1)])
-        num_poscar = len(files)
-        for poscar in files:
+        num_poscar = len(poscars)
+        for poscar in poscars:
             node = poscar.split('-')[-1]
             ip = f'node{node}'
             shell_script = f'''
@@ -265,12 +259,13 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            cp ../../{vasp_files_path}/Adsorb/* .
+                            cp ../../{vasp_files_path}/Adsorb/Optimization/* .
                             scp {gpu_node}:{local_strs_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
                             DPT --vdW optPBE
+                            
                             for i in {opt_times}
                             do
                                 cp INCAR_$i INCAR
@@ -284,7 +279,7 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                                 rm WAVECAR CHGCAR
                             done
                             line=`cat CONTCAR | wc -l`
-                            fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
+                            fail=`tail -10 vasp-{opt_times}.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{local_strs_path}/$p-Relax
                                 scp vasp-{opt_times}.vasp {gpu_node}:{local_energy_path}/out-$p
@@ -299,6 +294,56 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         while not self.is_done(monitor_path, num_poscar):
             time.sleep(self.wait_time)
         system_echo(f'All jobs are completed --- Optimization')
+        self.remove_flag(monitor_path)
+    
+    def run_SinglePointEnergy(self, poscars, monitor_path, 
+                              local_strs_path, local_energy_path):
+        """
+        calculate energy
+        
+        Parameters
+        ----------
+        poscars [str, 1d]: name of poscars
+        times [int, 0d]: number of optimize times
+        monitor_path [str, 0d]: path of FINISH flags
+        local_strs_path [str, 0d]: structure path in GPU node
+        local_energy_path [str, 0d]: energy path in GPU node
+        """
+        num_poscar = len(poscars)
+        for poscar in poscars:
+            node = poscar.split('-')[-1]
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            cd {self.calculation_path}
+                            p={poscar}
+                            mkdir $p
+                            cd $p
+                            cp ../../{vasp_files_path}/Adsorb/SinglePointEnergy/* .
+                            scp {gpu_node}:{local_strs_path}/$p POSCAR
+                            
+                            DPT -v potcar
+                            DPT --vdW optPBE
+                            date > vasp-0.vasp
+                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-0.vasp
+                            date >> vasp-0.vasp
+                            
+                            fail=`tail -10 vasp-0.vasp | grep WARNING | wc -l`
+                            if [ $fail -eq 0 ]; then
+                                scp vasp-0.vasp {gpu_node}:{local_energy_path}/out-$p
+                                scp CHGCAR {gpu_node}:{local_energy_path}/CHGCAR-$p
+                                scp OUTCAR {gpu_node}:{local_energy_path}/OUTCAR-$p
+                            fi
+                            cd ../
+                            
+                            touch FINISH-$p
+                            scp FINISH-$p {gpu_node}:{local_strs_path}/
+                            rm -rf $p FINISH-$p
+                            '''
+            self.ssh_node(shell_script, ip)
+        while not self.is_done(monitor_path, num_poscar):
+            time.sleep(self.wait_time)
+        system_echo(f'All jobs are completed --- Energy calculate')
         self.remove_flag(monitor_path)
     
     def sites_analysis(self, single, repeat):
@@ -392,7 +437,7 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                 energy = float(line.split()[2])
         return energy
 
-    def cluster_sites(self, max_sites=4):
+    def cluster_sites(self, max_sites=3):
         """
         cluster adsorb sites by cartesian coordinates 
         and choose the lowest energy sites as adsorb site
@@ -644,12 +689,93 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck):
         return result
 
 
-class NEBSolver():
+class NEBSolver(MultiAdsorbSites):
     #
     def __init__(self):
-        pass 
+        AdsorbSites.__init__(self)
+        if not os.path.exists(neb_path):
+            os.mkdir(neb_path) 
+            os.mkdir(neb_analysis_path)
+        
+    def calculate(self,):
+        self.generate_path()
+        self.run_SinglePointEnergy()
+        self.plot_barrier()
     
-
+    def generate_path(self, file, atom, repeat):
+        #
+        dat = f'{adsorb_analysis_path}/{file}-One-Cluster.dat'
+        cluster_sites = self.import_list2d(dat, str, numpy=True)
+        poscars = cluster_sites[:,0]
+        #get adsorb sites
+        coors = self.nearest_site(file, poscars, repeat)
+        
+        '''
+        #make directory of filled poscar
+        fill_path = f'{adsorb_strs_path}/{file}-One'
+        if not os.path.exists(fill_path):
+            os.mkdir(fill_path)
+        for path, poscars in enumerate(poscars_seq):
+            slab = Structure.from_file(f'{anode_strs_path}/{file}')
+            slab.make_supercell(repeat)
+            #add atom by filling order
+            sites_seq = []
+            for poscar in poscars:
+                adsorb_coor = []
+                stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
+                for i, number in enumerate(stru.atomic_numbers):
+                    if number == atom:
+                        adsorb_coor.append(stru.frac_coords[i])
+                seq = self.filling_sites(adsorb_coor, repeat)
+                sites_seq += seq
+            #export filling poscars
+            for sites in sites_seq:
+                for site in sites:
+                    slab.append(atom, site)
+                atom_num = dict(Counter(slab.atomic_numbers))[atom]
+                filename = f'{fill_path}/{file[:-4]}-{path}-{atom_num}-{ratio}{file[-4:]}'
+                slab.to(filename=filename, fmt='poscar')
+        self.change_node_assign(f'{fill_path}')
+        return os.listdir(f'{fill_path}')
+        '''
+    def nearest_site(self, file, poscars, repeat):
+        coors = []
+        for poscar in poscars:
+            stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
+            coor = stru.frac_coords[-1]
+            coors.append(coor)
+        latt = stru.lattice.matrix
+        print(latt)
+        print(self.filling_sites(coors, repeat))
+    
+    def interpolate(self, start, end):
+        #
+        poscar = Structure.from_file('test/POSCAR')
+        start = Structure.from_file('test/POSCAR_1')
+        end = Structure.from_file('test/POSCAR_2')
+        #
+        chgcar = Chgcar(poscar, {'total':np.array([[[0]]]), 'diff':np.array([[0,0,0]])})
+        potential = ChgcarPotential(chgcar.from_file('test/CHGCAR')).get_v()
+        #
+        neb = NEBPathfinder(start, end, [-1], potential, n_images=20)
+        for i, image in enumerate(neb.images):
+            image.to(filename=f'test/NEB_path/POSCAR-NEB-{i:02.0f}', fmt='poscar')
+        neb.plot_images('test/NEB_path/POSCAR-NEB')
+    
+    def plot_barrier(self,):
+        file = os.listdir('test/NEB_output')
+        contcars = [i for i in file if i[0]=='C']
+        outcars = [i for i in file if i[0]=='O']
+        strus, outs = [], []
+        for i in contcars:
+            strus.append(Structure.from_file(f'test/NEB_output/{i}'))
+        for i in outcars:
+            outs.append(Outcar(f'test/NEB_output/{i}'))
+        neb_analyzer = NEBAnalysis.from_outcars(outs, strus)
+        neb_plot = neb_analyzer.get_plot()
+        neb_plot.savefig('test/NEB_output/NEB.png', dpi=300)
+    
+    
 class Battery(SSHTools):
     #calculate properties of battery
     def __init__(self):
@@ -669,12 +795,13 @@ class Battery(SSHTools):
     
     
 if __name__ == '__main__':
+    
     repeat = (2,2,1)
     adsorb = AdsorbSites()
-    adsorb.get_slab()
-    '''
+    #adsorb.get_slab()
+    
     if len(os.listdir(anode_strs_path)) > 0:
-        #adsorb.relax(11, repeat)
+        adsorb.relax(11, repeat)
         adsorb.sites_analysis(-1.3156, repeat)
         adsorb.cluster_sites()
         adsorb.sites_plot()
@@ -686,50 +813,6 @@ if __name__ == '__main__':
     else:
         system_echo('No suitable adsorbates are found')
     '''
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    
-    '''
-    from pymatgen.core.structure import Structure
-    from pymatgen.io.vasp.outputs import Chgcar, Outcar
-    from pymatgen.analysis.path_finder import ChgcarPotential, NEBPathfinder
-    from pymatgen.analysis.transition_state import NEBAnalysis
-    
-    poscar = Structure.from_file('test/POSCAR')
-    start = Structure.from_file('test/POSCAR_1')
-    end = Structure.from_file('test/POSCAR_2')
-    chgcar = Chgcar(poscar, {'total':np.array([[[1]]]), 'diff':np.array([[0,0,0]])})
-    potential = ChgcarPotential(chgcar.from_file('test/CHGCAR')).get_v()
-    neb = NEBPathfinder(start, end, [-1], potential, n_images=20)
-    for i, image in enumerate(neb.images):
-        image.to(filename=f'test/NEB_path/POSCAR-NEB-{i:02.0f}', fmt='poscar')
-    neb.plot_images('test/NEB_path/POSCAR-NEB')
-    
-    file = os.listdir('test/NEB_output')
-    contcars = [i for i in file if i[0]=='C']
-    outcars = [i for i in file if i[0]=='O']
-    strus, outs = [], []
-    for i in contcars:
-        strus.append(Structure.from_file(f'test/NEB_output/{i}'))
-    for i in outcars:
-        outs.append(Outcar(f'test/NEB_output/{i}'))
-    neb_analyzer = NEBAnalysis.from_outcars(outs, strus)
-    neb_plot = neb_analyzer.get_plot()
-    neb_plot.savefig('test/NEB_output/NEB.png', dpi=300)
+    neb = NEBSolver()
+    neb.generate_path('POSCAR-04-131',11, (2,2,1))
     '''

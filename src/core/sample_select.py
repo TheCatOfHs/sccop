@@ -12,16 +12,13 @@ sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.utils import *
+from core.predict import *
 from core.data_transfer import Transfer
-from core.predict import CrystalGraphConvNet, batch_balance
-from core.predict import DataParallel, Normalizer
-from core.predict import PPMData, get_loader
 
 
 class Select(ListRWTools, SSHTools, ClusterTools):
     #Select training samples by active learning
-    def __init__(self, round,
-                 batch_size=1024, num_workers=0):
+    def __init__(self, round, batch_size=1024, num_workers=0):
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.round = f'{round:03.0f}'
@@ -35,30 +32,43 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         if not os.path.exists(self.poscar_save_path):
             os.mkdir(self.poscar_save_path)
         
-    def samples(self, atom_pos, atom_type, grid_name):
+    def samples(self, atom_pos, atom_type, grid_name,
+                train_pos, train_type, train_grid):
         """
         choose lowest energy structure in different clusters
         each structure is unique by pos, type and grid
-        atom_pos: atom positions in list
-        atom_type: atom types in list
-        grid_name: grid in np array
 
         Parameters
         ----------
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
         grid_name [int, 2d]: name of grid
+        train_pos [int, 2d]: position in training set
+        train_type [int, 2d]: type in training set
+        train_grid [int, 1d]: grid in training set
         """
-        atom_pos, atom_type, grid_name = \
+        #delete same structures
+        grid_name = np.ravel(grid_name)
+        atom_pos, atom_type, grid_name, _ = \
             self.delete_duplicates(atom_pos, atom_type, grid_name)
-        self.num_crys = len(atom_pos)
-        system_echo(f'Delete duplicates---sample number: {self.num_crys}')
+        num_crys = len(atom_pos)
+        system_echo(f'Delete duplicates in searching samples: {num_crys}')
+        #delete same structures according to training set
+        atom_pos, atom_type, grid_name, _ = \
+            self.delete_same_selected(atom_pos, atom_type, grid_name,
+                                      train_pos, train_type, train_grid)
+        tuple = atom_pos, atom_type, grid_name
+        batch_balance(num_crys, self.batch_size, tuple)
+        num_crys = len(grid_name)
+        system_echo(f'Delete duplicates same as trainset: {num_crys}')
+        #predict energy and get crystal vector
         loader = self.dataloader(atom_pos, atom_type, grid_name)
         model_names = self.model_select()
         mean_pred, std_pred, crys_mean = self.mean(model_names, loader)
         idx_few = self.filter(mean_pred, std_pred)
         mean_pred_few = mean_pred[idx_few].cpu().numpy()
         crys_mean_few = crys_mean[idx_few].cpu().numpy()
+        #reduce dimension and clustering
         crys_embedded = self.reduce(crys_mean_few)
         clusters = self.cluster(crys_embedded, num_clusters)
         idx_slt = self.min_in_cluster(idx_few, mean_pred_few, clusters)
@@ -72,37 +82,95 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        grid_name [int, 2d]: grid of atoms
-
+        grid_name [int, 1d, np or list]: grid of atoms
+        
         Returns
         ----------
-        pos [int, 2d]: reduced position of atoms
-        type [int, 2d]: reduced type of atoms
-        grid [int, 1d, np]: reduced grid of atoms
+        atom_pos [int, 2d]: reduced position of atoms
+        atom_type [int, 2d]: reduced type of atoms
+        grid_name [int, 1d]: reduced grid of atoms
+        index [int, 1d]: index of sample in origin array
         """
+        #different length of atoms convert to string
+        grid_name = np.transpose([grid_name])
         pos_str = self.list2d_to_str(atom_pos, '{0}')
         type_str = self.list2d_to_str(atom_type, '{0}')
         grid_str = self.list2d_to_str(grid_name, '{0}')
         pos_type_grid = [i+'-'+j+'-'+k for i, j, k in 
                          zip(pos_str, type_str, grid_str)]
-        reduce = np.unique(pos_type_grid)
-        reduce = np.array([i.split('-') for i in reduce])
-        pos_str, type_str, grid_str = \
-            reduce[:,0], reduce[:,1], reduce[:,2]
-
-        grid = self.str_to_list1d(grid_str, int)
-        order  = np.argsort(grid)
-        grid = np.array(grid)[order]
-        pos_str = pos_str[order]
-        type_str = type_str[order]
-        
-        pos = self.str_to_list2d(pos_str, int)
-        type = self.str_to_list2d(type_str, int)
-        num_crys = len(pos)
-        tuple = (pos, type, list(grid))
-        batch_balance(num_crys, self.batch_size, tuple)
-        return pos, type, grid
+        #delete same structure accroding to pos, type and grid
+        _, index = np.unique(pos_type_grid, return_index=True)
+        atom_pos = np.array(atom_pos, dtype=object)[index]
+        atom_type = np.array(atom_type, dtype=object)[index]
+        grid_name = grid_name.flatten()[index]
+        #convert to list
+        atom_pos = atom_pos.tolist()
+        atom_type = atom_type.tolist()
+        grid_name = grid_name.tolist()
+        index = index.tolist()
+        return atom_pos, atom_type, grid_name, index
     
+    def delete_same_selected(self, atom_pos, atom_type, grid_name,
+                             train_pos, train_type, train_grid):
+        """
+        delete same structures that are already selected
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        train_pos [int, 2d]: position in training set
+        train_type [int, 2d]: type in training set
+        train_grid [int, 1d]: grid in training set
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        index [int, 1d]: index of sample in origin array
+        """
+        #different length of atoms convert to string
+        grid_name = np.transpose([grid_name])
+        train_grid = np.transpose([train_grid])
+        atom_pos_str = self.list2d_to_str(atom_pos, '{0}')
+        atom_type_str = self.list2d_to_str(atom_type, '{0}')
+        grid_name_str = self.list2d_to_str(grid_name, '{0}')
+        train_pos_str = self.list2d_to_str(train_pos, '{0}')
+        train_type_str = self.list2d_to_str(train_type, '{0}')
+        train_grid_str = self.list2d_to_str(train_grid, '{0}')
+        #delete same structure accroding to pos, type and grid
+        array_1 = [i+'-'+j+'-'+k for i, j, k in 
+                   zip(atom_pos_str, atom_type_str, grid_name_str)]
+        array_2 = [i+'-'+j+'-'+k for i, j, k in 
+                   zip(train_pos_str, train_type_str, train_grid_str)]
+        array = np.concatenate((array_1, array_2))
+        _, index, counts = np.unique(array, return_index=True, return_counts=True)
+        #delete structures same as selected set
+        same_index = []
+        for i, repeat in enumerate(counts):
+            if repeat > 1:
+                same_index.append(i)
+        sample_num = len(grid_name)
+        index = np.delete(index, same_index)
+        index = [i for i in index if i < sample_num]
+        atom_pos = np.array(atom_pos, dtype=object)[index]
+        atom_type = np.array(atom_type, dtype=object)[index]
+        grid_name = grid_name.flatten()[index]
+        #sorted by grid name
+        order  = np.argsort(grid_name)
+        atom_pos = atom_pos[order]
+        atom_type = atom_type[order]
+        grid_name = grid_name[order]
+        index = np.array(index)[order]
+        #convert to list
+        atom_pos = atom_pos.tolist()
+        atom_type = atom_type.tolist()
+        grid_name = grid_name.tolist()
+        index = index.tolist()
+        return atom_pos, atom_type, grid_name, index
+        
     def dataloader(self, atom_pos, atom_type, grid_name):
         """
         transfer data to the input of graph network and
@@ -112,7 +180,7 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         ----------
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
-        grid_name [int, 1d, np]: name of grid
+        grid_name [int, 1d]: name of grid
         
         Returns
         ----------
@@ -137,7 +205,7 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         atom_feas += atom_fea
         nbr_feas += nbr_fea
         nbr_fea_idxes += nbr_fea_idx
-        targets = np.zeros(self.num_crys)
+        targets = np.zeros(len(grid_name))
         dataset = PPMData(atom_feas, nbr_feas, 
                           nbr_fea_idxes, targets)
         loader = get_loader(dataset, self.batch_size, self.num_workers)
@@ -262,13 +330,18 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         ----------
         idx [int, 1d, np]: index of samples
         """
-        num_min = ratio_min_energy*self.num_crys
-        num_max = ratio_max_std*self.num_crys
+        sample_num = len(std_pred)
+        num_min = ratio_min_energy*sample_num
+        num_max = ratio_max_std*sample_num
+        min_top = int(num_min)
+        max_top = sample_num - int(num_max)
+        #get index of samples
         _, mean_idx = torch.sort(mean_pred)
         _, std_idx = torch.sort(std_pred)
-        min_idx = mean_idx[:int(num_min)].cpu().numpy()
-        max_idx = std_idx[:int(num_max)].cpu().numpy()
+        min_idx = mean_idx[:min_top].cpu().numpy()
+        max_idx = std_idx[max_top:].cpu().numpy()
         idx = np.union1d(min_idx, max_idx)
+        system_echo(f'After Filter---sample number: {len(idx)}')
         return idx
     
     def reduce(self, crys_fea):
@@ -374,55 +447,91 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         with open(file, 'w') as f:
             f.write('\n'.join(POSCAR))
 
-    def export(self, recycle, atom_pos, atom_type, grid_name):
+    def export(self, recyc, atom_pos, atom_type, energy, grid_name):
         """
         export configurations after ccop
 
         Parameters
         ----------
-        recycle [int, 0d]: recycle times
+        recyc [int, 0d]: recycle times
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
-        grid_name [int, 2d]: name of grid
+        energy [float, 1d]: energy of structure
+        grid_name [int, 1d]: name of grid
         """
-        #delete duplicates in searching samples
-        self.num_crys = len(atom_pos)
-        system_echo(f'Training set---sample number: {self.num_crys}')
-        atom_pos, atom_type, grid_name = \
+        #delete same structures
+        atom_pos, atom_type, grid_name, index = \
             self.delete_duplicates(atom_pos, atom_type, grid_name)
-        self.num_crys = len(atom_pos)
-        system_echo(f'Delete duplicates---sample number: {self.num_crys}')
-        #predict energy and calculate crystal vector
-        loader = self.dataloader(atom_pos, atom_type, grid_name)
-        model_names = self.model_select()
-        mean_pred, _, crys_mean = self.mean(model_names, loader)
-        idx_all = np.arange(self.num_crys)
-        mean_pred_all = mean_pred.cpu().numpy()
-        crys_mean_all = crys_mean.cpu().numpy()
-        #filter structure by energy
-        energy_order = np.argsort(mean_pred_all)
-        filter_num = int(len(energy_order)*ratio_round)
-        filter = energy_order[:filter_num]
-        idx_all = idx_all[filter]
-        mean_pred_all = mean_pred_all[filter]
-        crys_mean_all = crys_mean_all[filter]
-        system_echo(f'Energy filter---sample number: {len(idx_all)}')
-        #export poscars
-        crys_embedded = self.reduce(crys_mean_all)
-        clusters = self.cluster(crys_embedded, num_poscars)
-        idx_slt = self.min_in_cluster(idx_all, mean_pred_all, clusters)
-        self.round = f'CCOP-{recycle}'
+        energy = np.array(energy)[index]
+        num_crys = len(grid_name)
+        system_echo(f'Delete duplicates in trainset: {num_crys}')
+        #delete same structures according to training set
+        if recyc > 0:
+            recyc_pos, recyc_type, recyc_grid = self.collect(recyc)
+            atom_pos, atom_type, grid_name, index = \
+                self.delete_same_selected(atom_pos, atom_type, grid_name,
+                                          recyc_pos, recyc_type, recyc_grid)
+            energy = energy[index]
+            num_crys = len(grid_name)
+            system_echo(f'Delete duplicates same as previous recycle: {num_crys}')
+        #select Top k lowest energy structures
+        #export training set and select samples
+        idx_slt = np.argsort(energy)[:num_poscars]
+        self.round = f'CCOP-{recyc}'
         self.poscar_save_path = f'{poscar_path}/{self.round}'
         self.sh_save_path = self.poscar_save_path
         if not os.path.exists(self.poscar_save_path):
             os.mkdir(self.poscar_save_path)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
+        self.write_recycle(recyc, idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize structures: {num_poscars}')
-        #export training set
-        os.mkdir(f'{record_path}/{recycle+1}')
-        self.write_list2d(f'{record_path}/{recycle+1}/atom_pos.dat', atom_pos)
-        self.write_list2d(f'{record_path}/{recycle+1}/atom_type.dat', atom_type)
-        self.write_list2d(f'{record_path}/{recycle+1}/grid_name.dat', np.transpose([grid_name]))
+    
+    def collect(self, recyc):
+        """
+        import selected samples in each recycle
+
+        Parameters
+        ----------
+        recyc [int, 0d]: recycle times
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        """
+        atom_pos, atom_type, grid_name = [], [], []
+        for i in range(recyc):
+            atom_pos += self.import_list2d(f'{record_path}/{i}/atom_pos_select.dat', int)
+            atom_type += self.import_list2d(f'{record_path}/{i}/atom_type_select.dat', int)
+            grid_name += self.import_list2d(f'{record_path}/{i}/grid_name_select.dat', int)
+        grid_name = list(np.array(grid_name).flatten())
+        return atom_pos, atom_type, grid_name
+        
+    def write_recycle(self, recyc, index, atom_pos, atom_type, grid_name):
+        """
+        export position, type, grid of trainset and select samples
+        
+        Parameters
+        ----------
+        recyc [int, 0d]: recycle times
+        index [int, 1d]: index of select samples
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        """
+        dir = f'{record_path}/{recyc}'
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+        atom_pos_np = np.array(atom_pos)
+        atom_type_np = np.array(atom_type)
+        grid_name_np = np.transpose([grid_name])
+        self.write_list2d(f'{dir}/atom_pos.dat', atom_pos_np)
+        self.write_list2d(f'{dir}/atom_type.dat', atom_type_np)
+        self.write_list2d(f'{dir}/grid_name.dat', grid_name_np)
+        self.write_list2d(f'{dir}/atom_pos_select.dat', atom_pos_np[index])
+        self.write_list2d(f'{dir}/atom_type_select.dat', atom_type_np[index])
+        self.write_list2d(f'{dir}/grid_name_select.dat', grid_name_np[index])
         
 
 class OptimSelect(ListRWTools, SSHTools, ClusterTools):
@@ -503,21 +612,17 @@ class ReadoutNet(CrystalGraphConvNet):
     
 
 if __name__ == '__main__':
-    '''
-    #Data import
-    matools = ListRWTools()
-    atom_pos = matools.import_list2d(f'{search_path}/001/atom_pos.dat', int)
-    atom_type = matools.import_list2d(f'{search_path}/001/atom_type.dat', int)
-    grid_name = matools.import_list2d(f'{search_path}/001/grid_name.dat', int)
-    
-    #Select samples
-    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-    select = Select(1)
-    start = time.time()
-    select.samples(atom_pos, atom_type, grid_name)
-    end = time.time()
-    print(end - start)
-    '''
-    num_recycle = 2
-    opt_slt = OptimSelect()
-    opt_slt.optim_select()
+    round = 4
+    train_pos = [[1]]
+    train_type = [[1]]
+    train_grid = [[1]]
+    rw = ListRWTools()
+    file_head = f'{search_path}/{round+1:03.0f}'
+    atom_pos = rw.import_list2d(f'{file_head}/atom_pos.dat', int)
+    atom_type = rw.import_list2d(f'{file_head}/atom_type.dat', int)
+    grid_name = rw.import_list2d(f'{file_head}/grid_name.dat', int)
+    select = Select(round+1)
+    sample_num = len(atom_pos)
+    energy = [1 for _ in range(sample_num)]
+    grid_name = np.ravel(grid_name)
+    select.export(1, atom_pos, atom_type, energy, grid_name)
