@@ -51,7 +51,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            #DPT --vdW DFT-D3
                             for i in 1
                             do
                                 cp INCAR_$i INCAR
@@ -198,7 +198,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            #DPT --vdW DFT-D3
                             for i in 2 3
                             do
                                 cp INCAR_$i INCAR
@@ -254,7 +254,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             scp {gpu_node}:{self.KPOINTS}/KPOINTS-$p KPOINTS_2
 
                             DPT -v potcar
-                            #DPT --vdW optPBE
+                            #DPT --vdW DFT-D3
                             for i in 1 2
                             do
                                 cp INCAR_$i INCAR
@@ -301,7 +301,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             cp ../../{vasp_files_path}/Phonon/* .
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                             scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
-                            #DPT --vdW optPBE
+                            #DPT --vdW DFT-D3
                             
                             phonopy -d --dim="3 3 1"
                             n=`ls | grep POSCAR- | wc -l`
@@ -358,7 +358,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                             tar -zxf thirdorder-files.tar.gz
                             cp thirdorder-files/* .
-                            #DPT --vdW optPBE
+                            #DPT --vdW DFT-D3
                             
                             python2 thirdorder_vasp.py sow 2 2 2 -5
                             file=`ls | grep 3RD.POSCAR.`
@@ -506,10 +506,14 @@ class PostProcess(VASPoptimize, GeoCheck):
                             done
                             
                             python get-kappa.py
+                            python ../../libs/scripts/plot-thermal-conductivity.py
                             scp kappa.dat {gpu_node}:{self.thermalconductivity_path}/kappa-$p.dat
                             scp 300/BTE.v {gpu_node}:{self.thermalconductivity_path}/BTE.v-$p.dat
                             scp 300/BTE.qpoints {gpu_node}:{self.thermalconductivity_path}/BTE.qpoints-$p.dat
                             scp 300/T300K/BTE.w {gpu_node}:{self.thermalconductivity_path}/BTE.w-$p.dat
+                            scp Thermal.png {gpu_node}:{self.thermalconductivity_path}/thermal-$p.png
+                            scp Scatter.png {gpu_node}:{self.thermalconductivity_path}/scatter-$p.png
+                            scp Velocity.png {gpu_node}:{self.thermalconductivity_path}/velocity-$p.png
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/

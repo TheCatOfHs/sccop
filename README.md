@@ -6,11 +6,11 @@
 
 shell版本: bash
 
-python版本: python3.5及以后。需要有ase, pytorch, DPT, phonopy, pymatgen库
+python版本: python3.5及以后。需要有pytorch, DPT, phonopy, pymatgen库
 
 ## 程序启动
 
-连接GPU节点ssh node151，进入/local/ccop，挂起nohup python src/main.py >& log&
+连接GPU节点ssh node151，进入/local/ccop，挂起nohup python src/main.py >& log &
 
 ## VASP计算
 
@@ -31,11 +31,18 @@ pip install seekpath
 节点之间需要ssh免密连接
 
 配置方法：
-
-1. 主节点：cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
+1. cd ~/.ssh
+2. 生成密钥对 ssh-keygen -t rsa -b 4096
 
 更新密钥：
-
-1. scp \~/.ssh/authorized_keys root@ip1:~/.ssh/
-2. scp \~/.ssh/authorized_keys root@ip2:~/.ssh/
+1. ssh-copy-id -i ~/.ssh/id_rsa.pub user@node
+2. ssh-copy-id -i ~/.ssh/id_rsa.pub user@node
 3. ...
+
+## scp 自动连接
+vi /etc/ssh/ssh_config
+修改 StrictHostKeyChecking 为 no
+
+
+## 
+Z:.5hV=]Jgx@2~39B)cC

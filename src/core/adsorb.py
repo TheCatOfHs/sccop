@@ -47,14 +47,15 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         generate slab structure
         """
         #calculate phonon spectrum
+        self.rotate_axis(optim_strs_path, 0, 2)
         self.rotate_axis(optim_strs_path, 15)
-        self.rotate_axis(optim_strs_path, 0)
         self.post.run_phonon()
         #get and optimize slab structures
         poscars = sorted(os.listdir(optim_strs_path))
         self.run_SinglePointEnergy(poscars, optim_strs_path, 
                                    self.local_optim_strs_path, 
-                                   self.local_anode_energy_path)
+                                   self.local_anode_energy_path,
+                                   CHGCAR=True)
         #choose dynamic stable structures
         self.select_poscar()
     
@@ -264,7 +265,7 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            DPT --vdW optPBE
+                            DPT --vdW DFT-D3
                             
                             for i in {opt_times}
                             do
@@ -297,18 +298,30 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         self.remove_flag(monitor_path)
     
     def run_SinglePointEnergy(self, poscars, monitor_path, 
-                              local_strs_path, local_energy_path):
+                              local_strs_path, local_energy_path,
+                              out=True, CHGCAR=False, OUTCAR=False):
         """
-        calculate energy
+        calculate single point energy
         
         Parameters
         ----------
         poscars [str, 1d]: name of poscars
-        times [int, 0d]: number of optimize times
         monitor_path [str, 0d]: path of FINISH flags
         local_strs_path [str, 0d]: structure path in GPU node
         local_energy_path [str, 0d]: energy path in GPU node
+        out [bool, 0d]: cp out file to local directory
+        CHGCAR [bool, 0d]: cp CHGCAR to local directory
+        OUTCAR [bool, 0d]: cp OUTCAR to local directory
         """
+        flag_out = 0
+        flag_CHGCAR = 0
+        flag_OUTCAR = 0
+        if out:
+            flag_out = 1
+        if CHGCAR:
+            flag_CHGCAR = 1
+        if OUTCAR:
+            flag_OUTCAR = 1
         num_poscar = len(poscars)
         for poscar in poscars:
             node = poscar.split('-')[-1]
@@ -323,16 +336,22 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                             scp {gpu_node}:{local_strs_path}/$p POSCAR
                             
                             DPT -v potcar
-                            DPT --vdW optPBE
+                            DPT --vdW DFT-D3
                             date > vasp-0.vasp
                             /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-0.vasp
                             date >> vasp-0.vasp
                             
                             fail=`tail -10 vasp-0.vasp | grep WARNING | wc -l`
                             if [ $fail -eq 0 ]; then
-                                scp vasp-0.vasp {gpu_node}:{local_energy_path}/out-$p
-                                scp CHGCAR {gpu_node}:{local_energy_path}/CHGCAR-$p
-                                scp OUTCAR {gpu_node}:{local_energy_path}/OUTCAR-$p
+                                if [ {flag_out} -eq 1 ]; then
+                                    scp vasp-0.vasp {gpu_node}:{local_energy_path}/out-$p
+                                fi
+                                if [ {flag_CHGCAR} -eq 1 ]; then
+                                    scp CHGCAR {gpu_node}:{local_energy_path}/CHGCAR-$p
+                                fi
+                                if [ {flag_OUTCAR} -eq 1 ]; then
+                                    scp OUTCAR {gpu_node}:{local_energy_path}/OUTCAR-$p
+                                fi
                             fi
                             cd ../
                             
@@ -689,93 +708,192 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck):
         return result
 
 
-class NEBSolver(MultiAdsorbSites):
-    #
+class NEBSolver(AdsorbSites):
+    #diffusion path between lowest energy sites
     def __init__(self):
-        AdsorbSites.__init__(self)
         if not os.path.exists(neb_path):
             os.mkdir(neb_path) 
             os.mkdir(neb_analysis_path)
+    
+    def calculate(self, atom, repeat):
+        """
+        NEB calculation of structure in anode_strs_path
         
-    def calculate(self,):
-        self.generate_path()
-        self.run_SinglePointEnergy()
-        self.plot_barrier()
+        Parameters
+        ----------
+        atom [int, 0d]: atomic number
+        repeat [int, tuple]: size of supercell
+        """
+        files = os.listdir(anode_strs_path)
+        for file in files:
+            #generate diffusion path
+            self.generate_path(file, atom, repeat)
+            #calculate points in path
+            paths = os.listdir(neb_path)
+            paths = [i for i in paths if re.match(file, i)]
+            for path in paths:
+                monitor_path = f'{neb_path}/{path}'
+                local_neb_path = f'/local/ccop/{monitor_path}'
+                poscars = os.listdir(monitor_path)
+                self.run_SinglePointEnergy(poscars, monitor_path,
+                                           local_neb_path, 
+                                           local_neb_path,
+                                           out=False, OUTCAR=True)
+                #plot diffusion barrier
+                self.plot_barrier(path)
     
     def generate_path(self, file, atom, repeat):
-        #
+        """
+        generate diffusion path between lowest energy sites
+        
+        Parameters
+        ----------
+        file [str, 0d]: name of anode material
+        atom [int, 0d]: atomic number
+        repeat [int, tuple]: size of supercell
+        """
+        #get lowest adsorb site
         dat = f'{adsorb_analysis_path}/{file}-One-Cluster.dat'
         cluster_sites = self.import_list2d(dat, str, numpy=True)
-        poscars = cluster_sites[:,0]
-        #get adsorb sites
-        coors = self.nearest_site(file, poscars, repeat)
-        
-        '''
-        #make directory of filled poscar
-        fill_path = f'{adsorb_strs_path}/{file}-One'
-        if not os.path.exists(fill_path):
-            os.mkdir(fill_path)
-        for path, poscars in enumerate(poscars_seq):
-            slab = Structure.from_file(f'{anode_strs_path}/{file}')
-            slab.make_supercell(repeat)
-            #add atom by filling order
-            sites_seq = []
-            for poscar in poscars:
-                adsorb_coor = []
-                stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
-                for i, number in enumerate(stru.atomic_numbers):
-                    if number == atom:
-                        adsorb_coor.append(stru.frac_coords[i])
-                seq = self.filling_sites(adsorb_coor, repeat)
-                sites_seq += seq
-            #export filling poscars
-            for sites in sites_seq:
-                for site in sites:
-                    slab.append(atom, site)
-                atom_num = dict(Counter(slab.atomic_numbers))[atom]
-                filename = f'{fill_path}/{file[:-4]}-{path}-{atom_num}-{ratio}{file[-4:]}'
-                slab.to(filename=filename, fmt='poscar')
-        self.change_node_assign(f'{fill_path}')
-        return os.listdir(f'{fill_path}')
-        '''
-    def nearest_site(self, file, poscars, repeat):
-        coors = []
-        for poscar in poscars:
-            stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
-            coor = stru.frac_coords[-1]
-            coors.append(coor)
-        latt = stru.lattice.matrix
-        print(latt)
-        print(self.filling_sites(coors, repeat))
+        poscar = cluster_sites[0,0]
+        #get start and end of diffusion path
+        lowest_sites = self.get_lowest_sites(file, poscar, repeat)
+        endpoints = self.find_endpoint(lowest_sites)
+        #export site poscars
+        for i, points in enumerate(endpoints):
+            os.mkdir(f'{neb_path}/{file}-path-{i:02.0f}')
+            for j, site in enumerate(points):
+                stru = Structure.from_file(f'{anode_strs_path}/{file}')
+                stru.make_supercell(repeat)
+                stru.append(atom, site)
+                file_name = f'{neb_path}/{file}-path-{i:02.0f}/POSCAR-Site-{j}'
+                stru.to(filename=file_name, fmt='poscar')
+        #interpolate points between sites
+        paths = os.listdir(neb_path)
+        paths = sorted([i for i in paths if re.match(file, i)])
+        for i, path in enumerate(paths):
+            sites = os.listdir(f'{neb_path}/{path}')
+            start, end = sites
+            self.interpolate(i, file, start, end)
     
-    def interpolate(self, start, end):
-        #
-        poscar = Structure.from_file('test/POSCAR')
-        start = Structure.from_file('test/POSCAR_1')
-        end = Structure.from_file('test/POSCAR_2')
-        #
+    def get_lowest_sites(self, file, poscar, repeat):
+        """
+        find all periodic coordinates of adsorb sites
+        
+        Parameters
+        ----------
+        file [str, 0d]: name of adsorb material
+        poscar [str, 0d]: poscar name of adsorb site
+        repeat [int, tuple]: size of supercell
+        
+        Returns
+        ----------
+        lowest_sites [float, 2d, np]: fraction coor of all adsorb sites
+        """
+        stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
+        frac_coor = stru.frac_coords[-1]
+        lowest_sites = self.periodic_sites(frac_coor, repeat)
+        return lowest_sites
+    
+    def periodic_sites(self, frac_coor, repeat):
+        """
+        find periodic sites
+        
+        Parameters
+        ----------
+        frac_coor [float, 1d, np]: fraction coordinate
+        repeat [int, tuple]: size of supercell
+
+        Returns
+        ----------
+        sites [float, 2d]: fraction coordinates of periodic sites
+        """
+        divide = [1/i for i in repeat]
+        a, b, c = [[0, i] if i < 1 else [0] for i in divide]
+        dispalce = [i for i in itertools.product(a, b, c)]
+        #filling sites
+        sites = []
+        for dis in dispalce:
+            sites.append(frac_coor + dis)
+        return sites
+    
+    def find_endpoint(self, sites):
+        """
+        find endpoints of diffusion path
+        
+        Parameters
+        ----------
+        sites [float, 2d]: fraction coordinates of periodic sites
+        
+        Returns
+        ----------
+        endpoint [float, 2d]: endpoint of diffusion path
+        """
+        endpoints = []
+        start = sites[0]
+        ends = sites[1:]
+        for end in ends:
+            endpoints.append([start, end])
+        return endpoints
+    
+    def interpolate(self, index, file, start, end):
+        """
+        interpolate betwen endpoints of diffusion path
+        
+        Ziqin Rong, Daniil Kitchaev, Pieremanuele Canepa, Wenxuan Huang, Gerbrand
+        Ceder, The Journal of Chemical Physics 145 (7), 074112
+        
+        Parameters
+        ----------
+        index [int, 0d]: index of diffusion path
+        file [str, 0d]: name of adsorb material
+        start [str, 0d]: name of start poscar
+        end [str, 0d]: name of end poscar
+        """
+        #import structure
+        dir = f'{neb_path}/{file}-path-{index:02.0f}'
+        poscar = Structure.from_file(f'{anode_strs_path}/{file}')
+        start = Structure.from_file(f'{dir}/{start}')
+        end = Structure.from_file(f'{dir}/{end}')
+        #import potential
         chgcar = Chgcar(poscar, {'total':np.array([[[0]]]), 'diff':np.array([[0,0,0]])})
-        potential = ChgcarPotential(chgcar.from_file('test/CHGCAR')).get_v()
-        #
+        potential = ChgcarPotential(chgcar.from_file(f'{anode_energy_path}/CHGCAR-{file}')).get_v()
+        #interpolate between endpoints
         neb = NEBPathfinder(start, end, [-1], potential, n_images=20)
         for i, image in enumerate(neb.images):
-            image.to(filename=f'test/NEB_path/POSCAR-NEB-{i:02.0f}', fmt='poscar')
-        neb.plot_images('test/NEB_path/POSCAR-NEB')
+            file_name = f'{dir}/POSCAR-NEB-{i:02.0f}'
+            image.to(filename=file_name, fmt='poscar')
+        neb.plot_images(f'{dir}/POSCAR-NEB')
     
-    def plot_barrier(self,):
-        file = os.listdir('test/NEB_output')
-        contcars = [i for i in file if i[0]=='C']
-        outcars = [i for i in file if i[0]=='O']
+    def plot_barrier(self, path):
+        """
+        export figure of NEB path
+        
+        Parameters
+        ----------
+        path [str, 0d]: name of diffusion path
+        """
+        dir = f'{neb_path}/{path}'
+        file = os.listdir(dir)
+        poscars = sorted([i for i in file if i[0]=='P'])
+        outcars = sorted([i for i in file if i[0]=='O'])
         strus, outs = [], []
-        for i in contcars:
-            strus.append(Structure.from_file(f'test/NEB_output/{i}'))
+        for i in poscars:
+            strus.append(Structure.from_file(f'{dir}/{i}'))
         for i in outcars:
-            outs.append(Outcar(f'test/NEB_output/{i}'))
+            outs.append(Outcar(f'{dir}/{i}'))
+        #plot diffusion barrier
         neb_analyzer = NEBAnalysis.from_outcars(outs, strus)
         neb_plot = neb_analyzer.get_plot()
-        neb_plot.savefig('test/NEB_output/NEB.png', dpi=300)
-    
-    
+        neb_plot.savefig(f'{neb_analysis_path}/{path}.png', dpi=500)
+        #export extreams dat
+        min, max = neb_analyzer.get_extrema()
+        extreams = min + max
+        extreams = sorted(extreams, key=lambda x: -x[1])
+        file_name = f'{neb_analysis_path}/{path}-extreams.dat'
+        self.write_list2d(file_name, extreams, '{0:8.6f}')
+        
+
 class Battery(SSHTools):
     #calculate properties of battery
     def __init__(self):
@@ -795,24 +913,23 @@ class Battery(SSHTools):
     
     
 if __name__ == '__main__':
-    
+    atom = 11 
     repeat = (2,2,1)
     adsorb = AdsorbSites()
-    #adsorb.get_slab()
+    adsorb.get_slab()
     
     if len(os.listdir(anode_strs_path)) > 0:
-        adsorb.relax(11, repeat)
+        adsorb.relax(atom, repeat)
         adsorb.sites_analysis(-1.3156, repeat)
         adsorb.cluster_sites()
         adsorb.sites_plot()
         adsorb.sites_plot(cluster=False)
         
         multi_adsorb = MultiAdsorbSites()
-        multi_adsorb.relax(11, repeat)
+        multi_adsorb.relax(atom, repeat)
         multi_adsorb.analysis(-1.3156, repeat)
+        
+        neb = NEBSolver()
+        neb.calculate(atom, repeat)
     else:
         system_echo('No suitable adsorbates are found')
-    '''
-    neb = NEBSolver()
-    neb.generate_path('POSCAR-04-131',11, (2,2,1))
-    '''

@@ -201,6 +201,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         ndensity [float, 0d]: density of atoms
         min_dis [float, 0d]: minimal distance between atoms
         """
+        system_echo(f'Generate Initial Data from CSPD')
         options = f'--component {component} --ndensity {ndensity} --mindis {min_dis}'
         shell_script = f'''
                         cd libs/ASG
@@ -254,13 +255,16 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
             grid_name_new += [grid_name[i]]
             opt_idx += [len(atom_pos_new)-1]
             #sampling on different grids
+            counter = 0
             points = [i for i in range(point_num[i])]
-            grid_name_new += [grid for _ in range(num_rand)]
             for _ in range(num_rand):
                 seed = random.randint(0, type_num-1)
                 atom_num = len(type_pool[seed])
-                atom_pos_new += [random.sample(points, atom_num)]
-                atom_type_new += [type_pool[seed]]
+                if atom_num < len(points):
+                    atom_pos_new += [random.sample(points, atom_num)]
+                    atom_type_new += [type_pool[seed]]
+                    counter += 1
+            grid_name_new += [grid for _ in range(counter)]
         return atom_pos_new, atom_type_new, grid_name_new, opt_idx
     
     def structure_in_grid(self, recyc, grain):

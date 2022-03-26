@@ -115,24 +115,6 @@ class CrystalOptimization(ListRWTools):
         #Property calculate
         #self.property_calculate()
         
-        #adsorb sites calculate
-        system_echo('Begin Adsorb Sites Calculate')
-        repeat = (2, 2, 1)
-        adsorb = AdsorbSites()
-        adsorb.get_slab()
-        if len(os.listdir(anode_strs_path)) > 0:
-            adsorb.relax(11, repeat)
-            adsorb.sites_analysis(-1.3156, repeat)
-            adsorb.cluster_sites()
-            adsorb.sites_plot()
-            adsorb.sites_plot(cluster=False)
-            
-            multi_adsorb = MultiAdsorbSites()
-            multi_adsorb.relax(11, repeat)
-            multi_adsorb.analysis(-1.3156, repeat)
-        else:
-            system_echo('No suitable adsorbates are found')
-    
     def data_import(self, round):
         """
         import selected data from last round

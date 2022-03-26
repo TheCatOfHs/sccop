@@ -460,6 +460,8 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         grid_name [int, 1d]: name of grid
         """
         #delete same structures
+        num_crys = len(grid_name)
+        system_echo(f'Number of samples in trainset: {num_crys}')
         atom_pos, atom_type, grid_name, index = \
             self.delete_duplicates(atom_pos, atom_type, grid_name)
         energy = np.array(energy)[index]

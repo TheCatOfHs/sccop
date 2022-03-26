@@ -11,7 +11,7 @@ plt.rcParams['ytick.direction'] = 'in'
 def read_band(file_name):
     with open(file_name, 'r') as obj:
         file_content = obj.readlines()
-
+    
     data = np.array([[float(item) for item in line.split()] for line in file_content])
     print('Number of band is {:5.0f}'.format(data.shape[1]-1))
     return data

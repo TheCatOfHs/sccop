@@ -7,19 +7,19 @@ add_vacuum = True
 #Mutate
 num_mutate = 6
 mut_ratio = 0.9
-mut_freq = 3
+mut_freq = 1
 latt_mu = 0.
 latt_sigma = 0.2
 
 #Recycling
-num_recycle = 5
+num_recycle = 2
 num_round = 2
 num_seed = 40
 num_poscars = 40
 num_optims = 12
 
 #Initial Samples
-component = 'B1C3'
+component = 'XXX'
 ndensity = 0.1 
 min_dis_CSPD = 1.2
 num_CSPD = 48
