@@ -448,7 +448,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             cd $p
                             cp ../../{vasp_files_path}/Dielectric/* .
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
-                                
+                            
                             DPT -v potcar
                             cp INCAR_$i INCAR
                             cp KPOINTS_$i KPOINTS
@@ -512,6 +512,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             scp 300/BTE.qpoints {gpu_node}:{self.thermalconductivity_path}/BTE.qpoints-$p.dat
                             scp 300/T300K/BTE.w {gpu_node}:{self.thermalconductivity_path}/BTE.w-$p.dat
                             scp Thermal.png {gpu_node}:{self.thermalconductivity_path}/thermal-$p.png
+                            scp Cum_Thermal.png {gpu_node}:{self.thermalconductivity_path}/cum_thermal-$p.png
                             scp Scatter.png {gpu_node}:{self.thermalconductivity_path}/scatter-$p.png
                             scp Velocity.png {gpu_node}:{self.thermalconductivity_path}/velocity-$p.png
                             cd ../

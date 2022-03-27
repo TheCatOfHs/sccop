@@ -13,7 +13,6 @@ from core.search import ParallelWorkers, GeoCheck
 from core.predict import PPMData, PPModel
 from core.utils import ListRWTools, system_echo
 from core.post_process import PostProcess, VASPoptimize
-from core.adsorb import AdsorbSites, MultiAdsorbSites
 
 
 class CrystalOptimization(ListRWTools):
@@ -49,7 +48,7 @@ class CrystalOptimization(ListRWTools):
             select.write_POSCARs(idx, atom_pos, atom_type, grid_name)
             #VASP calculate
             self.vasp.sub_job(start)
-
+            
             #CCOP optimize
             grid_store = np.concatenate((grid_store, grid_init))
             for round in range(start, start+num_round):

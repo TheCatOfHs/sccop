@@ -15,6 +15,7 @@ from pymatgen.analysis.adsorption import AdsorbateSiteFinder, plot_slab
 from pymatgen.io.vasp.outputs import Chgcar, Outcar
 from pymatgen.analysis.path_finder import ChgcarPotential, NEBPathfinder
 from pymatgen.analysis.transition_state import NEBAnalysis
+from sklearn.metrics import silhouette_samples
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -237,7 +238,8 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         return adsorb_names
     
     def run_optimization(self, poscars, times, monitor_path, 
-                         local_strs_path, local_energy_path):
+                         local_strs_path, local_energy_path,
+                         out=True):
         """
         optimize configurations
         
@@ -249,6 +251,9 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
         local_strs_path [str, 0d]: structure path in GPU node
         local_energy_path [str, 0d]: energy path in GPU node
         """
+        flag_out = 0
+        if out:
+            flag_out = 1
         opt_times = ' '.join([str(i) for i in range(1, times+1)])
         num_poscar = len(poscars)
         for poscar in poscars:
@@ -283,7 +288,9 @@ class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
                             fail=`tail -10 vasp-{opt_times}.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{local_strs_path}/$p-Relax
-                                scp vasp-{opt_times}.vasp {gpu_node}:{local_energy_path}/out-$p
+                                if [ {flag_out} -eq 1 ]; then
+                                    scp vasp-{opt_times}.vasp {gpu_node}:{local_energy_path}/out-$p
+                                fi
                             fi
                             cd ../
                             
@@ -711,6 +718,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck):
 class NEBSolver(AdsorbSites):
     #diffusion path between lowest energy sites
     def __init__(self):
+        AdsorbSites.__init__(self)
         if not os.path.exists(neb_path):
             os.mkdir(neb_path) 
             os.mkdir(neb_analysis_path)
@@ -730,11 +738,14 @@ class NEBSolver(AdsorbSites):
             self.generate_path(file, atom, repeat)
             #calculate points in path
             paths = os.listdir(neb_path)
-            paths = [i for i in paths if re.match(file, i)]
+            pattern = f'{file}-path-[\w]*'
+            paths = sorted([i for i in paths if re.match(pattern, i)])
             for path in paths:
                 monitor_path = f'{neb_path}/{path}'
                 local_neb_path = f'/local/ccop/{monitor_path}'
                 poscars = os.listdir(monitor_path)
+                pattern = 'POSCAR-NEB-[\w]*-[\w]*'
+                poscars = [i for i in poscars if re.match(pattern, i)]
                 self.run_SinglePointEnergy(poscars, monitor_path,
                                            local_neb_path, 
                                            local_neb_path,
@@ -756,43 +767,54 @@ class NEBSolver(AdsorbSites):
         dat = f'{adsorb_analysis_path}/{file}-One-Cluster.dat'
         cluster_sites = self.import_list2d(dat, str, numpy=True)
         poscar = cluster_sites[0,0]
-        #get start and end of diffusion path
-        lowest_sites = self.get_lowest_sites(file, poscar, repeat)
+        #get DFT charge density of host structure
+        self.get_CHGCAR(file, poscar, repeat)
+        #get endpoints of diffusion path
+        lowest_sites = self.get_lowest_sites(file, atom, poscar, repeat)
         endpoints = self.find_endpoint(lowest_sites)
-        #export site poscars
-        for i, points in enumerate(endpoints):
-            os.mkdir(f'{neb_path}/{file}-path-{i:02.0f}')
-            for j, site in enumerate(points):
-                stru = Structure.from_file(f'{anode_strs_path}/{file}')
-                stru.make_supercell(repeat)
-                stru.append(atom, site)
-                file_name = f'{neb_path}/{file}-path-{i:02.0f}/POSCAR-Site-{j}'
-                stru.to(filename=file_name, fmt='poscar')
         #interpolate points between sites
-        paths = os.listdir(neb_path)
-        paths = sorted([i for i in paths if re.match(file, i)])
-        for i, path in enumerate(paths):
-            sites = os.listdir(f'{neb_path}/{path}')
+        for i, sites in enumerate(endpoints):
+            os.mkdir(f'{neb_path}/{file}-path-{i:02.0f}')
             start, end = sites
-            self.interpolate(i, file, start, end)
+            self.interpolate(i, atom, file, start, end)
     
-    def get_lowest_sites(self, file, poscar, repeat):
+    def get_lowest_sites(self, file, atom, poscar, repeat):
         """
-        find all periodic coordinates of adsorb sites
+        find all periodic coordinates of lowest adsorb sites
         
         Parameters
         ----------
         file [str, 0d]: name of adsorb material
+        atom [int, 0d]: atomic number
         poscar [str, 0d]: poscar name of adsorb site
         repeat [int, tuple]: size of supercell
         
         Returns
         ----------
-        lowest_sites [float, 2d, np]: fraction coor of all adsorb sites
+        lowest_sites [str, 1d]: name of all lowest adsorb sites
         """
+        sites_path = f'{neb_path}/{file}-site'
+        if not os.path.exists(sites_path):
+            os.mkdir(sites_path)
+        #get periodic sites
         stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
         frac_coor = stru.frac_coords[-1]
         lowest_sites = self.periodic_sites(frac_coor, repeat)
+        #export site poscars
+        sites_num = len(lowest_sites)
+        node_assign = self.assign_node(sites_num)
+        for i, point in enumerate(lowest_sites):
+            stru = Structure.from_file(f'{neb_path}/{file}-potential/{file}')
+            stru.append(atom, point)
+            file_name = f'{sites_path}/POSCAR-Site-{i:02.0f}-{node_assign[i]}'
+            stru.to(filename=file_name, fmt='poscar')
+        #optimize sites
+        local_sites_path = f'/local/ccop/{sites_path}'
+        lowest_sites = sorted(os.listdir(sites_path))
+        self.run_optimization(lowest_sites, 1, sites_path, 
+                              local_sites_path, local_sites_path,
+                              out=False)
+        lowest_sites = [i+'-Relax' for i in lowest_sites]
         return lowest_sites
     
     def periodic_sites(self, frac_coor, repeat):
@@ -823,11 +845,11 @@ class NEBSolver(AdsorbSites):
         
         Parameters
         ----------
-        sites [float, 2d]: fraction coordinates of periodic sites
+        sites [str, 1d]: name of periodic sites
         
         Returns
         ----------
-        endpoint [float, 2d]: endpoint of diffusion path
+        endpoint [str, 2d]: endpoint of diffusion path
         """
         endpoints = []
         start = sites[0]
@@ -836,7 +858,35 @@ class NEBSolver(AdsorbSites):
             endpoints.append([start, end])
         return endpoints
     
-    def interpolate(self, index, file, start, end):
+    def get_CHGCAR(self, file, poscar, repeat):
+        """
+        get CHGCAR of host structure
+
+        Parameters
+        ----------
+        file [str, 0d]: name of host structure
+        poscar [str, 0d]: name of relaxed structure
+        repeat [int, tuple]: size of supercell
+        """
+        potential_path = f'{neb_path}/{file}-potential'
+        if not os.path.exists(potential_path):
+            os.mkdir(potential_path)
+        #generate initial structure for sites to optimize
+        stru = Structure.from_file(f'{adsorb_strs_path}/{file}/{poscar}')
+        sites = stru.sites[:-1]
+        stru._sites = sites
+        stru.to(filename=f'{potential_path}/{file}', fmt='poscar')
+        #calculate charge density of host structure
+        host_stru = Structure.from_file(f'{anode_strs_path}/{file}')
+        host_stru.make_supercell(repeat)
+        host_stru.to(filename=f'{potential_path}/Host-{file}', fmt='poscar')
+        local_neb_potential = f'/local/ccop/{potential_path}'
+        self.run_SinglePointEnergy([f'Host-{file}'], potential_path,
+                                   local_neb_potential, 
+                                   local_neb_potential,
+                                   out=False, CHGCAR=True)
+    
+    def interpolate(self, index, atom, file, start, end):
         """
         interpolate betwen endpoints of diffusion path
         
@@ -846,24 +896,36 @@ class NEBSolver(AdsorbSites):
         Parameters
         ----------
         index [int, 0d]: index of diffusion path
+        atom [int, 0d]: atomic number
         file [str, 0d]: name of adsorb material
         start [str, 0d]: name of start poscar
         end [str, 0d]: name of end poscar
         """
         #import structure
-        dir = f'{neb_path}/{file}-path-{index:02.0f}'
-        poscar = Structure.from_file(f'{anode_strs_path}/{file}')
-        start = Structure.from_file(f'{dir}/{start}')
-        end = Structure.from_file(f'{dir}/{end}')
+        save_path = f'{neb_path}/{file}-path-{index:02.0f}'
+        poscar = Structure.from_file(f'{neb_path}/{file}-potential/{file}')
+        start = Structure.from_file(f'{neb_path}/{file}-site/{start}')
+        end = Structure.from_file(f'{neb_path}/{file}-site/{end}')
         #import potential
+        chgcar_name = f'{neb_path}/{file}-potential/CHGCAR-Host-{file}'
         chgcar = Chgcar(poscar, {'total':np.array([[[0]]]), 'diff':np.array([[0,0,0]])})
-        potential = ChgcarPotential(chgcar.from_file(f'{anode_energy_path}/CHGCAR-{file}')).get_v()
+        potential = ChgcarPotential(chgcar.from_file(chgcar_name)).get_v()
         #interpolate between endpoints
-        neb = NEBPathfinder(start, end, [-1], potential, n_images=20)
-        for i, image in enumerate(neb.images):
-            file_name = f'{dir}/POSCAR-NEB-{i:02.0f}'
+        start_coor = start.frac_coords[-1]
+        end_coor = end.frac_coords[-1]
+        neb = NEBPathfinder.string_relax(start_coor, end_coor, potential)
+        image_num = len(neb)
+        assign = self.assign_node(image_num)
+        for i, point in enumerate(neb):
+            file_name = f'{save_path}/POSCAR-NEB-{i:02.0f}-{assign[i]}'
+            if i == 0:
+                image = start
+            elif i == image_num-1:
+                image = end
+            else:
+                image = Structure.from_file(f'{neb_path}/{file}-potential/Host-{file}')
+                image.append(atom, point)
             image.to(filename=file_name, fmt='poscar')
-        neb.plot_images(f'{dir}/POSCAR-NEB')
     
     def plot_barrier(self, path):
         """
@@ -875,13 +937,12 @@ class NEBSolver(AdsorbSites):
         """
         dir = f'{neb_path}/{path}'
         file = os.listdir(dir)
-        poscars = sorted([i for i in file if i[0]=='P'])
-        outcars = sorted([i for i in file if i[0]=='O'])
+        pattern = 'POSCAR-NEB-[\w]*-[\w]*'
+        poscars = sorted([i for i in file if re.match(pattern, i)])
         strus, outs = [], []
         for i in poscars:
             strus.append(Structure.from_file(f'{dir}/{i}'))
-        for i in outcars:
-            outs.append(Outcar(f'{dir}/{i}'))
+            outs.append(Outcar(f'{dir}/OUTCAR-{i}'))         
         #plot diffusion barrier
         neb_analyzer = NEBAnalysis.from_outcars(outs, strus)
         neb_plot = neb_analyzer.get_plot()
@@ -916,18 +977,18 @@ if __name__ == '__main__':
     atom = 11 
     repeat = (2,2,1)
     adsorb = AdsorbSites()
-    adsorb.get_slab()
+    #adsorb.get_slab()
     
     if len(os.listdir(anode_strs_path)) > 0:
-        adsorb.relax(atom, repeat)
-        adsorb.sites_analysis(-1.3156, repeat)
-        adsorb.cluster_sites()
-        adsorb.sites_plot()
-        adsorb.sites_plot(cluster=False)
+        #adsorb.relax(atom, repeat)
+        #adsorb.sites_analysis(-1.31116, repeat)
+        #adsorb.cluster_sites()
+        #adsorb.sites_plot()
+        #adsorb.sites_plot(cluster=False)
         
-        multi_adsorb = MultiAdsorbSites()
-        multi_adsorb.relax(atom, repeat)
-        multi_adsorb.analysis(-1.3156, repeat)
+        #multi_adsorb = MultiAdsorbSites()
+        #multi_adsorb.relax(atom, repeat)
+        #multi_adsorb.analysis(-1.31116, repeat)
         
         neb = NEBSolver()
         neb.calculate(atom, repeat)
