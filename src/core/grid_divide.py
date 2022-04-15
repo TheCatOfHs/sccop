@@ -43,7 +43,7 @@ class ParallelDivide(ListRWTools, SSHTools):
             time.sleep(self.wait_time)
         self.zip_file_name(grid_mutate)
         self.remove_flag_on_gpu()
-        system_echo(f'Lattice generate: {grid_mutate}')
+        system_echo(f'Lattice generate number: {num_grid}')
         #update cpus
         for node in nodes:
             self.send_grid_to_cpu(node)

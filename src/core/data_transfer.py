@@ -55,14 +55,14 @@ class Transfer(ListRWTools):
     
         Parameters
         ----------
-        atom_pos [int, 1d]: atom list
+        atom_pos [int, 1d]: position list
         
         Returns
         ----------
         nbr_dis [float, 2d, np]: neighbor distance 
         """
         mask_len = self.grid_nbr_idx.shape[1]
-        mask = np.full((mask_len,), False)
+        mask = np.full(mask_len, False)
         mask[atom_pos] = True
         point_nbr_idx = self.grid_nbr_idx[atom_pos]
         point_nbr_dis = self.grid_nbr_dis[atom_pos]
@@ -86,7 +86,7 @@ class Transfer(ListRWTools):
         nbr_fea_idx [int, 2d, np]: neighbor index of each atom
         """
         mask_len = self.grid_nbr_idx.shape[1]
-        mask = np.full((mask_len,), False)
+        mask = np.full(mask_len, False)
         mask[atom_pos] = True
         point_nbr_idx = self.grid_nbr_idx[atom_pos]
         point_nbr_dis = self.grid_nbr_dis[atom_pos]
@@ -186,7 +186,7 @@ class MultiGridTransfer:
     
     def find_nbr_dis(self, atom_pos, grid_name):
         """
-        calculate near distance of configurations
+        calculate neighbor distance of structures
         
         Parameters
         ----------
@@ -195,7 +195,7 @@ class MultiGridTransfer:
 
         Returns
         ----------
-        nbr_dis [float, 3d]: near distance of configurations
+        nbr_dis [float, 3d]: neighbor distance of structures
         """
         last_grid = grid_name[0]
         transfer = Transfer(last_grid)
@@ -276,12 +276,8 @@ class MultiGridTransfer:
 
 
 if __name__ == "__main__":
-    grid_name = 1
-    grid_len = 125
-    grid_label = np.arange(grid_len)
-    atom_pos = [[j for j in range(i)] for i in range(10, 20)]
-    atom_type = [[j for j in range(i)] for i in range(10, 20)]
-    targets = np.random.rand(10,)
-    
-    transfer = Transfer(grid_name)
-    batch_atom_fea, batch_nbr_fea, batch_nbr_fea_idx = transfer.batch(atom_pos, atom_type)
+    rwtools = ListRWTools()
+    print(rwtools.import_list2d(f'data/grid/property/034_nbr_idx.bin', int, binary=True).shape)
+    print(rwtools.import_list2d(f'data/grid/property/034_nbr_dis.bin', int, binary=True).shape)
+    print(rwtools.import_list2d(f'data/grid/property/034_frac_coor.bin', int, binary=True))
+    print(rwtools.import_list2d(f'data/grid/property/034_latt_vec.bin', int, binary=True))

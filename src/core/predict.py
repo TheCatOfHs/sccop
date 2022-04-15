@@ -316,11 +316,14 @@ class PPModel(ListRWTools):
                                   self.batch_size, self.num_workers)
         test_loader = get_loader(self.test_data, 
                                   self.batch_size, self.num_workers)
-        checkpoint = torch.load(pretrain_model)
         sample_target = self.sample_data_list(self.train_data)
         normalizer = Normalizer(sample_target)
-        normalizer.load_state_dict(checkpoint['normalizer'])
-        model = self.model_initial(checkpoint)
+        if use_pretrain_model:
+            checkpoint = torch.load(pretrain_model)
+            normalizer.load_state_dict(checkpoint['normalizer'])
+            model = self.model_initial(checkpoint)
+        else:
+            model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model = DataParallel(model)
         model.to(self.device)
         criterion = nn.MSELoss()

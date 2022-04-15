@@ -5,9 +5,10 @@ do
     scp -r sfront:/public/BioPhys/lcn/ccop .
     cd ccop/
         sed -i s/'XXX'/$i/g src/core/global_var.py
-        python src/main.py
-        cp -r data/poscar/optim_strs_sym ../search/$i/.
-        cp -r data/vasp_out/optim_strs ../search/$i/.
+        python src/main.py > log
+        cp log ../search/$i/.
+        cp data/poscar/optim_strs_sym/* ../search/$i/.
+        cp data/vasp_out/optim_strs/energy/* ../search/$i/.
     cd ../
     rm -r ccop/
 done

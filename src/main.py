@@ -17,9 +17,9 @@ from core.post_process import PostProcess, VASPoptimize
 
 class CrystalOptimization(ListRWTools):
     #crystal combinational optimization program
-    def __init__(self, number, component, ndensity, min_dis_CSPD):
+    def __init__(self, number, component):
         os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
-        self.init = InitSampling(number, component, ndensity, min_dis_CSPD)
+        self.init = InitSampling(number, component)
         self.cpu_nodes = UpdateNodes()
         self.divide = ParallelDivide()
         self.transfer = MultiGridTransfer()
@@ -35,14 +35,14 @@ class CrystalOptimization(ListRWTools):
         grid_store = np.array([], dtype=int)
         train_pos, train_type, train_grid = [], [], []
         train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = [], [], [], []
-
+        
+        start = 0
         for recycle in range(num_recycle):
             system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #Generate structures
             atom_pos, atom_type, grid_name, grid_init = self.init.generate(recycle)
             system_echo('New initial samples generated')
             #Write POSCARs
-            start = recycle * (num_round+1)
             select = Select(start)
             idx = np.arange(len(atom_pos))
             select.write_POSCARs(idx, atom_pos, atom_type, grid_name)
@@ -50,6 +50,7 @@ class CrystalOptimization(ListRWTools):
             self.vasp.sub_job(start)
             
             #CCOP optimize
+            num_round = num_ml_list[recycle]
             grid_store = np.concatenate((grid_store, grid_init))
             for round in range(start, start+num_round):
                 #Data import
@@ -105,7 +106,8 @@ class CrystalOptimization(ListRWTools):
             #VASP optimize
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low()
-        
+            start += num_round + 1
+            
         #Select optimized structures
         opt_slt = OptimSelect()
         opt_slt.optim_select()
@@ -372,8 +374,8 @@ class CrystalOptimization(ListRWTools):
             frac_coor = self.import_list2d(f'{prefix}_frac_coor.bin', float, binary=True)
             point_num = len(frac_coor)
             points = [i for i in range(point_num)]
-            grid_name += [grid for _ in range(num_rand)]
-            for _ in range(num_rand):
+            grid_name += [grid for _ in range(num_sampling)]
+            for _ in range(num_sampling):
                 seed = random.randint(0, type_num-1)
                 atom_num = len(type_pool[seed])
                 atom_pos += [random.sample(points, atom_num)]
@@ -447,5 +449,5 @@ class CrystalOptimization(ListRWTools):
     
     
 if __name__ == '__main__':
-    ccop = CrystalOptimization(num_CSPD, component, ndensity, min_dis_CSPD)
+    ccop = CrystalOptimization(num_RCSD, component)
     ccop.main()

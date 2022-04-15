@@ -361,6 +361,32 @@ class ClusterTools:
         all_index = [i for i in range(poscars_num)]
         index = np.setdiff1d(all_index, same_poscars)
         return index, same_poscars
+    
+    def compare_poscars(self, poscar_1, poscar_2):
+        """
+        find common structures in poscar_1 
+        
+        Parameters
+        ----------
+        poscar_1 [str, 1d]: name of poscars
+        poscar_2 [str, 1d]: name of poscars
+
+        Returns
+        ----------
+        same_index [int, 1d]: index of common structures in poscar_1
+        """
+        same_index = []
+        for index, i in enumerate(poscar_1):
+            stru_1 = Structure.from_file(i)
+            for j in poscar_2:
+                stru_2 = Structure.from_file(j)
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_index.append(index)
+                    break
+        return same_index
 
 
 if __name__ == '__main__':

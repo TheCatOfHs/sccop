@@ -388,13 +388,19 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         pos [int, 2d]: input position
         type [int, 2d]: input type
         grid_name [int, 1d]: input grid name
+        
+        Returns
+        ----------
+        idx_order [int, 1d, np]: index of select samples sorted by grid
         """
+        #sorted by grid name
         num_jobs = len(idx)
         node_assign = self.assign_node(num_jobs)
         grid_slt = np.array(grid_name)[idx]
         order = np.argsort(grid_slt)
         grid_order = grid_slt[order]
         idx_order = idx[order]
+        #export poscars
         grid_last = grid_slt[0]
         transfer = Transfer(grid_last)
         pos_order, type_order = [], []
@@ -414,12 +420,14 @@ class Select(ListRWTools, SSHTools, ClusterTools):
                 self.write_POSCAR(pos[idx_slt], type[idx_slt],
                                   i+1, node_assign[i], 
                                   transfer, elements)
+        #export dat file of select structures
         self.write_list2d(f'{self.sh_save_path}/atom_pos_select.dat',
                           pos_order)
         self.write_list2d(f'{self.sh_save_path}/atom_type_select.dat', 
                           type_order)
         self.write_list2d(f'{self.sh_save_path}/grid_name_select.dat', 
                           np.transpose([grid_order]))
+        return idx_order
     
     def write_POSCAR(self, pos, type, num, node, transfer, elements):
         """
@@ -459,6 +467,11 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         energy [float, 1d]: energy of structure
         grid_name [int, 1d]: name of grid
         """
+        self.round = f'CCOP-{recyc}'
+        self.poscar_save_path = f'{poscar_path}/{self.round}'
+        self.sh_save_path = self.poscar_save_path
+        if not os.path.exists(self.poscar_save_path):
+            os.mkdir(self.poscar_save_path)
         #delete same structures
         num_crys = len(grid_name)
         system_echo(f'Number of samples in trainset: {num_crys}')
@@ -466,8 +479,8 @@ class Select(ListRWTools, SSHTools, ClusterTools):
             self.delete_duplicates(atom_pos, atom_type, grid_name)
         energy = np.array(energy)[index]
         num_crys = len(grid_name)
-        system_echo(f'Delete duplicates in trainset: {num_crys}')
-        #delete same structures according to training set
+        system_echo(f'Delete duplicates same in trainset: {num_crys}')
+        #delete structures that are selected before
         if recyc > 0:
             recyc_pos, recyc_type, recyc_grid = self.collect(recyc)
             atom_pos, atom_type, grid_name, index = \
@@ -475,18 +488,62 @@ class Select(ListRWTools, SSHTools, ClusterTools):
                                           recyc_pos, recyc_type, recyc_grid)
             energy = energy[index]
             num_crys = len(grid_name)
+            system_echo(f'Delete duplicates same as previous selected: {num_crys}')
+            atom_pos, atom_type, grid_name, energy = \
+                self.delete_recycle_poscar(recyc, atom_pos, atom_type, grid_name, energy)
+            num_crys = len(grid_name)
             system_echo(f'Delete duplicates same as previous recycle: {num_crys}')
         #select Top k lowest energy structures
         #export training set and select samples
         idx_slt = np.argsort(energy)[:num_poscars]
-        self.round = f'CCOP-{recyc}'
-        self.poscar_save_path = f'{poscar_path}/{self.round}'
-        self.sh_save_path = self.poscar_save_path
-        if not os.path.exists(self.poscar_save_path):
-            os.mkdir(self.poscar_save_path)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         self.write_recycle(recyc, idx_slt, atom_pos, atom_type, grid_name)
         system_echo(f'CCOP optimize structures: {num_poscars}')
+    
+    def delete_recycle_poscar(self, recyc, atom_pos, atom_type, grid_name, energy):
+        """
+        delete structures that have been optimized in previous recycle
+        
+        Parameters
+        ----------
+        recyc [int, 0d]: recycle times
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        energy [float, 1d]: energy of structure
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atom
+        atom_type [int, 2d]: type of atom
+        grid_name [int, 1d]: name of grid
+        energy [float, 1d]: energy of structure
+        """
+        #transfer pos, type, grid to poscar
+        idx_slt = np.argsort(energy)[:2*num_poscars]
+        idx_order = self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
+        #compare poscars with previous recycle
+        poscars = os.listdir(self.poscar_save_path)
+        poscars = sorted([i for i in poscars if re.match('POSCAR', i)])
+        poscars = [f'{self.poscar_save_path}/{i}' for i in poscars]
+        recyc_poscars = self.collect_poscars(recyc)
+        index = self.compare_poscars(poscars, recyc_poscars)
+        #select unoptimize structures
+        idx_filter = np.delete(idx_order, index)
+        atom_pos = np.array(atom_pos, dtype=object)[idx_filter]
+        atom_type = np.array(atom_type, dtype=object)[idx_filter]
+        grid_name = np.array(grid_name)[idx_filter]
+        energy = np.array(energy)[idx_filter]
+        #transfer to list
+        atom_pos = atom_pos.tolist()
+        atom_type = atom_type.tolist()
+        grid_name = grid_name.tolist()
+        energy = energy.tolist()
+        #remove poscars and dat files
+        files = os.listdir(self.poscar_save_path)
+        for file in files:
+            os.remove(f'{self.poscar_save_path}/{file}')
+        return atom_pos, atom_type, grid_name, energy
     
     def collect(self, recyc):
         """
@@ -509,7 +566,25 @@ class Select(ListRWTools, SSHTools, ClusterTools):
             grid_name += self.import_list2d(f'{record_path}/{i}/grid_name_select.dat', int)
         grid_name = list(np.array(grid_name).flatten())
         return atom_pos, atom_type, grid_name
+    
+    def collect_poscars(self, recyc):
+        """
+        list selected samples in each recycle
+
+        Parameters
+        ----------
+        recyc [int, 0d]: recycle times
         
+        Returns
+        ----------
+        full_poscars [int, 2d]: full name of poscars
+        """
+        full_poscars = []
+        for i in range(1, recyc+1):
+            poscars = os.listdir(f'{init_strs_path}_{i}')
+            full_poscars += [f'{init_strs_path}_{i}/{j}' for j in poscars] 
+        return full_poscars
+    
     def write_recycle(self, recyc, index, atom_pos, atom_type, grid_name):
         """
         export position, type, grid of trainset and select samples
@@ -614,16 +689,12 @@ class ReadoutNet(CrystalGraphConvNet):
     
 
 if __name__ == '__main__':
-    round = 4
-    train_pos = [[1]]
-    train_type = [[1]]
-    train_grid = [[1]]
     rw = ListRWTools()
-    file_head = f'{search_path}/{round+1:03.0f}'
+    file_head = f'{search_path}/{3:03.0f}'
     atom_pos = rw.import_list2d(f'{file_head}/atom_pos.dat', int)
     atom_type = rw.import_list2d(f'{file_head}/atom_type.dat', int)
     grid_name = rw.import_list2d(f'{file_head}/grid_name.dat', int)
-    select = Select(round+1)
+    select = Select(4)
     sample_num = len(atom_pos)
     energy = [1 for _ in range(sample_num)]
     grid_name = np.ravel(grid_name)
