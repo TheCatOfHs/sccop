@@ -1,10 +1,11 @@
 #Grid
 cutoff = 10
-num_min_atom = 2
-num_max_atom = 5
+num_min_atom = 5
+num_max_atom = 10
 grain_coarse = [.5, .5, 100.]
 grain_fine = [.25, .25, 100.]
 add_vacuum = True
+add_vdW = False
 
 #Mutate
 num_mutate = 6
@@ -12,10 +13,11 @@ mut_ratio = 0.9
 mut_freq = 1
 latt_mu = 0.
 latt_sigma = 0.2
+free_aix = [1, 1, 0]
 
 #Recycling
 num_recycle = 2
-num_ml_list = [1, 2]
+num_ml_list = [1, 1]
 num_seed = 40
 num_poscars = 36
 num_optims = 6
@@ -24,12 +26,12 @@ num_optims = 6
 component = 'XXX'
 num_RCSD = 36
 num_Rand = 120
-num_sampling = 4000
+num_sampling = 8000
 len_mu = 5
 len_sigma = 1
 ang_mu = 90
 ang_sigma = 15
-system_weight = [0., 0., 0., 0., 1., 0., 0.]
+system_weight = [1/6, 1/6, 1/6, 1/6, 1/6, 1/6, 0.]
 
 #Training
 train_batchsize = 128

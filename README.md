@@ -25,6 +25,7 @@ python版本: python3.5及以后。需要有pytorch, DPT, phonopy, pymatgen库
 注：所有计算的布里渊区路径均由pymatgen生成
 依赖包：pymatgen seekpath
 pip install seekpath
+pip install pymatgen-analysis-diffusion
 
 
 ## 节点通信

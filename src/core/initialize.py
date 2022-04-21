@@ -207,6 +207,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
             atom_type = species[seed]
             atom_num = len(atom_type)
             coors = np.random.rand(atom_num, 3)
+            coors *=  free_aix
             stru = Structure(latt, atom_type, coors)
             stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
     
@@ -258,6 +259,8 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
             #check validity of lattice vector
             a, b, c = [i if 4 < i else 4 for i in (a, b, c)]
             a, b, c = [i if i < 6 else 6 for i in (a, b, c)]
+            if add_vacuum:
+                c = 20
             latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
             volume = latt.volume
         return latt
@@ -390,13 +393,13 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
             point_num.append(num)
         return atom_pos, atom_type, grid_name, point_num, latt_file
     
-    def geo_constrain(self, number, atom_pos, atom_type, grid_name):
+    def geo_constrain(self, n, atom_pos, atom_type, grid_name):
         """
         geometry constrain to reduce structures
         
         Parameters
         ----------
-        number [int, 0d]: number of samples
+        n [int, 0d]: number of samples
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         grid_name [int, 1d]: name of grids
@@ -412,27 +415,78 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         check_num = len(check_overlay)
         sample_idx = np.arange(check_num)[check_overlay]
         #select samples that are not overlayed
-        atom_pos_diff, atom_type_diff, grid_name_diff = [], [], []
+        atom_pos_rand, atom_type_rand, grid_name_rand = [], [], []
         for i in sample_idx:
-            atom_pos_diff.append(atom_pos[i])
-            atom_type_diff.append(atom_type[i])
-            grid_name_diff.append(grid_name[i])
+            atom_pos_rand.append(atom_pos[i])
+            atom_type_rand.append(atom_type[i])
+            grid_name_rand.append(grid_name[i])
         #check neighbor distance of atoms
-        nbr_dis = self.find_nbr_dis(atom_pos_diff, grid_name_diff)
+        nbr_dis = self.find_nbr_dis(atom_pos_rand, grid_name_rand)
         check_near = [self.near(i) for i in nbr_dis]
         check_num = len(check_near)
-        sample_idx = np.arange(check_num)[check_near] 
         #sampling correct random samples
-        sample_num = len(sample_idx)
-        if sample_num > number:
-            sample_idx = np.random.choice(sample_idx, number, replace=False)
-        #add right samples into buffer
+        sample_idx = np.arange(check_num)[check_near]
         atom_pos_right, atom_type_right, grid_name_right = [], [], []
-        for i in sample_idx:
-            atom_pos_right.append(atom_pos_diff[i])
-            atom_type_right.append(atom_type_diff[i])
-            grid_name_right.append(grid_name_diff[i])
+        if len(sample_idx) > 0:
+            grids = np.array(grid_name_rand)[check_near]
+            sample_idx = self.balance_sampling(n, sample_idx, grids)
+            #add right samples into buffer
+            for i in sample_idx:
+                atom_pos_right.append(atom_pos_rand[i])
+                atom_type_right.append(atom_type_rand[i])
+                grid_name_right.append(grid_name_rand[i])  
         return atom_pos_right, atom_type_right, grid_name_right
+    
+    def balance_sampling(self, n, index, grids):
+        """
+        select samples from different grids
+        
+        Parameters
+        ----------
+        n [int, 0d]: number of samples
+        index [int, 1d]: index of samples
+        grids [int, 1d]: grid of samples
+
+        Returns
+        ----------
+        sample [int, 1d]: index of samples
+        """
+        array = np.stack((index, grids), axis=1)
+        array = sorted(array, key=lambda x: x[1])
+        index, grids = np.transpose(array)
+        #group index by grids
+        store, clusters = [], []
+        last_grid = grids[0]
+        for i, grid in enumerate(grids):
+            if grid == last_grid:
+                store.append(index[i])
+            else:
+                clusters.append(store)
+                last_grid = grid
+                store = []
+                store.append(index[i])
+        clusters.append(store)
+        #get sampling number of each grid
+        cluster_num = len(clusters)
+        cluster_per_num = [len(i) for i in clusters]
+        assign = [0 for _ in range(cluster_num)]
+        flag = True
+        while flag:
+            for i in range(cluster_num):
+                if sum(assign) == n:
+                    flag = False
+                    break
+                if sum(cluster_per_num) == 0:
+                    flag = False
+                    break
+                if cluster_per_num[i] > 0:
+                    cluster_per_num[i] -= 1
+                    assign[i] += 1
+        #sampling on different grids
+        sample = []
+        for i, cluster in zip(assign, clusters):
+            sample += random.sample(cluster, i)
+        return sample
     
     def count_latt_num(self):
         """
@@ -561,4 +615,4 @@ class Pretrain(Transfer):
 if __name__ == '__main__':
     #init = InitSampling(num_RCSD, component)
     #init.generate(1)
-    print(random.randint(0,0))
+    print('ok')

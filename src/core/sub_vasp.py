@@ -15,7 +15,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         self.repeat = repeat
         self.wait_time = wait_time
     
-    def sub_job(self, round):
+    def sub_job(self, round, vdW=False):
         """
         calculate POSCARs and return energys
         
@@ -25,6 +25,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         Parameters
         ----------
         round [int, 0d]: searching rounds
+        vdW [bool, 0d]: whether add vdW modify
         """
         round = f'{round:03.0f}'
         poscars = os.listdir(f'{poscar_path}/{round}')
@@ -35,7 +36,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
             os.mkdir(f'{vasp_out_path}/{round}-{i}')
             system_echo(f'Start VASP calculation---itersions: '
                         f'{round}-{i}, number: {num_poscar}')
-            self.sub_vasp_job(check_poscar, round, i)
+            self.sub_vasp_job(check_poscar, round, i, vdW)
             while not self.is_VASP_done(round, i, num_poscar):
                 time.sleep(self.wait_time)
             system_echo(f'All job are completed---itersions: '
@@ -50,7 +51,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                             f'{round}-{i}, number: {num_poscar}')
                 break
     
-    def sub_vasp_job(self, poscars, round, repeat):
+    def sub_vasp_job(self, poscars, round, repeat, vdW=False):
         """
         submit vasp jobs to nodes
 
@@ -59,11 +60,12 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         poscars [str, 1d]: name of poscar
         round [str, 0d]: searching rounds
         repeat [str, 0d]: repeat times 
+        vdW [bool, 0d]: whether add vdW modify
         """
         for poscar in poscars:
-            self.sub_job_with_ssh(poscar, round, repeat)
+            self.sub_job_with_ssh(poscar, round, repeat, vdW)
     
-    def sub_job_with_ssh(self, poscar, round, repeat):
+    def sub_job_with_ssh(self, poscar, round, repeat, vdW=False):
         """
         SSH to target node and call vasp for calculation
         
@@ -72,7 +74,11 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         poscars [str, 1d]: name of poscar
         round [str, 0d]: searching rounds
         repeat [str, 0d]: repeat times 
+        vdW [bool, 0d]: whether add vdW modify
         """
+        flag_vdW = 0
+        if vdW:
+            flag_vdW = 1
         node = poscar.split('-')[-1]
         ip = f'node{node}'
         local_vasp_out_path = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
@@ -85,7 +91,10 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                         cp ../../{vasp_files_path}/SinglePointEnergy/* .
                         scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
                         DPT -v potcar
-                        #DPT --vdW optPBE
+                        if [ {flag_vdW} -eq 1 ]; then
+                            DPT --vdW DFT-D3
+                        fi
+                        
                         date > $p.out
                         /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
                         date >> $p.out

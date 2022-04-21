@@ -3,11 +3,13 @@ import time
 import argparse
 import numpy as np
 
+from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.utils import ListRWTools, SSHTools, system_echo
-from pymatgen.core.structure import Structure
 
 
 parser = argparse.ArgumentParser()
@@ -214,10 +216,14 @@ class GridDivide(ListRWTools):
         ----------
         strain [float, 2d, np]: strain matrix
         """
+        #get strain matrix
         gauss_mat = np.random.normal(self.mu, self.sigma, (3, 3))
         gauss_sym = 0.25*(gauss_mat + np.transpose(gauss_mat)) + \
             0.5*np.identity(3)*gauss_mat
         strain = np.clip(gauss_sym, -1, 1)
+        #set free axis
+        free = np.transpose(np.ones((3, 3))*free_aix)
+        strain *= free
         return strain
     
     def lattice_check(self, latt_vec):
@@ -246,14 +252,20 @@ class GridDivide(ListRWTools):
         Parameters
         ----------
         latt_vec [float, 2d, np]: lattice vector
-
+        
         Returns
         ----------
         latt_vec [float, 2d, np]: modified vector
         """
-        norm = np.linalg.norm(latt_vec[-1])
-        if norm < 10:
-            latt_vec[-1] += [0., 0., 10.]
+        latt = Lattice(latt_vec)
+        a, b, c, alpha, beta, gamma = latt.parameters
+        if c < 20:
+            c = 20
+        latt = Lattice.from_parameters(a=a, b=b, c=c, 
+                                       alpha=alpha,
+                                       beta=beta,
+                                       gamma=gamma)
+        latt_vec = latt.matrix
         return latt_vec
     
     def fraction_coor(self, grain, latt_vec):

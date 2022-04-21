@@ -47,7 +47,7 @@ class CrystalOptimization(ListRWTools):
             idx = np.arange(len(atom_pos))
             select.write_POSCARs(idx, atom_pos, atom_type, grid_name)
             #VASP calculate
-            self.vasp.sub_job(start)
+            self.vasp.sub_job(start, vdW=add_vdW)
             
             #CCOP optimize
             num_round = num_ml_list[recycle]
@@ -97,7 +97,7 @@ class CrystalOptimization(ListRWTools):
                 select = Select(round+1)
                 select.samples(atom_pos, atom_type, grid_name, train_pos, train_type, train_grid)
                 #Single point ernergy calculate
-                self.vasp.sub_job(round+1)
+                self.vasp.sub_job(round+1, vdW=add_vdW)
             
             #Export searched POSCARs
             select = Select(start+num_round)
@@ -105,14 +105,14 @@ class CrystalOptimization(ListRWTools):
             system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #VASP optimize
             vasp = VASPoptimize(recycle)
-            vasp.run_optimization_low()
+            vasp.run_optimization_low(vdW=add_vdW)
             start += num_round + 1
             
         #Select optimized structures
         opt_slt = OptimSelect()
         opt_slt.optim_select()
         #Optimize
-        self.post.run_optimization()
+        self.post.run_optimization(vdW=add_vdW)
         #Property calculate
         #self.property_calculate()
         

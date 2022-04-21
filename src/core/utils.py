@@ -197,7 +197,7 @@ class SSHTools:
             os.rename(f'{path}/{poscar}', 
                       f'{path}/{poscar[:-4]}-{node_assign[i]}')
         
-    def assign_node(self, num_jobs):
+    def assign_node(self, num_jobs, order=True):
         """
         assign jobs to nodes
         
@@ -217,9 +217,16 @@ class SSHTools:
             if assign == 0:
                 node_assign = node_assign + nodes[:left]
             else:
-                node_assign = [i for i in nodes for _ in range(assign)]
+                node_seq = [i for i in nodes]
+                for n in range(assign):
+                    if np.mod(n+1, 2) == 0:
+                        node_assign += node_seq[::-1]
+                    else:
+                        node_assign += node_seq
             num_assign = len(node_assign)
-        return sorted(node_assign)
+        if order:
+            node_assign = sorted(node_assign)
+        return node_assign
     
     def assign_job(self, poscar):
         """

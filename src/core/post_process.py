@@ -28,11 +28,15 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
         if not os.path.exists(self.optim_strs_path):
             os.mkdir(self.optim_strs_path)
             os.mkdir(self.energy_path)
-
-    def run_optimization_low(self):
+    
+    def run_optimization_low(self, vdW=False):
         '''
         optimize configurations at low level
+        vdW [bool, 0d]: whether add vdW modify
         '''
+        flag_vdW = 0
+        if vdW:
+            flag_vdW = 1
         files = sorted(os.listdir(self.ccop_out_path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         num_poscar = len(poscars)
@@ -51,8 +55,11 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW DFT-D3
-                            for i in 1
+                            if [ {flag_vdW} -eq 1 ]; then
+                                DPT --vdW DFT-D3
+                            fi
+                            
+                            for i in 1 2
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
@@ -68,7 +75,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                             fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
-                                scp vasp-1.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                                scp vasp-2.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
                             cd ../
                             
@@ -176,10 +183,14 @@ class PostProcess(VASPoptimize, GeoCheck):
             os.mkdir(phonon_path)
             os.mkdir(thermalconductivity_path)
     
-    def run_optimization(self):
+    def run_optimization(self, vdW=False):
         '''
         optimize configurations from low to high level
+        vdW [bool, 0d]: whether add vdW modify
         '''
+        flag_vdW = 0
+        if vdW:
+            flag_vdW = 1
         files = sorted(os.listdir(ccop_out_path))
         poscars = [i for i in files if re.match(r'POSCAR', i)]
         num_poscar = len(poscars)
@@ -198,8 +209,11 @@ class PostProcess(VASPoptimize, GeoCheck):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            #DPT --vdW DFT-D3
-                            for i in 2 3
+                            if [ {flag_vdW} -eq 1 ]; then
+                                DPT --vdW DFT-D3
+                            fi
+                            
+                            for i in 3
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
@@ -280,10 +294,13 @@ class PostProcess(VASPoptimize, GeoCheck):
         system_echo(f'All jobs are completed --- Electronic structure')
         self.remove_flag(optim_strs_path)
     
-    def run_phonon(self):
+    def run_phonon(self, vdW=False):
         '''
         calculate phonon spectrum of optimized configurations
         '''
+        flag_vdW = 0
+        if vdW:
+            flag_vdW = 1
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
         self.get_k_points(poscars, task='phonon')
@@ -301,9 +318,11 @@ class PostProcess(VASPoptimize, GeoCheck):
                             cp ../../{vasp_files_path}/Phonon/* .
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                             scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
-                            #DPT --vdW DFT-D3
+                            if [ {flag_vdW} -eq 1 ]; then
+                                DPT --vdW DFT-D3
+                            fi
                             
-                            phonopy -d --dim="3 3 1"
+                            phonopy -d --dim="4 4 1"
                             n=`ls | grep POSCAR- | wc -l`
                             for i in `seq -f%03g 1 $n`
                             do
@@ -570,7 +589,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
                                 [[' = '] for i in range(5)], 
-                                [['XXX'], ['3 3 1'], [band], [band_label], ['write']]] # output the file by columns
+                                [['XXX'], ['4 4 1'], [band], [band_label], ['write']]] # output the file by columns
                 self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
