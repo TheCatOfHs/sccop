@@ -28,17 +28,15 @@ args = parser.parse_args()
 
 class ParallelWorkers(ListRWTools, SSHTools):
     #Assign sampling jobs to each node
-    def __init__(self, repeat=2, sleep_time=1):
-        self.repeat = repeat
-        self.wait_time = wait_time
+    def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
     
     def search(self, round, num_paths, init_pos, init_type, init_grid):
         """
         assign jobs by the following files
-        initial_pos_XXX.dat: initial position by line
-        initial_type_XXX.dat: initial type by line
-        worker_job_XXX.dat: node job by line
+        initial_pos_XXX.dat: initial position
+        initial_type_XXX.dat: initial type
+        worker_job_XXX.dat: node job
         e.g. round path node grid model
              1 1 131 1 model_best.pth.tar
              
@@ -63,15 +61,16 @@ class ParallelWorkers(ListRWTools, SSHTools):
             time.sleep(self.sleep_time)
         self.remove_flag(self.sh_save_path)
         system_echo('Successful update each node!')
-        
-        self.sub_job_to_workers(pos, type, job)
+        #sub searching job to each node
+        work_node_num = self.sub_job_to_workers(pos, type, job)
         system_echo('Successful assign works to workers!')
-        job_finish = self.worker_monitor(pos, type, job, num_paths)
-        system_echo(f'Finished searching jobs: {len(job_finish)}/{num_paths}')
-        
-        atom_pos, atom_type, grid_name = self.collect(job_finish)
+        while not self.is_done(self.sh_save_path, work_node_num):
+            time.sleep(self.sleep_time)
+        self.unzip()
+        #collect searching path
+        atom_pos, atom_type, grid_name = self.collect(job)
         system_echo(f'All workers are finished!---sample number: {len(atom_pos)}')
-        
+        #export searching results
         self.write_list2d(f'{self.sh_save_path}/atom_pos.dat', 
                           atom_pos, style='{0:3.0f}')
         self.write_list2d(f'{self.sh_save_path}/atom_type.dat',
@@ -80,8 +79,8 @@ class ParallelWorkers(ListRWTools, SSHTools):
                           grid_name, style='{0:3.0f}')
         self.remove_all_path()
     
-    def generate_job(self, round, num_paths, init_pos, 
-                     init_type, init_grid):
+    def generate_job(self, round, num_paths, 
+                     init_pos, init_type, init_grid):
         """
         generate initial searching files
         
@@ -101,6 +100,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         for i, node in enumerate(node_assign):
             job = [round, i, node, init_grid[i], model]
             worker_job.append(job)
+        #export searching files
         worker_file = f'{self.sh_save_path}/worker_job_{self.round}.dat'
         pos_file = f'{self.sh_save_path}/initial_pos_{self.round}.dat'
         type_file = f'{self.sh_save_path}/initial_type_{self.round}.dat'
@@ -126,100 +126,6 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         '''
         self.ssh_node(shell_script, ip)
     
-    def sampling_with_ssh(self, atom_pos, atom_type,
-                          round, path, node, grid_name, model_name):
-        """
-        SSH to target node and call workers for sampling
-
-        Parameters
-        ----------
-        atom_pos [str, 0d]: initial atom position
-        atom_type [str, 0d]: initial atom type
-        round [str, 0d]: searching round
-        path [str, 0d]: searching path
-        node [str, 0d]: searching node
-        grid_name [str, 0d]: name of grid
-        model_name [str, 0d]: name of predict model
-        """
-        ip = f'node{node}'
-        options = f'--atom_pos {atom_pos} --atom_type {atom_type} ' \
-                  f'--round {round} --path {path} --node {node} ' \
-                  f'--grid_name {grid_name} --model_name {model_name}'
-        postfix = f'{self.round}-{path.zfill(3)}-{node}.dat'
-        pos, type, energy = f'pos-{postfix}', f'type-{postfix}', f'energy-{postfix}'
-        local_sh_save_path = f'/local/ccop/{self.sh_save_path}'
-        shell_script = f'''
-                        #!/bin/bash
-                        cd /local/ccop/
-                        python src/core/search.py {options}
-                        
-                        cd {self.sh_save_path}
-                        if [ -f {pos} -a -f {type} -a -f {energy} ]; then
-                            tar -zcf {path}.tar.gz {pos} {type} {energy}
-                            scp {path}.tar.gz {gpu_node}:{local_sh_save_path}
-                            touch FINISH-{path}
-                            scp FINISH-{path} {gpu_node}:{local_sh_save_path}
-                            #rm FINISH-{path} {pos} {type} {energy} {path}.tar.gz
-                        fi
-                        '''
-        self.ssh_node(shell_script, ip)
-    
-    def worker_monitor(self, pos, type, job, num_paths):
-        """
-        monitor workers whether have done
-        
-        Parameters
-        ----------
-        pos [str, 1d, np]: initial pos
-        type [str, 1d, np]: initial type
-        job [str, 2d, np]: jobs assigned to nodes
-        num_paths [int, 0d]: number of search path
-        
-        Returns
-        ----------
-        job_finish [str, 2d, np]: finished jobs
-        """
-        exist_path = np.arange(num_paths)
-        time_counter, repeat_counter = 0, 0
-        while not self.is_done(self.sh_save_path, num_paths):
-            time.sleep(self.sleep_time)
-            time_counter += 1
-            if time_counter > self.wait_time:
-                fail_path, exist_path = self.find_fail_jobs(job)
-                num_fail = len(fail_path)
-                pos_fail, type_fail, job_fail = \
-                    pos[fail_path], type[fail_path], job[fail_path]
-                self.sub_job_to_workers(pos_fail, type_fail, job_fail)
-                repeat_counter += 1
-                time_counter = self.wait_time/2
-                system_echo(f'Failure searching jobs: {num_fail}')
-                break
-            if repeat_counter == self.repeat:
-                break 
-        self.unzip(exist_path)
-        job_finish = job[exist_path]
-        return job_finish
-    
-    def find_fail_jobs(self, job):
-        """
-        find ssh failure jobs
-        
-        Parameters
-        ----------
-        job [str, 2d, np]: all jobs
-
-        Returns
-        ----------
-        fail_path [int, 1d, np]: index of failure jobs
-        exist_path [int, 1d, np]: index of success jobs
-        """
-        all_path = [int(i) for i in job[:,1]]
-        shell_script = f'ls {self.sh_save_path} | grep tar.gz'
-        ct = os.popen(shell_script).read().split()
-        exist_path = [int(i.split('.')[0]) for i in ct]
-        fail_path = np.setdiff1d(all_path, exist_path)
-        return fail_path, sorted(exist_path)
-    
     def sub_job_to_workers(self, pos, type, job):
         """
         sub searching jobs to nodes
@@ -230,18 +136,80 @@ class ParallelWorkers(ListRWTools, SSHTools):
         type [str, 1d, np]: initial type
         job [str, 2d, np]: jobs assgined to nodes
         """
-        for atom_pos, atom_type, assign in zip(pos, type, job):
+        #poscars grouped by nodes
+        pos_node, type_node, job_node = [], [], []
+        pos_assign, type_assign, job_assign = [], [], []
+        for node in nodes:
+            for i, line in enumerate(job):
+                label = line[2]
+                if label == str(node):
+                    pos_assign.append(pos[i])
+                    type_assign.append(type[i])
+                    job_assign.append(line)
+            pos_node.append(pos_assign)
+            type_node.append(type_assign)
+            job_node.append(np.transpose(job_assign))
+            pos_assign, type_assign, job_assign = [], [], []
+        #sub job to target node
+        for atom_pos, atom_type, assign in zip(pos_node, type_node, job_node):
             self.sampling_with_ssh(atom_pos, atom_type, *assign)
+        work_node_num = len(pos_node)
+        return work_node_num
     
-    def unzip(self, exist_path):
+    def sampling_with_ssh(self, atom_pos, atom_type, 
+                          round, path, node, grid_name, model_name):
         """
-        unzip files of finish path
-        
+        SSH to target node and call workers for sampling
+
         Parameters
         ----------
-        exist_path [int, 1d, np]: successful searching path
+        atom_pos [str, 1d]: initial atom position
+        atom_type [str, 1d]: initial atom type
+        round [str, 1d]: searching round
+        path [str, 1d]: searching path
+        node [str, 1d]: searching node
+        grid_name [str, 1d]: name of grid
+        model_name [str, 1d]: name of predict model
         """
-        zip_file = [f'{i}.tar.gz' for i in exist_path]
+        ip = f'node{node[0]}'
+        search_jobs = []
+        for i in range(len(atom_pos)):
+            option = f'--atom_pos {atom_pos[i]} --atom_type {atom_type[i]} ' \
+                     f'--round {round[i]} --path {path[i]} --node {node[i]} ' \
+                     f'--grid_name {grid_name[i]} --model_name {model_name[i]}'
+            search_jobs.append(f'nohup python src/core/search.py {option} >& log&')
+        search_jobs = ' '.join(search_jobs)
+        #ssh to target node then search from different start
+        local_sh_save_path = f'/local/ccop/{self.sh_save_path}'
+        shell_script = f'''
+                        #!/bin/bash
+                        cd /local/ccop/
+                        {search_jobs}
+                        
+                        while true;
+                        do
+                            num=`ps -ef | grep search.py | grep -v grep | wc -l`
+                            if [ $num -eq 0 ]; then
+                                rm log
+                                break
+                            fi
+                            sleep 1s
+                        done
+                        
+                        cd {self.sh_save_path}
+                        tar -zcf search-{ip}.tar.gz *
+                        touch FINISH-{ip}
+                        scp search-{ip}.tar.gz FINISH-{ip} {gpu_node}:{local_sh_save_path}
+                        rm *
+                        '''
+        self.ssh_node(shell_script, ip)
+    
+    def unzip(self):
+        """
+        unzip files of finish path
+        """
+        zip_file = os.listdir(self.sh_save_path)
+        zip_file = [i for i in zip_file if i.endswith('gz')]
         zip_file = ' '.join(zip_file)
         shell_script = f'''
                         #!/bin/bash
@@ -249,7 +217,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         for i in {zip_file}
                         do
                             tar -zxf $i
-                            #rm $i
+                            rm $i
                         done
                         '''
         os.system(shell_script)
@@ -262,7 +230,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         
         Parameters
         ----------
-        job [str, 2d, np]: assignment of node
+        job [str, 2d, np]: jobs assgined to nodes
         
         Returns
         ----------
@@ -270,21 +238,26 @@ class ParallelWorkers(ListRWTools, SSHTools):
         atom_type [int, 2d]: type of atoms
         grid_name [int, 2d, np]: name of grid
         """
-        assign, grid = job[:,:3], job[:,3]
-        sort = np.argsort(grid)
-        assign, grid = assign[sort], grid[sort]
+        job = np.transpose(job)
+        round, path, node, grid = job[:4]
         atom_pos, atom_type, grid_name, lack = [], [], [], []
-        for i, item in enumerate(assign):
-            pos_file = self.get_file_name('pos', *tuple(item))
-            type_file = self.get_file_name('type', *tuple(item))
+        for i in range(len(path)):
+            #get name of path record files
+            assign = (round[i], path[i], node[i])
+            pos_file = self.get_file_name('pos', *assign)
+            type_file = self.get_file_name('type', *assign)
+            #get searching results
             if os.path.exists(pos_file):
                 pos = self.import_list2d(pos_file, int)
                 type = self.import_list2d(type_file, int)
-                atom_pos += pos
-                atom_type += type
-                num_sample = len(type)
-                zeros = np.zeros((num_sample, 1))
-                grid_name.append(zeros + int(grid[i]))
+                if len(pos) > 0:
+                    atom_pos += pos
+                    atom_type += type
+                    num_sample = len(type)
+                    zeros = np.zeros((num_sample, 1))
+                    grid_name.append(zeros + int(grid[i]))
+                else:
+                    lack.append(pos_file)
             else:
                 lack.append(pos_file)
         grid_name = np.vstack(grid_name)
@@ -489,29 +462,30 @@ class Search(ListRWTools, GeoCheck):
         new_pos [int, 1d]: position of atom after 1 SA step
         type [int, 1d]: type of atom after 1 SA step
         """
-        flag = False
-        atom_num = len(pos)
-        while not flag:
-            #generate actions
-            new_pos = pos.copy()
-            nbr_dis = self.transfer.grid_nbr_dis[new_pos]
-            nbr_idx = self.transfer.grid_nbr_idx[new_pos]
-            idx = np.random.randint(0, atom_num)
-            actions_mv = self.action_filter(idx, nbr_dis, nbr_idx)
-            actions_ex = self.exchange_action(type)
-            replace_ex = [-1 for _ in actions_ex]
-            actions = np.concatenate((actions_mv, replace_ex))
-            #exchange atoms or move atom
-            point = np.random.choice(actions)
-            if point == -1:
-                actions_num = len(actions_ex)
-                idx = np.random.randint(0, actions_num)
-                idx_1, idx_2 = actions_ex[idx]
-                new_pos[idx_1], new_pos[idx_2] = \
-                    new_pos[idx_2], new_pos[idx_1]
-            else:
-                new_pos[idx] = point    
-            flag = self.overlay(new_pos, atom_num)
+        new_pos = pos.copy()
+        for _ in range(num_move):
+            flag = False
+            atom_num = len(new_pos)
+            while not flag:
+                #generate actions
+                nbr_dis = self.transfer.grid_nbr_dis[new_pos]
+                nbr_idx = self.transfer.grid_nbr_idx[new_pos]
+                idx = np.random.randint(0, atom_num)
+                actions_mv = self.action_filter(idx, nbr_dis, nbr_idx)
+                actions_ex = self.exchange_action(type)
+                replace_ex = [-1 for _ in actions_ex]
+                actions = np.concatenate((actions_mv, replace_ex))
+                #exchange atoms or move atom
+                point = np.random.choice(actions)
+                if point == -1:
+                    actions_num = len(actions_ex)
+                    idx = np.random.randint(0, actions_num)
+                    idx_1, idx_2 = actions_ex[idx]
+                    new_pos[idx_1], new_pos[idx_2] = \
+                        new_pos[idx_2], new_pos[idx_1]
+                else:
+                    new_pos[idx] = point    
+                flag = self.overlay(new_pos, atom_num)
         return new_pos, type.copy()
     
     def exchange_action(self, type):
@@ -632,6 +606,8 @@ class Search(ListRWTools, GeoCheck):
         pos_buffer [int, 2d]: atom positions
         type_buffer [int, 2d]: atom types
         energy_buffer [float, 2d]: configuration energy
+        path [int, 0d]: number of path
+        node [int, 0d]: searching node
         """
         self.write_list2d(f'{self.sh_save_path}/'
                           f'pos-{self.round}-{path:03.0f}-{node}.dat', 
@@ -652,6 +628,6 @@ if __name__ == '__main__':
     grid_name = args.grid_name
     model_name = args.model_name
     
-    #Search
+    #Searching
     worker = Search(round, grid_name)
     worker.explore(atom_pos, atom_type, model_name, path, node)

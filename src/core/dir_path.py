@@ -22,7 +22,7 @@ elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
 KPOINTS_file = 'vasp/KPOINTS'
 bandconf_file = 'vasp/bandconf'
-pretrain_model = 'database/mp_20/pretrain_model/model_best.pth.tar'
+pretrain_model = 'data/pretrain/model_2d.pth.tar'
 
 #Property file
 optim_vasp_path = f'{vasp_out_path}/optim_strs'

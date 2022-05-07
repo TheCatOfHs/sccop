@@ -49,7 +49,7 @@ class ParallelDivide(ListRWTools, SSHTools):
         #update cpus
         for node in nodes:
             self.send_grid_to_cpu(node)
-        while not self.is_done(grid_prop_path, self.num_node*num_grid):
+        while not self.is_done(grid_prop_path, self.num_node):
             time.sleep(self.wait_time)
         self.remove_flag_on_gpu()
         self.remove_flag_on_cpu()
@@ -88,9 +88,8 @@ class ParallelDivide(ListRWTools, SSHTools):
                         
                         touch FINISH-{mutate}                        
                         tar -zcf {mutate}.tar.gz {file} FINISH-{mutate}
-                        scp {mutate}.tar.gz {gpu_node}:{self.prop_path}/
+                        scp {mutate}.tar.gz FINISH-{mutate} {gpu_node}:{self.prop_path}/
                         
-                        scp FINISH-{mutate} {gpu_node}:{self.prop_path}/
                         rm {file} {mutate}.tar.gz FINISH-{mutate}
                         '''
         self.ssh_node(shell_script, ip)
@@ -112,28 +111,32 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         update grid of each node
         """
-        for i, file in enumerate(self.zip_file):
-            ip = f'node{node}'
-            shell_script = f'''
-                            cd /local/ccop/{grid_prop_path}
-                            scp {gpu_node}:{self.prop_path}/{file} .
-                            tar -zxf {file}
-                            rm {file}
-                            
-                            touch FINISH-{node}-{i}
-                            scp FINISH-{node}-{i} {gpu_node}:{self.prop_path}/
-                            rm FINISH-{node}-{i}
-                            '''
-            self.ssh_node(shell_script, ip)
+        zip_file_str = ' '.join(self.zip_file)
+        ip = f'node{node}'
+        shell_script = f'''
+                        cd /local/ccop/{grid_prop_path}
+                        scp {gpu_node}:{self.prop_path}/{{{','.join(self.zip_file)}}} .
+                        
+                        for i in {zip_file_str}
+                        do
+                            nohup tar -zxf $i >& log-$i &
+                            rm log-$i
+                        done
+                        
+                        touch FINISH-{node}
+                        scp FINISH-{node} {gpu_node}:{self.prop_path}/
+                        rm FINISH-{node} {zip_file_str}
+                        '''
+        self.ssh_node(shell_script, ip)
     
     def unzip_grid_on_gpu(self):
         """
         unzip grid property on gpu node
         """
-        zip_file = ' '.join(self.zip_file)
+        zip_file_str = ' '.join(self.zip_file)
         shell_script = f'''
                         cd {grid_prop_path}/
-                        for i in {zip_file}
+                        for i in {zip_file_str}
                         do
                             nohup tar -zxf $i >& log-$i &
                             rm log-$i
@@ -164,6 +167,20 @@ class ParallelDivide(ListRWTools, SSHTools):
         remove zip file
         """
         os.system(f'rm {grid_prop_path}/*.tar.gz')
+    
+
+class PlanarSpaceGroup():
+    #
+    def __init__(self):
+        pass    
+
+    def unequal_area(self, group):
+        
+        #
+        if group == 1:
+            pass
+        
+        
     
     
 class GridDivide(ListRWTools):
@@ -252,15 +269,16 @@ class GridDivide(ListRWTools):
         Parameters
         ----------
         latt_vec [float, 2d, np]: lattice vector
-        
+
         Returns
         ----------
         latt_vec [float, 2d, np]: modified vector
         """
         latt = Lattice(latt_vec)
         a, b, c, alpha, beta, gamma = latt.parameters
-        if c < 20:
-            c = 20
+        if c < vacuum_space:
+            c = vacuum_space
+            alpha, beta = 90, 90
         latt = Lattice.from_parameters(a=a, b=b, c=c, 
                                        alpha=alpha,
                                        beta=beta,
@@ -274,19 +292,28 @@ class GridDivide(ListRWTools):
         
         Parameters
         ----------
-        bond_len [float, 1d]: fine grain of grid
+        grain [float, 1d]: grain of grid
+        latt_vec [float, 2d]: lattice vectors
         
         Returns
         ----------
-        coor [float, 2d]: fraction coordinate of grid
+        coor [float, 2d, np]: fraction coordinate of grid
         """
         norms = [np.linalg.norm(i) for i in latt_vec]
         n = [norms[i]//grain[i] for i in range(3)]
-        n = [1 if i==0 else i for i in n]
-        grain_a, grain_b, grain_c = [1/i for i in n]
-        coor = [[i, j, k] for i in np.arange(0, 1, grain_a)
-                for j in np.arange(0, 1, grain_b)
-                for k in np.arange(0, 1, grain_c)]
+        grains = [1/i for i in n]
+        #constrain number of grid plane
+        ends = []
+        for i in range(3):
+            plane_num = plane_upper[i]
+            if n[i] < plane_num:
+                ends.append(1)
+            else:
+                ends.append(grains[i]*plane_num)
+        #get fraction coordinate of grid points
+        coor = [[i, j, k] for i in np.arange(0, ends[0], grains[0])
+                for j in np.arange(0, ends[1], grains[1])
+                for k in np.arange(0, ends[2], grains[2])]
         return np.array(coor)
     
     def near_property(self, stru, cutoff, near=0):

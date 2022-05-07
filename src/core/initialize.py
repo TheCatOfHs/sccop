@@ -7,12 +7,12 @@ import numpy as np
 import pandas as pd
 from collections import Counter
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import Structure
+from pymatgen.core.structure import IStructure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
-from core.utils import SSHTools, system_echo
+from core.utils import *
 from core.predict import PPMData, PPModel
 from core.data_transfer import Transfer, MultiGridTransfer
 from core.grid_divide import GridDivide, ParallelDivide
@@ -102,7 +102,7 @@ class UpdateNodes(SSHTools):
                         rm latt_vec.tar.gz
                         '''
         os.system(shell_script)
-        
+    
 
 class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, GeoCheck):
     #generate initial structures of ccop
@@ -153,7 +153,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
     def build_grid(self, grain, grid_name, latt_file):
         """
         build grid of structure
-
+        
         Parameters
         ----------
         grain [float, 1d]: grain of grid
@@ -202,68 +202,112 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         if not os.path.exists(dir):
             os.mkdir(dir)
         for i in range(number):
-            latt = self.lattice_generate()
+            latt, _ = self.lattice_generate()
             seed = random.randint(0, species_num-1)
             atom_type = species[seed]
             atom_num = len(atom_type)
             coors = np.random.rand(atom_num, 3)
             coors *=  free_aix
-            stru = Structure(latt, atom_type, coors)
+            stru = IStructure(latt, atom_type, coors)
             stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
     
     def lattice_generate(self):
         """
         generate lattice by crystal system
         
-        Returns:
+        Returns
+        ----------
         latt [obj]: Lattice object of pymatgen
+        crystal_system [int, 0d]: crystal system number
         """
         volume = 0
         system = np.arange(0, 7)
         while volume == 0:
             crystal_system = np.random.choice(system, p=system_weight)
-            #cubic
+            #triclinic
             if crystal_system == 0:
-                a = random.normalvariate(len_mu, len_sigma)
-                b, c = a, a
-                alpha, beta, gamma = 90, 90, 90
-            #tetragonal
+                a, b, c = np.random.normal(len_mu, len_sigma, 3)
+                alpha, beta, gamma = np.random.normal(ang_mu, ang_sigma, 3)
+            #monoclinic
             if crystal_system == 1:
-                a, c = np.random.normal(len_mu, len_sigma, 2)
-                b = a
-                alpha, beta, gamma = 90, 90, 90
+                a, b, c = np.random.normal(len_mu, len_sigma, 3)
+                alpha, gamma = 90, 90
+                beta = random.normalvariate(ang_mu, ang_sigma)
             #orthorhombic
             if crystal_system == 2:
                 a, b, c = np.random.normal(len_mu, len_sigma, 3)
                 alpha, beta, gamma = 90, 90, 90
-            #trigonal
+            #tetragonal
             if crystal_system == 3:
+                a, c = np.random.normal(len_mu, len_sigma, 2)
+                b = a
+                alpha, beta, gamma = 90, 90, 90
+            #trigonal
+            if crystal_system == 4:
                 a = random.normalvariate(len_mu, len_sigma)
                 b, c = a, a
                 alpha = random.normalvariate(ang_mu, ang_sigma)
                 beta, gamma = alpha, alpha
             #hexagonal
-            if crystal_system == 4:
+            if crystal_system == 5:
                 a, c = np.random.normal(len_mu, len_sigma, 2)
                 b = a
                 alpha, beta, gamma = 90, 90, 120
-            #monoclinic
-            if crystal_system == 5:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, gamma = 90, 90
-                beta = random.normalvariate(ang_mu, ang_sigma)
-            #triclinic
+            #cubic
             if crystal_system == 6:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, beta, gamma = np.random.normal(ang_mu, ang_sigma, 3)
+                a = random.normalvariate(len_mu, len_sigma)
+                b, c = a, a
+                alpha, beta, gamma = 90, 90, 90
             #check validity of lattice vector
-            a, b, c = [i if 4 < i else 4 for i in (a, b, c)]
-            a, b, c = [i if i < 6 else 6 for i in (a, b, c)]
+            a, b, c = [i if len_lower < i else len_lower for i in (a, b, c)]
+            a, b, c = [i if i < len_upper else len_upper for i in (a, b, c)]
             if add_vacuum:
-                c = 20
+                c = vacuum_space
+                alpha, beta = 90, 90
             latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
             volume = latt.volume
-        return latt
+        return latt, crystal_system
+    
+    def get_space_group(self, system):
+        """
+        get space group number according to crystal system
+        
+        Parameters
+        ----------
+        system [int, 0d]: crystal system
+
+        Returns
+        ----------
+        space_group [int, 0d]: international number of space group
+        """
+        #space group of 2-dimensional structure
+        if num_dim == 2:
+            if system == 1:
+                groups = [1, 3]
+            if system == 2:
+                groups = [4, 6, 8, 25, 28, 32, 38]
+            if system == 3:
+                groups = [75, 99, 100]
+            if system == 5:
+                groups = [143, 156, 157, 168, 183]
+        #space group of 3-dimensional structure
+        if num_dim == 3:
+            if system == 0:
+                groups = np.arange(1, 3)
+            if system == 1:
+                groups = np.arange(3, 16)
+            if system == 2:
+                groups = np.arange(16, 75)
+            if system == 3:
+                groups = np.arange(75, 143)
+            if system == 4:
+                groups = np.arange(143, 168)
+            if system == 5:
+                groups = np.arange(168, 195)
+            if system == 6:
+                groups = np.arange(195, 231)
+        space_group = np.random.choice(groups)
+        return space_group
     
     def random_sampling(self, recyc, atom_type, grid_name, point_num):
         """
@@ -526,34 +570,38 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
     
 class Pretrain(Transfer):
     #Pretrain property predict model
-    def __init__(self, 
-                 cutoff=8, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
+    def __init__(self, cutoff=12, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
         self.cutoff = cutoff
         self.nbr, self.var = nbr, var
         self.filter = np.arange(dmin, dmax+step, step)
         self.elem_embed = self.import_list2d(
             atom_init_file, int, numpy=True)
     
-    def pretrain(self,):
-        train_df = pd.read_csv('database/mp_20/train.csv')
-        valid_df = pd.read_csv('database/mp_20/val.csv')
-        test_df = pd.read_csv('database/mp_20/test.csv')
-        train_store = [train_df.iloc[idx] for idx in range(len(train_df))]
-        train_cifs = [i['cif'] for i in train_store]
-        train_energys = [i['formation_energy_per_atom'] for i in train_store]
-        valid_store = [valid_df.iloc[idx] for idx in range(len(valid_df))]
-        valid_cifs = [i['cif'] for i in valid_store]
-        valid_energys = [i['formation_energy_per_atom'] for i in valid_store]
-        test_store = [test_df.iloc[idx] for idx in range(len(test_df))]
-        test_cifs = [i['cif'] for i in test_store]
-        test_energys = [i['formation_energy_per_atom'] for i in test_store]
+    def pretrain(self):
+        path = 'database/CIF2D'
+        data = pd.read_csv(f'{path}/id_prop.csv', header=None).values
+        #divide into train, valid, test
+        data_num = len(data)
+        index = np.arange(data_num)
+        train_index = index[:int(data_num*0.6)]
+        valid_index = index[int(data_num*0.6):int(data_num*0.8)]
+        test_index = index[int(data_num*0.8):]
+        #get name of cifs
+        train_cifs, train_energys = np.transpose(data[train_index])
+        valid_cifs, valid_energys = np.transpose(data[valid_index])
+        test_cifs, test_energys = np.transpose(data[test_index])
+        train_cifs = [f'{path}/{i}.cif' for i in train_cifs]
+        valid_cifs = [f'{path}/{i}.cif' for i in valid_cifs]
+        test_cifs = [f'{path}/{i}.cif' for i in test_cifs]
+        #transfer data to input of model
         train_atom_fea, train_nbr_fea, train_nbr_fea_idx = self.batch(train_cifs)
         valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx = self.batch(valid_cifs)
         test_atom_fea, test_nbr_fea, test_nbr_fea_idx = self.batch(test_cifs)
+        #training prediction model
         train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys)
         valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
         test_data = PPMData(test_atom_fea, test_nbr_fea, test_nbr_fea_idx, test_energys)
-        ppm = PPModel(100, train_data, valid_data, test_data, batch_size=128)
+        ppm = PPModel(100, train_data, valid_data, test_data)
         ppm.train_epochs()
     
     def single(self, cif):
@@ -570,7 +618,7 @@ class Pretrain(Transfer):
         nbr_fea [float, 2d, np]: distance of near neighbor 
         nbr_idx [int, 2d, np]: index of near neighbor 
         """
-        crystal = Structure.from_str(cif, fmt='cif')
+        crystal = Structure.from_file(cif)
         atom_type = np.array(crystal.atomic_numbers) - 1
         all_nbrs = crystal.get_all_neighbors(self.cutoff)
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
@@ -611,8 +659,44 @@ class Pretrain(Transfer):
         return batch_atom_fea, batch_nbr_fea, \
                 batch_nbr_fea_idx
     
-        
+    
 if __name__ == '__main__':
-    #init = InitSampling(num_RCSD, component)
-    #init.generate(1)
-    print('ok')
+    '''
+    ssh = SSHTools()
+    cifs = os.listdir('database/CIF2D')
+    node_assign = ssh.assign_node(len(cifs), order=False)
+    for i, cif in enumerate(cifs):
+        stru = Structure.from_file(f'database/CIF2D/{cif}')
+        stru.to(filename=f'data/poscar/000/POSCAR-{cif[:-4]}-{node_assign[i]}', fmt='poscar')
+    '''
+    #cpu_nodes = UpdateNodes()
+    #cpu_nodes.update()
+    #from core.sub_vasp import ParallelSubVASP
+    #vasp = ParallelSubVASP()
+    #vasp.sub_job(0, vdW=True)
+    #vasp.get_energy(0, 0)
+    '''
+    rwtools = ListRWTools()
+    ct = rwtools.import_list2d('data/vasp_out/Energy-0.dat', str)
+    names, energys = [], []
+    for i in ct:
+        if i[1] == 'True':
+            name = i[0].split('-')
+            label = name[1] + '-' + name[2]
+            names.append(label)
+            energys.append(i[2])
+    
+    
+    import shutil
+    for i in names:
+        file_1 = f'database/CIF2D/{i}.cif'
+        file_2 = f'database/CIF2D_vdW/{i}.cif'
+        shutil.copy(file_1, file_2)
+    
+    df = pd.DataFrame({'cif':names, 'E':energys})
+    df.to_csv('id_prop.csv',index =False ,sep = ',')
+    '''
+    model = Pretrain()
+    model.pretrain()
+    #print(model.import_list2d('test.txt', int))
+    

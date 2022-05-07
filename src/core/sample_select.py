@@ -520,7 +520,7 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         energy [float, 1d]: energy of structure
         """
         #transfer pos, type, grid to poscar
-        idx_slt = np.argsort(energy)[:2*num_poscars]
+        idx_slt = np.argsort(energy)[:3*num_poscars]
         idx_order = self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
         #compare poscars with previous recycle
         poscars = os.listdir(self.poscar_save_path)

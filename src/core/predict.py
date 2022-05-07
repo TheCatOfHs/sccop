@@ -1,7 +1,7 @@
+import random
 import functools
 import numpy as np
 import os, sys, time, shutil
-from random import sample
 
 import torch
 import torch.nn as nn
@@ -310,14 +310,16 @@ class PPModel(ListRWTools):
         """
         train model by epochs
         """
+        #load data
         train_loader = get_loader(self.train_data, 
                                   self.batch_size, self.num_workers, shuffle=True)
         valid_loader = get_loader(self.valid_data, 
                                   self.batch_size, self.num_workers)
         test_loader = get_loader(self.test_data, 
-                                  self.batch_size, self.num_workers)
+                                 self.batch_size, self.num_workers)
         sample_target = self.sample_data_list(self.train_data)
         normalizer = Normalizer(sample_target)
+        #build prediction model
         if use_pretrain_model:
             checkpoint = torch.load(pretrain_model)
             normalizer.load_state_dict(checkpoint['normalizer'])
@@ -326,8 +328,17 @@ class PPModel(ListRWTools):
             model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
         model = DataParallel(model)
         model.to(self.device)
+        #set learning rate
+        if use_pretrain_model:
+            out_layer_id = list(map(id, model.module.fc_out.parameters()))
+            rest_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
+            params = [{'params': rest_layer, 'lr': self.lr/5},
+                      {'params': model.module.fc_out.parameters()}]
+        else:
+            params = model.parameters()
+        #training model
         criterion = nn.MSELoss()
-        optimizer = optim.Adam(model.parameters(), lr=self.lr, weight_decay=0)
+        optimizer = optim.Adam(params, lr=self.lr, weight_decay=0)
         scheduler = MultiStepLR(optimizer, milestones=[100], gamma=0.1)
         mae_buffer, best_mae_error = [], 1e10
         system_echo('-----------Begin Training Property Predict Model------------')
@@ -435,7 +446,7 @@ class PPModel(ListRWTools):
                         f'MAE {mae_errors.val:.3f} ({mae_errors.avg:.3f})'
                         )
         if best_model_test:
-            system_echo(f'Best model MAE {mae_errors.avg:.3f}')
+            system_echo(f'MAE of Best model on Testset: {mae_errors.avg:.3f}')
             self.write_list2d(f'{self.model_save_path}/pred.dat', 
                               pred_all, style='{0:8.4f}')
             self.write_list2d(f'{self.model_save_path}/vasp.dat', 
@@ -471,7 +482,7 @@ class PPModel(ListRWTools):
             sample_data_list = [dataset[i] for i in range(len(dataset))]
         else:
             sample_data_list = [dataset[i] for i in
-                                sample(range(len(dataset)), 500)]
+                                random.sample(range(len(dataset)), 500)]
         _, sample_target = collate_pool(sample_data_list)
         return sample_target
 
@@ -602,13 +613,18 @@ class AverageMeter():
         
 
 if __name__ == '__main__':
-    checkpoint = torch.load('test/model_best.pth.tar', map_location='cpu')
+    checkpoint = torch.load('test/model_best.pth.tar')
     model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
     model.load_state_dict(checkpoint['state_dict'])
+    model = DataParallel(model)
     
+    print(model.parameters())
+    print(model.module.parameters())
+    '''
     normalizer = Normalizer(torch.tensor([]))
     print(normalizer.std)
     print(normalizer.mean)
     normalizer.load_state_dict(checkpoint['normalizer'])
     print(checkpoint['normalizer'])
     print(normalizer.std)
+    '''

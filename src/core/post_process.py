@@ -28,10 +28,13 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
         if not os.path.exists(self.optim_strs_path):
             os.mkdir(self.optim_strs_path)
             os.mkdir(self.energy_path)
-    
+
     def run_optimization_low(self, vdW=False):
         '''
         optimize configurations at low level
+        
+        Parameters
+        ----------
         vdW [bool, 0d]: whether add vdW modify
         '''
         flag_vdW = 0
@@ -59,7 +62,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            for i in 1 2
+                            for i in 1 2 3
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
@@ -75,7 +78,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
                             fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strs_path}/$p
-                                scp vasp-2.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                                scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
                             cd ../
                             
@@ -186,6 +189,9 @@ class PostProcess(VASPoptimize, GeoCheck):
     def run_optimization(self, vdW=False):
         '''
         optimize configurations from low to high level
+        
+        Parameters
+        ----------
         vdW [bool, 0d]: whether add vdW modify
         '''
         flag_vdW = 0
@@ -213,7 +219,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            for i in 3
+                            for i in 4 5
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
@@ -227,7 +233,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             done
                             if [ `cat CONTCAR|wc -l` -ge 8 ]; then
                                 scp CONTCAR {gpu_node}:{self.optim_strs_path}/$p
-                                scp vasp-3.vasp {gpu_node}:{self.energy_path}/out-$p
+                                scp vasp-5.vasp {gpu_node}:{self.energy_path}/out-$p
                             fi
                             cd ../
                             
@@ -278,7 +284,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 cp IBZKPT IBZKPT_$i
                                 cp EIGENVAL EIGENVAL_$i
                             done
-
+                            
                             DPT -b
                             python ../../libs/scripts/plot-energy-band.py
                             scp DPT.BAND.dat {gpu_node}:{self.pbe_band_path}/band-$p.dat
@@ -294,16 +300,21 @@ class PostProcess(VASPoptimize, GeoCheck):
         system_echo(f'All jobs are completed --- Electronic structure')
         self.remove_flag(optim_strs_path)
     
-    def run_phonon(self, vdW=False):
+    def run_phonon(self, vdW=False, dimension=3):
         '''
         calculate phonon spectrum of optimized configurations
+        
+        Parameters
+        ----------
+        vdW [bool, 0d]: whether add vdW modify
+        dimension [int, 0d]: 2d or 3d kpath
         '''
         flag_vdW = 0
         if vdW:
             flag_vdW = 1
         poscars = sorted(os.listdir(optim_strs_path))
         num_poscar = len(poscars)
-        self.get_k_points(poscars, task='phonon')
+        self.get_k_points(poscars, task='phonon', dimension=dimension)
         system_echo(f'Start VASP calculation --- Phonon spectrum')
         for poscar in poscars:
             node = poscar.split('-')[-1]
@@ -322,7 +333,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            phonopy -d --dim="4 4 1"
+                            phonopy -d --dim="2 2 1"
                             n=`ls | grep POSCAR- | wc -l`
                             for i in `seq -f%03g 1 $n`
                             do
@@ -342,6 +353,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             phonopy --full-fc band.conf
                             phonopy-bandplot --gnuplot --legacy band.yaml > phonon-$p.dat
                             python ../../libs/scripts/plot-phonon-band.py phonon-$p.dat band.conf
+                            scp band.yaml {gpu_node}:{self.phonon_path}/band-$p.yaml
                             scp phonon-$p.dat {gpu_node}:{self.phonon_path}/phonon-$p.dat
                             scp PHON.png {gpu_node}:{self.phonon_path}/phonon-$p.png
                             scp FORCE_CONSTANTS {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_2ND-$p
@@ -377,9 +389,8 @@ class PostProcess(VASPoptimize, GeoCheck):
                             scp {gpu_node}:{self.optim_strs_path}/$p POSCAR
                             tar -zxf thirdorder-files.tar.gz
                             cp thirdorder-files/* .
-                            #DPT --vdW DFT-D3
                             
-                            python2 thirdorder_vasp.py sow 2 2 2 -5
+                            python2 thirdorder_vasp.py sow 2 2 1 -5
                             file=`ls | grep 3RD.POSCAR.`
                             for i in $file
                             do
@@ -394,7 +405,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 cd ../
                             done
                             
-                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 2 -5 > log
+                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 1 -5 > log
                             scp FORCE_CONSTANTS_3RD {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p
                             cd ../
                             touch FINISH-$p
@@ -545,7 +556,7 @@ class PostProcess(VASPoptimize, GeoCheck):
         system_echo(f'All jobs are completed --- Thermal Conductivity')
         self.remove_flag(optim_strs_path)
 
-    def get_k_points(self, poscars, task):
+    def get_k_points(self, poscars, task, dimension=3):
         """
         search k path by Hinuma, Y., Pizzi, G., Kumagai, Y., Oba, F., & Tanaka, I. (2017)
         
@@ -553,6 +564,7 @@ class PostProcess(VASPoptimize, GeoCheck):
         ----------
         poscars [str, 1d]: string list of poscars
         task [str, 0d]: task name
+        dimension [int, 0d]: 2d or 3d kpath
         """
         for poscar in poscars:
             structure = Structure.from_file(f'{optim_strs_path}/{poscar}')
@@ -575,6 +587,14 @@ class PostProcess(VASPoptimize, GeoCheck):
                 while '' in labels:
                     points.pop(labels.index(''))
                     labels.remove('')
+                if dimension == 2:
+                    points_2d, labels_2d = [], []
+                    point_num = len(points)
+                    for i in range(point_num):
+                        if points[i][-1] == 0:
+                            points_2d.append(points[i])
+                            labels_2d.append(labels[i])
+                    points, labels = points_2d, labels_2d
                 phonon_points = [[[points[0], labels[0]]]]
                 for i in range(1, len(labels)-2, 2):    # find the continuous bands
                     phonon_points[-1].append([points[i], labels[i]])
@@ -587,9 +607,9 @@ class PostProcess(VASPoptimize, GeoCheck):
                         band += '  {0}'.format(' '.join([f'{item:.3f}' for item in point[0]]))
                         band_label += ' ${0}$'.format(point[1])
                     band = band if i == len(phonon_points)-1 else band + ','
-                band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS']], 
-                                [[' = '] for i in range(5)], 
-                                [['XXX'], ['4 4 1'], [band], [band_label], ['write']]] # output the file by columns
+                band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS'], ['EIGENVECTORS']], 
+                                [[' = '] for i in range(6)], 
+                                [['XXX'], ['2 2 1'], [band], [band_label], ['write'], ['.TRUE.']]] # output the file by columns
                 self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
@@ -604,7 +624,7 @@ class PostProcess(VASPoptimize, GeoCheck):
         labels [str, 1d]: list of labels
         sp [str, 1d]: special characters
         std [str, 1d]: LaTeX characters
-
+        
         Returns
         ----------
         labels [str, 1d]: LaTeX labels
@@ -628,4 +648,5 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    post.get_k_points(['POSCAR-CCOP-1-0030-132'], 'phonon')
+    post.get_k_points(['POSCAR-B1C1N1-001-136'], 'phonon', dimension=2)
+    

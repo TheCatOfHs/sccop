@@ -1,8 +1,6 @@
 import os, sys
 import numpy as np
 
-from pymatgen.core.structure import Structure
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *

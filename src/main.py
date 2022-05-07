@@ -64,7 +64,7 @@ class CrystalOptimization(ListRWTools):
                     self.train_predict_model(round, add_num, atom_pos, atom_type, 
                                              grid_name, energy_select, train_atom_fea, 
                                              train_nbr_fea, train_nbr_fea_idx, train_energy)
-                #Update structure buffer
+                #Update training set
                 train_pos += atom_pos
                 train_type += atom_type
                 train_grid += grid_name
@@ -99,7 +99,20 @@ class CrystalOptimization(ListRWTools):
                 #Single point ernergy calculate
                 self.vasp.sub_job(round+1, vdW=add_vdW)
             
-            #Export searched POSCARs
+            #Update training set
+            atom_pos, atom_type, grid_name, energy_select = \
+                    self.data_import(start+num_round)
+            add_num = len(atom_pos)
+            train_pos += atom_pos
+            train_type += atom_type
+            train_grid += grid_name
+            train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = \
+                    self.train_predict_model(round, add_num, atom_pos, atom_type, 
+                                             grid_name, energy_select, train_atom_fea, 
+                                             train_nbr_fea, train_nbr_fea_idx, train_energy,
+                                             train_model=False)
+            
+            #Select searched POSCARs
             select = Select(start+num_round)
             select.export(recycle, train_pos, train_type, train_energy, train_grid)
             system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
@@ -107,15 +120,13 @@ class CrystalOptimization(ListRWTools):
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low(vdW=add_vdW)
             start += num_round + 1
-            
+        
         #Select optimized structures
         opt_slt = OptimSelect()
         opt_slt.optim_select()
         #Optimize
         self.post.run_optimization(vdW=add_vdW)
-        #Property calculate
-        #self.property_calculate()
-        
+    
     def data_import(self, round):
         """
         import selected data from last round
@@ -175,7 +186,8 @@ class CrystalOptimization(ListRWTools):
 
     def train_predict_model(self, round, add_num, atom_pos, atom_type, 
                             grid_name, energy_select, train_atom_fea, 
-                            train_nbr_fea, train_nbr_fea_idx, train_energy):
+                            train_nbr_fea, train_nbr_fea_idx, train_energy,
+                            train_model=True):
         """
         train CGCNN as predict model
         
@@ -191,7 +203,8 @@ class CrystalOptimization(ListRWTools):
         train_nbr_fea [float, 4d]: bond feature 
         train_nbr_fea_idx [int, 3d]: neighbor index
         train_energy [float, 1d]: train energy
-
+        train_model [bool, 0d]: whether train model
+        
         Returns
         ----------
         train_atom_fea [float, 3d]: atom feature
@@ -202,20 +215,21 @@ class CrystalOptimization(ListRWTools):
         #training data
         atom_fea, nbr_fea, nbr_fea_idx = \
             self.transfer.batch(atom_pos, atom_type, grid_name)
-        train_atom_fea += atom_fea[0:add_num]
-        train_nbr_fea += nbr_fea[0:add_num]
-        train_nbr_fea_idx += nbr_fea_idx[0:add_num]
-        train_energy += energy_select[0:add_num]
+        train_atom_fea += atom_fea[:add_num]
+        train_nbr_fea += nbr_fea[:add_num]
+        train_nbr_fea_idx += nbr_fea_idx[:add_num]
+        train_energy += energy_select[:add_num]
         #validation data
         valid_atom_fea = atom_fea[add_num:]
         valid_nbr_fea = nbr_fea[add_num:]
         valid_nbr_fea_idx = nbr_fea_idx[add_num:]
         valid_energy = energy_select[add_num:]
         #training model
-        train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy)
-        valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energy)
-        ppm = PPModel(round+1, train_data, valid_data, valid_data)
-        ppm.train_epochs()
+        if train_model:
+            train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy)
+            valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energy)
+            ppm = PPModel(round+1, train_data, valid_data, valid_data)
+            ppm.train_epochs()
         #train data added
         train_atom_fea += atom_fea[add_num:]
         train_nbr_fea += nbr_fea[add_num:]

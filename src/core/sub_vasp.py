@@ -33,12 +33,15 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         num_poscar = len(poscars)
         check_poscar = poscars
         for i in range(self.repeat):
-            os.mkdir(f'{vasp_out_path}/{round}-{i}')
+            out_path = f'{vasp_out_path}/{round}-{i}'
+            os.mkdir(out_path)
             system_echo(f'Start VASP calculation---itersions: '
                         f'{round}-{i}, number: {num_poscar}')
-            self.sub_vasp_job(check_poscar, round, i, vdW)
-            while not self.is_VASP_done(round, i, num_poscar):
+            #begin vasp calculation
+            work_node_num = self.sub_vasp_job(check_poscar, round, i, vdW)
+            while not self.is_done(out_path, work_node_num):
                 time.sleep(self.wait_time)
+            self.remove_flag(out_path)
             system_echo(f'All job are completed---itersions: '
                         f'{round}-{i}, number: {num_poscar}')
             if i > 0:
@@ -57,21 +60,37 @@ class ParallelSubVASP(ListRWTools, SSHTools):
 
         Parameters
         ----------
-        poscars [str, 1d]: name of poscar
+        poscars [str, 1d]: name of poscars
         round [str, 0d]: searching rounds
         repeat [str, 0d]: repeat times 
         vdW [bool, 0d]: whether add vdW modify
+        
+        Returns
+        ----------
+        work_node_num [int, 0d]: number of work node
         """
-        for poscar in poscars:
-            self.sub_job_with_ssh(poscar, round, repeat, vdW)
-    
-    def sub_job_with_ssh(self, poscar, round, repeat, vdW=False):
+        #poscars grouped by nodes
+        assign, jobs = [], []
+        for node in nodes:
+            for poscar in poscars:
+                label = poscar.split('-')[-1]
+                if label == str(node):
+                    assign.append(poscar)
+            jobs.append(assign)
+            assign = []
+        #sub job to target node
+        for job in jobs:
+            self.sub_job_with_ssh(job, round, repeat, vdW)
+        work_node_num = len(jobs)
+        return work_node_num
+        
+    def sub_job_with_ssh(self, job, round, repeat, vdW=False):
         """
         SSH to target node and call vasp for calculation
         
         Parameters
         ----------
-        poscars [str, 1d]: name of poscar
+        job [str, 1d]: name of poscars in same node
         round [str, 0d]: searching rounds
         repeat [str, 0d]: repeat times 
         vdW [bool, 0d]: whether add vdW modify
@@ -79,46 +98,55 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         flag_vdW = 0
         if vdW:
             flag_vdW = 1
-        node = poscar.split('-')[-1]
+        node = job[0].split('-')[-1]
+        poscar_str = ' '.join(job)
         ip = f'node{node}'
+        job_num = '`ps -ef | grep /opt/intel/impi/4.0.3.008/intel64/bin/mpirun | grep -v grep | wc -l`'
         local_vasp_out_path = f'/local/ccop/{vasp_out_path}/{round}-{repeat}'
         shell_script = f'''
                         cd /local/ccop/vasp
-                        p={poscar}
-                        mkdir $p
-                        cd $p
+                        for p in {poscar_str}
+                        do
+                            mkdir $p
+                            cd $p
+
+                            cp ../../{vasp_files_path}/SinglePointEnergy/* .
+                            scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
+                            DPT -v potcar
+                            if [ {flag_vdW} -eq 1 ]; then
+                                DPT --vdW DFT-D3
+                            fi
+                            
+                            nohup /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >& $p.out&
+                            cd ../
+                            
+                            counter={job_num}
+                            while [ $counter -ge 10 ]
+                            do
+                                counter={job_num}
+                                sleep 1s
+                            done
+                        done
                         
-                        cp ../../{vasp_files_path}/SinglePointEnergy/* .
-                        scp {gpu_node}:/local/ccop/{poscar_path}/{round}/$p POSCAR
-                        DPT -v potcar
-                        if [ {flag_vdW} -eq 1 ]; then
-                            DPT --vdW DFT-D3
-                        fi
+                        while true;
+                        do
+                            num={job_num}
+                            if [ $num -eq 0 ]; then
+                                touch FINISH-{node}
+                                break
+                            fi
+                            sleep 1s
+                        done
                         
-                        date > $p.out
-                        /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> $p.out
-                        date >> $p.out
-                        scp $p.out {gpu_node}:{local_vasp_out_path}/
-                        cd ../
-                        rm -r $p
+                        for p in {poscar_str}
+                        do
+                            cp $p/$p.out .
+                        done
+                        
+                        scp *.out FINISH-{node} {gpu_node}:{local_vasp_out_path}/
+                        rm -r *
                         '''
         self.ssh_node(shell_script, ip)
-    
-    def is_VASP_done(self, round, repeat, num_poscar):
-        """
-        if the vasp calculation is completed, return True
-        
-        Parameters
-        ----------
-        num_poscars [int, 0d]: number of POSCARs
-        
-        Returns
-        ----------
-        flag [bool, 0d]: whether all nodes are done
-        """
-        command = f'ls -l {vasp_out_path}/{round}-{repeat} | grep ^- | wc -l'
-        flag = self.check_num_file(command, num_poscar)
-        return flag
     
     def get_energy(self, round, repeat):
         """
