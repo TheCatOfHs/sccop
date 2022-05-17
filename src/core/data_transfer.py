@@ -27,6 +27,8 @@ class Transfer(ListRWTools):
         ----------
         all_pos [int, 1d]: position in all grid
         """
+        print(mapping)
+        print(min_pos)
         all_pos = np.array(mapping, dtype=object)[min_pos]
         all_pos = np.concatenate(all_pos).tolist()
         return all_pos
@@ -254,9 +256,9 @@ class Transfer(ListRWTools):
         #import mapping between minimum and all grid
         if task == 'mapping':
             mapping = self.import_list2d(
-                f'{head}_nbr_idx.bin', int, binary=True)
+                f'{head}_mapping.bin', int, binary=True)
             return mapping
-    
+
     
 class MultiGridTransfer(Transfer):
     #positoin, type, symmetry should be sorted in grid order
@@ -279,9 +281,10 @@ class MultiGridTransfer(Transfer):
         last_grid = grid_name[0]
         i, all_pos_bh = 0, []
         #pos convert under different grids
+        print(grid_name)
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
-                all_pos_seq = self.get_all_pos_seq(min_pos[i:j], grid)
+                all_pos_seq = self.get_all_pos_seq(min_pos[i:j], last_grid)
                 all_pos_bh += all_pos_seq
                 last_grid = grid
                 i = j
@@ -307,7 +310,7 @@ class MultiGridTransfer(Transfer):
         #get neighbor distance under different grids
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
-                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:], grid)
+                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:], last_grid)
                 nbr_dis_bh += nbr_dis_seq
                 last_grid = grid
                 i = j
@@ -337,7 +340,7 @@ class MultiGridTransfer(Transfer):
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
                 atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = \
-                    self.get_ppm_input_seq(atom_pos[i:j], atom_type[i:j], grid)
+                    self.get_ppm_input_seq(atom_pos[i:j], atom_type[i:j], last_grid)
                 atom_fea_bh += atom_fea_seq
                 nbr_fea_bh += nbr_fea_seq
                 nbr_fea_idx_bh += nbr_fea_idx_seq

@@ -17,8 +17,8 @@ sing_point_energy_path = 'libs/VASP_inputs/SinglePointEnergy'
 log_file = 'data/system.log'
 elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
-KPOINTS_file = 'vasp/KPOINTS'
-bandconf_file = 'vasp/bandconf'
+KPOINTS_file = 'data/post/KPOINTS'
+bandconf_file = 'data/post/bandconf'
 pretrain_model = 'data/pretrain/model_2d.pth.tar'
 
 #Property file

@@ -172,8 +172,8 @@ class PostProcess(VASPoptimize, GeoCheck):
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
-        if not os.path.exists('vasp'):
-            os.mkdir('vasp')
+        if not os.path.exists('data/post'):
+            os.mkdir('data/post')
             os.mkdir(KPOINTS_file)
             os.mkdir(bandconf_file)
         if not os.path.exists(optim_vasp_path):

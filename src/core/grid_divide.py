@@ -4,6 +4,7 @@ import copy
 import random
 import argparse
 import numpy as np
+from decimal import Decimal
 from collections import Counter
 
 from pymatgen.core.lattice import Lattice
@@ -393,8 +394,9 @@ class PlanarSpaceGroup():
         system [int, 0d]: crystal system number
         params [float, 1d]: approximal lattice constants
         """
-        approx = [round(i, 6) for i in latt.parameters]
+        approx = [self.convert_digit(i) for i in latt.parameters]
         a, b, c, alpha, beta, gamma = approx
+        system = 0
         if a != b and gamma != 90:
             system = 0
         if a != b and gamma == 90:
@@ -406,6 +408,17 @@ class PlanarSpaceGroup():
         c = vacuum_space
         params = [a, b, c, alpha, beta, gamma]
         return system, params
+    
+    def convert_digit(self, num):
+        """
+        keep 2 digits after decimal point
+        
+        Parameters
+        ----------
+        num [flat, 0d]: float number
+        """
+        return float(Decimal(num).quantize(Decimal('0.01'),
+                                           rounding = 'ROUND_HALF_UP'))
     
     def triclinic_1(self, frac_grain):
         """

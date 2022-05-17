@@ -28,10 +28,10 @@ num_poscars = 12
 num_optims = 6
 
 #Initial Samples
-component = 'XXX'
+component = 'B1C3'
 num_latt = 36
 num_Rand = 120
-num_sampling = 1000
+num_sampling = 5
 len_mu = 5
 len_sigma = 1
 len_lower = 4

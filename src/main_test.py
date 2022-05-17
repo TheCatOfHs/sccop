@@ -33,15 +33,17 @@ class CrystalOptimization(ListRWTools):
         self.cpu_nodes.update()
         #Initialize storage
         grid_store = np.array([], dtype=int)
-        train_pos, train_type, train_grid = [], [], []
+        train_pos, train_type, train_symm, train_grid = [], [], [], []
         train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = [], [], [], []
         
         start = 0
         for recycle in range(num_recycle):
             system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #Generate structures
-            atom_pos, atom_type, grid_name, grid_init = self.init.generate(recycle)
+            atom_pos, atom_type, atom_symm, grid_name, grid_init = self.init.generate(recycle)
             system_echo('New initial samples generated')
+            break
+    '''
             #Write POSCARs
             select = Select(start)
             idx = np.arange(len(atom_pos))
@@ -126,7 +128,7 @@ class CrystalOptimization(ListRWTools):
         opt_slt.optim_select()
         #Optimize
         self.post.run_optimization(vdW=add_vdW)
-    
+    '''
     def data_import(self, round):
         """
         import selected data from last round

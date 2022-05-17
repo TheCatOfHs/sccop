@@ -43,16 +43,13 @@ class UpdateNodes(SSHTools):
         shell_script = f'''
                         #!/bin/bash
                         cd /local
-                        #rm -rf ccop/
-                        #mkdir ccop/
+                        rm -rf ccop/
+                        mkdir ccop/
                         cd ccop/
-                        #mkdir vasp/ libs/
                         
                         scp -r {gpu_node}:/local/ccop/data .
                         scp -r {gpu_node}:/local/ccop/src .
-                        scp -r {gpu_node}:/local/ccop/libs/DPT libs/.
-                        scp -r {gpu_node}:/local/ccop/libs/scripts libs/.
-                        scp -r {gpu_node}:/local/ccop/libs/VASP_inputs libs/.
+                        scp -r {gpu_node}:/local/ccop/libs .
                         
                         touch FINISH-{ip}
                         scp FINISH-{ip} {gpu_node}:/local/ccop/
@@ -93,7 +90,7 @@ class UpdateNodes(SSHTools):
         latt_str = ' '.join(latt)
         shell_script = f'''
                         #!/bin/bash
-                        cd data/grid/property/
+                        cd data/grid/
                         tar -zcf latt_vec.tar.gz {latt_str}
                         '''
         os.system(shell_script)
@@ -101,15 +98,16 @@ class UpdateNodes(SSHTools):
     def del_zip_latt(self):
         shell_script = f'''
                         #!/bin/bash
-                        cd data/grid/property/
+                        cd data/grid/
                         rm latt_vec.tar.gz
                         '''
         os.system(shell_script)
     
 
-class InitSampling(GridDivide, ParallelDivide, UpdateNodes, GeoCheck, MultiGridTransfer):
+class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridTransfer):
     #generate initial structures of ccop
     def __init__(self, number, component):
+        UpdateNodes.__init__(self)
         ParallelDivide.__init__(self)
         self.create_dir()
         self.initial_poscars(number, component)
