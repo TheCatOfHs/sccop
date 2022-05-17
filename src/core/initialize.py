@@ -2,19 +2,18 @@ import os, sys
 import re
 import time
 import random
+import copy
 
 import numpy as np
-import pandas as pd
 from collections import Counter
 from pymatgen.core.lattice import Lattice
-from pymatgen.core.structure import IStructure
+from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.utils import *
-from core.predict import PPMData, PPModel
-from core.data_transfer import Transfer, MultiGridTransfer
+from core.data_transfer import MultiGridTransfer
 from core.grid_divide import GridDivide, ParallelDivide
 from core.search import GeoCheck
 
@@ -42,11 +41,12 @@ class UpdateNodes(SSHTools):
         """
         ip = f'node{node}'
         shell_script = f'''
+                        #!/bin/bash
                         cd /local
-                        rm -rf ccop/
-                        mkdir ccop/
+                        #rm -rf ccop/
+                        #mkdir ccop/
                         cd ccop/
-                        mkdir vasp/ libs/
+                        #mkdir vasp/ libs/
                         
                         scp -r {gpu_node}:/local/ccop/data .
                         scp -r {gpu_node}:/local/ccop/src .
@@ -69,10 +69,11 @@ class UpdateNodes(SSHTools):
         node [int, 0d]: cpu node
         """
         ip = f'node{node}'
-        local_grid_prop_path = f'/local/ccop/{grid_prop_path}'
+        local_grid_path = f'/local/ccop/{grid_path}'
         shell_script = f'''
-                        cd {local_grid_prop_path}
-                        scp {gpu_node}:{local_grid_prop_path}/latt_vec.tar.gz .
+                        #!/bin/bash
+                        cd {local_grid_path}
+                        scp {gpu_node}:{local_grid_path}/latt_vec.tar.gz .
                         tar -zxf latt_vec.tar.gz
                             
                         touch FINISH-{ip}
@@ -91,6 +92,7 @@ class UpdateNodes(SSHTools):
         """
         latt_str = ' '.join(latt)
         shell_script = f'''
+                        #!/bin/bash
                         cd data/grid/property/
                         tar -zcf latt_vec.tar.gz {latt_str}
                         '''
@@ -98,22 +100,56 @@ class UpdateNodes(SSHTools):
     
     def del_zip_latt(self):
         shell_script = f'''
+                        #!/bin/bash
                         cd data/grid/property/
                         rm latt_vec.tar.gz
                         '''
         os.system(shell_script)
     
 
-class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, GeoCheck):
+class InitSampling(GridDivide, ParallelDivide, UpdateNodes, GeoCheck, MultiGridTransfer):
     #generate initial structures of ccop
     def __init__(self, number, component):
         ParallelDivide.__init__(self)
         self.create_dir()
-        self.RCSD_generate(number, component)
+        self.initial_poscars(number, component)
+    
+    def initial_poscars(self, number, component):
+        """
+        generate initial poscars randomly
         
+        Parameters
+        ----------
+        number [int, 0d]: number of poscars
+        component [str, 0d]: component of searching system
+        """
+        system_echo(f'Generate Initial Data Randomly')
+        #transfer component to atom type list
+        elements= re.findall('[A-Za-z]+', component)
+        ele_num = [int(i) for i in re.findall('[0-9]+', component)]
+        atom_type = []
+        for ele, num in zip(elements, ele_num):
+            for _ in range(num):
+                atom_type.append(ele)
+        atom_types = self.control_atom_number(atom_type)
+        #make directory of initial poscars
+        dir = f'{poscar_path}/initial_strs_0'
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+        #generate poscars from crystal system randomly
+        num = len(atom_types)
+        for i in range(number):
+            latt = self.lattice_generate()
+            seed = random.randint(0, num-1)
+            atom_type = atom_types[seed]
+            atom_num = len(atom_type)
+            coors = np.random.rand(atom_num, 3)
+            stru = Structure(latt, atom_type, coors)
+            stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
+    
     def generate(self, recyc):
         """
-        initial samples from RCSD and random
+        generate initial samples
         
         Parameters
         ----------
@@ -123,46 +159,163 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
         """
         if recyc > 0:
             grain = grain_fine
         else:
             grain = grain_coarse
-        #transfer initial structures
-        atom_pos, atom_type, grid_name, point_num, latt_file = \
-            self.structure_in_grid(recyc, grain)
-        #build grid
-        grid_new = self.build_grid(grain, grid_name, latt_file)
-        system_echo('New grids have been built')
         #structures generated randomly
-        atom_pos_rand, atom_type_rand, grid_name_rand= \
-            self.random_sampling(recyc, atom_type, grid_name, point_num)
+        atom_pos, atom_type, atom_symm, grid_name = \
+            self.random_sampling(recyc, grain)
+        #build grid
+        self.build_grid(grid_name)
+        system_echo('New grids have been built')
         #geometry check
-        atom_pos, atom_type, grid_name = \
-            self.geo_constrain(num_RCSD, atom_pos, atom_type, grid_name)
-        atom_pos_rand, atom_type_rand, grid_name_rand = \
-            self.geo_constrain(num_Rand, atom_pos_rand, atom_type_rand, grid_name_rand)
+        atom_pos, atom_type, atom_symm, grid_name = \
+            self.geo_constrain(atom_pos, atom_type, atom_symm, grid_name)
         #add random samples
-        atom_pos += atom_pos_rand
-        atom_type += atom_type_rand
-        grid_name += grid_name_rand
         system_echo(f'Sampling number: {len(atom_pos)}')    
-        return atom_pos, atom_type, grid_name, grid_new
+        return atom_pos, atom_type, atom_symm, grid_name
     
-    def build_grid(self, grain, grid_name, latt_file):
+    def random_sampling(self, recyc, grain):
+        """
+        sampling randomly with symmetry
+        
+        Parameters
+        ----------
+        recyc [int, 0d]: times of recycling
+        grain [float, 1d]: grain of grid
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
+        grid_name [int, 1d]: name of grids
+        """
+        grid_num = self.count_latt_num()
+        init_path = f'{init_strs_path}_{recyc}'
+        file_name = os.listdir(init_path)
+        atom_pos, atom_type, atom_symm, grid_name = [], [], [], []
+        for i, poscar in enumerate(file_name):
+            #import lattice
+            stru = Structure.from_file(f'{init_path}/{poscar}', sort=True)
+            latt = stru.lattice
+            atom_num = self.get_atom_number(stru)
+            cry_system, params = self.judge_crystal_system(latt)
+            latt = Lattice.from_parameters(*params)
+            #sampling
+            grid = grid_num + i
+            pos_sample, type_sample, symm_sample, grid_sample = \
+                self.put_atoms_into_latt(atom_num, cry_system, grain, latt, grid)
+            #append to buffer
+            atom_pos += pos_sample
+            atom_type += type_sample
+            atom_symm += symm_sample
+            grid_name += grid_sample
+        return atom_pos, atom_type, atom_symm, grid_name
+    
+    def put_atoms_into_latt(self, atom_num, system, grain, latt, grid):
+        """
+        put atoms into lattice under specific space group
+        
+        Parameters
+        ----------
+        atom_num [dict, int:int]: number of different atoms\\
+        system [int, 0d]: number of crystal system
+        grain [float, 1d]: grain of grid
+        latt [obj]: lattice object in pymatgen
+        grid [int, 0d]: name of grid 
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
+        grid_name [int, 1d]: name of grids
+        """
+        #choose symmetry by space group
+        space_group = self.get_space_group(system)
+        all_grid, mapping = self.get_grid_points(space_group, grain, latt)
+        symm_site = self.group_symm_sites(mapping)
+        assign_plan = self.assign_by_spacegroup(atom_num, symm_site)
+        #put atoms into grid with symmetry constrain
+        atom_pos, atom_type, atom_symm, grid_name = [], [], [], []
+        if len(assign_plan) > 0:
+            for assign in assign_plan:
+                type, symm = self.get_type_and_symm(assign)
+                for _ in range(num_sampling):
+                    pos = self.get_pos(symm, symm_site)
+                    atom_pos.append(pos)
+                atom_type += [type for _ in range(num_sampling)]
+                atom_symm += [symm for _ in range(num_sampling)]
+                grid_name += [grid for _ in range(num_sampling)]
+            #write lattice file and mapping relationship
+            head = f'{grid_path}/{grid:03.0f}'
+            self.write_list2d(f'{head}_latt_vec.bin', latt.matrix, binary=True)
+            self.write_list2d(f'{head}_frac_coords.bin', all_grid, binary=True)
+            self.write_list2d(f'{head}_mapping.bin', mapping, binary=True)
+        return atom_pos, atom_type, atom_symm, grid_name
+    
+    def get_type_and_symm(self, assign):
+        """
+        get list of atom type and symmetry
+        
+        Parameters
+        ----------
+        assign [dict, int:list]: site assignment of atom_num
+
+        Returns
+        ----------
+        type [int, 1d]: type of atoms
+        symm [int, 1d]: symmetry of atoms
+        """
+        type, symm = [], []
+        for atom in assign.keys():
+            value = assign[atom]
+            symm += sorted(value)
+            type += [atom for _ in range(len(value))]
+        return type, symm
+
+    def get_pos(self, symm, symm_site):
+        """
+        sampling position of atoms by symmetry
+        
+        Parameters
+        ----------
+        symm [int, 1d]: symmetry of atoms
+        symm_site [dict, int:list]: site position grouped by symmetry
+
+        Returns
+        ----------
+        pos [int, 1d]: position of atoms
+        """
+        site_copy = copy.deepcopy(symm_site)
+        pos = []
+        for i in symm:
+            pool = site_copy[i]
+            sample = np.random.choice(pool)
+            pos.append(sample)
+            pool.remove(sample)
+        return pos
+    
+    def build_grid(self, grid_name):
         """
         build grid of structure
         
         Parameters
         ----------
-        grain [float, 1d]: grain of grid
         grid_name [str, 1d]: name of grid
-        latt_file [str, 1d]: lattice file
-
-        Returns:
-        grid_new [str, 1d]: name of grid
         """
+        #get lattice files
+        latt_file = []
+        grid_name = np.unique(grid_name)
+        for grid in grid_name:
+            latt_file.append(f'{grid:03.0f}_latt_vec.bin')
+            latt_file.append(f'{grid:03.0f}_frac_coords.bin')
+            latt_file.append(f'{grid:03.0f}_mapping.bin')
         #copy lattice file to cpu nodes
         self.zip_latt_vec(latt_file)
         for node in nodes:
@@ -172,207 +325,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         self.remove_flag('.')
         self.del_zip_latt()
         #build grid
-        grid_new = np.unique(grid_name)
-        grid_origin = grid_new
-        grid_mutate = grid_new
-        self.assign_to_cpu(grain, grid_origin, grid_mutate)
-        return grid_new
-
-    def RCSD_generate(self, number, component):
-        """
-        generate initial samples randomly
-        
-        Parameters
-        ----------
-        number [int, 0d]: number of RCSD samples
-        component [str, 0d]: component of searching system
-        """
-        system_echo(f'Generate Initial Data Randomly')
-        #transfer component to atom type list
-        elements= re.findall('[A-Za-z]+', component)
-        ele_num = [int(i) for i in re.findall('[0-9]+', component)]
-        species = []
-        for ele, num in zip(elements, ele_num):
-            for _ in range(num):
-                species.append(ele)
-        species = self.control_atom_number(species)
-        species_num = len(species)
-        #export poscars
-        dir = f'{poscar_path}/initial_strs_0'
-        if not os.path.exists(dir):
-            os.mkdir(dir)
-        for i in range(number):
-            latt, _ = self.lattice_generate()
-            seed = random.randint(0, species_num-1)
-            atom_type = species[seed]
-            atom_num = len(atom_type)
-            coors = np.random.rand(atom_num, 3)
-            coors *=  free_aix
-            stru = IStructure(latt, atom_type, coors)
-            stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
-    
-    def lattice_generate(self):
-        """
-        generate lattice by crystal system
-        
-        Returns
-        ----------
-        latt [obj]: Lattice object of pymatgen
-        crystal_system [int, 0d]: crystal system number
-        """
-        volume = 0
-        system = np.arange(0, 7)
-        while volume == 0:
-            crystal_system = np.random.choice(system, p=system_weight)
-            #triclinic
-            if crystal_system == 0:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, beta, gamma = np.random.normal(ang_mu, ang_sigma, 3)
-            #monoclinic
-            if crystal_system == 1:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, gamma = 90, 90
-                beta = random.normalvariate(ang_mu, ang_sigma)
-            #orthorhombic
-            if crystal_system == 2:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, beta, gamma = 90, 90, 90
-            #tetragonal
-            if crystal_system == 3:
-                a, c = np.random.normal(len_mu, len_sigma, 2)
-                b = a
-                alpha, beta, gamma = 90, 90, 90
-            #trigonal
-            if crystal_system == 4:
-                a = random.normalvariate(len_mu, len_sigma)
-                b, c = a, a
-                alpha = random.normalvariate(ang_mu, ang_sigma)
-                beta, gamma = alpha, alpha
-            #hexagonal
-            if crystal_system == 5:
-                a, c = np.random.normal(len_mu, len_sigma, 2)
-                b = a
-                alpha, beta, gamma = 90, 90, 120
-            #cubic
-            if crystal_system == 6:
-                a = random.normalvariate(len_mu, len_sigma)
-                b, c = a, a
-                alpha, beta, gamma = 90, 90, 90
-            #check validity of lattice vector
-            a, b, c = [i if len_lower < i else len_lower for i in (a, b, c)]
-            a, b, c = [i if i < len_upper else len_upper for i in (a, b, c)]
-            if add_vacuum:
-                c = vacuum_space
-                alpha, beta = 90, 90
-            latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
-            volume = latt.volume
-        return latt, crystal_system
-    
-    def get_space_group(self, system):
-        """
-        get space group number according to crystal system
-        
-        Parameters
-        ----------
-        system [int, 0d]: crystal system
-
-        Returns
-        ----------
-        space_group [int, 0d]: international number of space group
-        """
-        #space group of 2-dimensional structure
-        if num_dim == 2:
-            if system == 1:
-                groups = [1, 3]
-            if system == 2:
-                groups = [4, 6, 8, 25, 28, 32, 38]
-            if system == 3:
-                groups = [75, 99, 100]
-            if system == 5:
-                groups = [143, 156, 157, 168, 183]
-        #space group of 3-dimensional structure
-        if num_dim == 3:
-            if system == 0:
-                groups = np.arange(1, 3)
-            if system == 1:
-                groups = np.arange(3, 16)
-            if system == 2:
-                groups = np.arange(16, 75)
-            if system == 3:
-                groups = np.arange(75, 143)
-            if system == 4:
-                groups = np.arange(143, 168)
-            if system == 5:
-                groups = np.arange(168, 195)
-            if system == 6:
-                groups = np.arange(195, 231)
-        space_group = np.random.choice(groups)
-        return space_group
-    
-    def random_sampling(self, recyc, atom_type, grid_name, point_num):
-        """
-        add random samples
-        
-        Parameters
-        ----------
-        recyc [int, 0d]: times of recyclings
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: name of grids
-        point_num [int, 1d]: number of grid points
-        
-        Returns
-        ----------
-        atom_pos_new [int, 2d]: position of atoms randomly
-        atom_type_new [int, 2d]: type of atoms
-        grid_name_new [int, 1d]: grid name
-        """
-        #type pool with various number of atoms
-        if recyc == 0:
-            type_pool = self.atom_type_rand(atom_type)
-        else:
-            type_pool = self.import_list2d(f'{record_path}/{recyc-1}/atom_type.dat', int)
-        type_num = len(type_pool)
-        #sampling on different grids
-        atom_pos_new, atom_type_new, grid_name_new = [], [], []
-        for i, grid in enumerate(grid_name):
-            counter = 0
-            points = [i for i in range(point_num[i])]
-            for _ in range(num_sampling):
-                seed = random.randint(0, type_num-1)
-                atom_num = len(type_pool[seed])
-                if atom_num < len(points):
-                    atom_pos_new += [random.sample(points, atom_num)]
-                    atom_type_new += [type_pool[seed]]
-                    counter += 1
-            grid_name_new += [grid for _ in range(counter)]
-        return atom_pos_new, atom_type_new, grid_name_new
-    
-    def atom_type_rand(self, atom_type):
-        """
-        generate various length of atom type
-        
-        Parameters
-        ----------
-        atom_type [int, 2d]: type of atoms
-
-        Returns
-        ----------
-        types [int, 2d]: type of atoms 
-        """
-        count = Counter(atom_type[0])
-        species = list(count.keys())
-        type_num = list(count.values())
-        #get greatest common divisor
-        gcd = np.gcd.reduce(type_num)
-        type_num = np.array(type_num)//gcd
-        #get min length of atom type
-        init_type = []
-        for i, atom in enumerate(species):
-            for _ in range(type_num[i]):
-                init_type.append(atom)
-        #get different length of atom type
-        types = self.control_atom_number(init_type)
-        return types
+        self.assign_to_cpu(grid_name)
     
     def control_atom_number(self, atom_type):
         """
@@ -380,11 +333,11 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         
         Parameters
         ----------
-        atom_type [int or str, 1d]: min number of atoms
+        atom_type [str, 1d]: min number of atoms
 
         Returns
         ----------
-        atom_types [int or str, 2d]: various number of atoms
+        atom_types [str, 2d]: various number of atoms
         """
         times = 1
         atom_types = []
@@ -396,90 +349,48 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         atom_types = [i for i in atom_types if num_min_atom <= len(i)]
         return atom_types
     
-    def structure_in_grid(self, recyc, grain):
-        """
-        put structure into grid
-        
-        Parameters
-        ----------
-        recyc [int, 0d]: times of recycling
-        grain [float, 1d]: grain of grid
-        
-        Returns
-        ----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: new initial grids
-        point_num [int, 1d]: number of grid points
-        latt_file [str, 1d]: name of lattice
-        """
-        grid_num = self.count_latt_num()
-        init_path = f'{init_strs_path}_{recyc}'
-        file_name = os.listdir(init_path)
-        atom_pos, atom_type, grid_name, point_num, latt_file = [], [], [], [], []
-        for i, poscar in enumerate(file_name):
-            #import structure
-            stru = Structure.from_file(f'{init_path}/{poscar}', sort=True)
-            latt_vec = stru.lattice.matrix
-            type = self.get_atom_number(stru)
-            stru_frac = stru.frac_coords
-            grid_frac = self.fraction_coor(grain, latt_vec)
-            pos = self.put_into_grid(stru_frac, latt_vec, grid_frac, latt_vec)
-            #write lattice file
-            file = f'{grid_num+i:03.0f}_latt_vec.bin'
-            self.write_list2d(f'{grid_prop_path}/{file}', latt_vec, binary=True)
-            #append to buffer
-            atom_type.append(type)
-            atom_pos.append(pos)
-            latt_file.append(file)
-            grid_name.append(grid_num+i)
-            num = len(grid_frac)
-            point_num.append(num)
-        return atom_pos, atom_type, grid_name, point_num, latt_file
-    
-    def geo_constrain(self, n, atom_pos, atom_type, grid_name):
+    def geo_constrain(self, atom_pos, atom_type, atom_symm, grid_name):
         """
         geometry constrain to reduce structures
         
         Parameters
         ----------
-        n [int, 0d]: number of samples
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
         
         Returns
         ----------
-        atom_pos_right [int, 2d]: position of atoms after constrain
-        atom_type_right [int, 2d]: type of atoms after constrain
-        grid_name_right [int, 1d]: name of grids after constrain
+        atom_pos [int, 2d]: position of atoms after constrain
+        atom_type [int, 2d]: type of atoms after constrain
+        atom_symm [int, 2d]: symmetry of atoms after constrain
+        grid_name [int, 1d]: name of grids after constrain
         """
         #check overlay of atoms
         check_overlay = [self.overlay(i, len(i)) for i in atom_pos]
         check_num = len(check_overlay)
-        sample_idx = np.arange(check_num)[check_overlay]
+        idx = np.arange(check_num)[check_overlay]
         #select samples that are not overlayed
-        atom_pos_rand, atom_type_rand, grid_name_rand = [], [], []
-        for i in sample_idx:
-            atom_pos_rand.append(atom_pos[i])
-            atom_type_rand.append(atom_type[i])
-            grid_name_rand.append(grid_name[i])
+        atom_pos = np.array(atom_pos, dtype=object)[idx]
+        atom_type = np.array(atom_type, dtype=object)[idx]
+        atom_symm = np.array(atom_symm, dtype=object)[idx]
+        grid_name = np.array(grid_name, dtype=object)[idx]
         #check neighbor distance of atoms
-        nbr_dis = self.find_nbr_dis(atom_pos_rand, grid_name_rand)
+        all_pos = self.get_all_pos_bh(atom_pos, grid_name)
+        nbr_dis = self.get_nbr_dis_bh(all_pos, grid_name)
         check_near = [self.near(i) for i in nbr_dis]
         check_num = len(check_near)
         #sampling correct random samples
-        sample_idx = np.arange(check_num)[check_near]
-        atom_pos_right, atom_type_right, grid_name_right = [], [], []
-        if len(sample_idx) > 0:
-            grids = np.array(grid_name_rand)[check_near]
-            sample_idx = self.balance_sampling(n, sample_idx, grids)
-            #add right samples into buffer
-            for i in sample_idx:
-                atom_pos_right.append(atom_pos_rand[i])
-                atom_type_right.append(atom_type_rand[i])
-                grid_name_right.append(grid_name_rand[i])  
-        return atom_pos_right, atom_type_right, grid_name_right
+        idx = np.arange(check_num)[check_near]
+        grids = np.array(grid_name)[check_near]
+        idx = self.balance_sampling(num_Rand, idx, grids)
+        #add right samples into buffer
+        atom_pos = np.array(atom_pos, dtype=object)[idx].tolist()
+        atom_type = np.array(atom_type, dtype=object)[idx].tolist()
+        atom_symm = np.array(atom_symm, dtype=object)[idx].tolist()
+        grid_name = np.array(grid_name, dtype=object)[idx].tolist()
+        return atom_pos, atom_type, atom_symm, grid_name
     
     def balance_sampling(self, n, index, grids):
         """
@@ -536,7 +447,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         """
         count number of grids
         """
-        command = f'ls -l {grid_prop_path} | grep latt_vec.bin | wc -l'
+        command = f'ls -l {grid_path} | grep latt_vec.bin | wc -l'
         num = os.popen(command)
         return int(num.read())
     
@@ -550,9 +461,11 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
 
         Returns
         ----------
-        atom_type [int, 1d]: start from 0 
+        atom_num [dict, int:int]: number of different atoms
         """
-        return list(np.array(stru.atomic_numbers) - 1)
+        atom_type = stru.atomic_numbers
+        atom_num = dict(Counter(atom_type))
+        return atom_num
     
     def create_dir(self):
         """
@@ -564,139 +477,7 @@ class InitSampling(GridDivide, ParallelDivide, UpdateNodes, MultiGridTransfer, G
         os.mkdir(vasp_out_path)
         os.mkdir(record_path)
         os.mkdir(grid_path)
-        os.mkdir(grid_poscar_path)
-        os.mkdir(grid_prop_path)
     
-    
-class Pretrain(Transfer):
-    #Pretrain property predict model
-    def __init__(self, cutoff=12, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
-        self.cutoff = cutoff
-        self.nbr, self.var = nbr, var
-        self.filter = np.arange(dmin, dmax+step, step)
-        self.elem_embed = self.import_list2d(
-            atom_init_file, int, numpy=True)
-    
-    def pretrain(self):
-        path = 'database/CIF2D'
-        data = pd.read_csv(f'{path}/id_prop.csv', header=None).values
-        #divide into train, valid, test
-        data_num = len(data)
-        index = np.arange(data_num)
-        train_index = index[:int(data_num*0.6)]
-        valid_index = index[int(data_num*0.6):int(data_num*0.8)]
-        test_index = index[int(data_num*0.8):]
-        #get name of cifs
-        train_cifs, train_energys = np.transpose(data[train_index])
-        valid_cifs, valid_energys = np.transpose(data[valid_index])
-        test_cifs, test_energys = np.transpose(data[test_index])
-        train_cifs = [f'{path}/{i}.cif' for i in train_cifs]
-        valid_cifs = [f'{path}/{i}.cif' for i in valid_cifs]
-        test_cifs = [f'{path}/{i}.cif' for i in test_cifs]
-        #transfer data to input of model
-        train_atom_fea, train_nbr_fea, train_nbr_fea_idx = self.batch(train_cifs)
-        valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx = self.batch(valid_cifs)
-        test_atom_fea, test_nbr_fea, test_nbr_fea_idx = self.batch(test_cifs)
-        #training prediction model
-        train_data = PPMData(train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energys)
-        valid_data = PPMData(valid_atom_fea, valid_nbr_fea, valid_nbr_fea_idx, valid_energys)
-        test_data = PPMData(test_atom_fea, test_nbr_fea, test_nbr_fea_idx, test_energys)
-        ppm = PPModel(100, train_data, valid_data, test_data)
-        ppm.train_epochs()
-    
-    def single(self, cif):
-        """
-        index and distance of near grid points
-        
-        Parameters
-        ----------
-        cif [str, 0d]: string of cif 
-        
-        Returns
-        ----------
-        atom_fea [int, 2d, np]: feature of atoms
-        nbr_fea [float, 2d, np]: distance of near neighbor 
-        nbr_idx [int, 2d, np]: index of near neighbor 
-        """
-        crystal = Structure.from_file(cif)
-        atom_type = np.array(crystal.atomic_numbers) - 1
-        all_nbrs = crystal.get_all_neighbors(self.cutoff)
-        all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
-        num_near = min(map(lambda x: len(x), all_nbrs))
-        nbr_idx, nbr_dis = [], []
-        for nbr in all_nbrs:
-            idx = list(map(lambda x: x[2], nbr[:num_near]))[:self.nbr]
-            dis = list(map(lambda x: x[1], nbr[:num_near]))[:self.nbr]
-            nbr_idx.append(idx)
-            nbr_dis.append(dis)
-        nbr_idx, nbr_dis = np.array(nbr_idx), np.array(nbr_dis)
-        atom_fea = self.atom_initializer(atom_type)
-        nbr_fea = self.expand(nbr_dis)
-        return atom_fea, nbr_fea, nbr_idx
-    
-    def batch(self, cifs):
-        """
-        transfer cifs to input of predict model
-        
-        Parameters
-        ----------
-        cifs [str, 1d]: string of structure in cif
 
-        Returns
-        ----------
-        batch_atom_fea [int, 3d]: batch atom feature
-        batch_nbr_fea [float, 4d]: batch neighbor feature
-        batch_nbr_fea_idx [float, 3d]: batch neighbor index
-        """
-        batch_atom_fea, batch_nbr_fea, \
-            batch_nbr_fea_idx = [], [], []
-        for cif in cifs:
-            atom_fea, nbr_fea, nbr_fea_idx = \
-                self.single(cif)
-            batch_atom_fea.append(atom_fea)
-            batch_nbr_fea.append(nbr_fea)
-            batch_nbr_fea_idx.append(nbr_fea_idx)
-        return batch_atom_fea, batch_nbr_fea, \
-                batch_nbr_fea_idx
-    
-    
 if __name__ == '__main__':
-    '''
-    ssh = SSHTools()
-    cifs = os.listdir('database/CIF2D')
-    node_assign = ssh.assign_node(len(cifs), order=False)
-    for i, cif in enumerate(cifs):
-        stru = Structure.from_file(f'database/CIF2D/{cif}')
-        stru.to(filename=f'data/poscar/000/POSCAR-{cif[:-4]}-{node_assign[i]}', fmt='poscar')
-    '''
-    #cpu_nodes = UpdateNodes()
-    #cpu_nodes.update()
-    #from core.sub_vasp import ParallelSubVASP
-    #vasp = ParallelSubVASP()
-    #vasp.sub_job(0, vdW=True)
-    #vasp.get_energy(0, 0)
-    '''
-    rwtools = ListRWTools()
-    ct = rwtools.import_list2d('data/vasp_out/Energy-0.dat', str)
-    names, energys = [], []
-    for i in ct:
-        if i[1] == 'True':
-            name = i[0].split('-')
-            label = name[1] + '-' + name[2]
-            names.append(label)
-            energys.append(i[2])
-    
-    
-    import shutil
-    for i in names:
-        file_1 = f'database/CIF2D/{i}.cif'
-        file_2 = f'database/CIF2D_vdW/{i}.cif'
-        shutil.copy(file_1, file_2)
-    
-    df = pd.DataFrame({'cif':names, 'E':energys})
-    df.to_csv('id_prop.csv',index =False ,sep = ',')
-    '''
-    model = Pretrain()
-    model.pretrain()
-    #print(model.import_list2d('test.txt', int))
-    
+    pass

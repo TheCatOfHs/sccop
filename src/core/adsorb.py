@@ -1253,36 +1253,36 @@ class ThermalConductivity(PostProcess):
         calculate property of structures
         """
         #dielectric matrix
-        #self.run_dielectric()
+        self.run_dielectric()
         #calculate phonon spectrum 
-        #self.run_phonon(vdW=False, dimension=2)
+        self.run_phonon(vdW=False, dimension=2)
         #3 order force constant
-        #self.run_3RD()
+        self.run_3RD()
         #lattice thermal conductivity
         self.run_thermal_conductivity()
         
     
 if __name__ == '__main__':
-    atom = 3
+    atom = 11
     repeat = (2, 2, 1)
     sides = ['One']
     adsorb = AdsorbSites()
     #adsorb.get_slab()
-    adsorb.relax(atom, repeat)
+    #adsorb.relax(atom, repeat)
     #adsorb.sites_analysis(-1.31116, repeat)
-    adsorb.sites_analysis(-2.07845725, repeat)
-    adsorb.cluster_sites()
-    adsorb.sites_plot(repeat)
-    adsorb.sites_plot(repeat, cluster=False)
+    #adsorb.sites_analysis(-2.07845725, repeat)
+    #adsorb.cluster_sites()
+    #adsorb.sites_plot(repeat)
+    #adsorb.sites_plot(repeat, cluster=False)
     
-    neb = NEBSolver()
-    neb.calculate(atom, repeat)
+    #neb = NEBSolver()
+    #neb.calculate(atom, repeat)
     #sites = [[0.25, 0., 0.597], [0.5, 0., 0.597], [.75, 0., 0.597]]
     #neb.self_define_calculate(0, atom, 'POSCAR-04-131', sites, repeat)
     
     #multi_adsorb = MultiAdsorbSites()
     #multi_adsorb.relax(atom, repeat, sides)
     #multi_adsorb.analysis(-1.31116, repeat, sides)
-    
-    #thermal = ThermalConductivity()
-    #thermal.calculate()
+    #multi_adsorb.analysis(-2.07845725, repeat, sides)
+    thermal = ThermalConductivity()
+    thermal.calculate()

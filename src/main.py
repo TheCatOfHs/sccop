@@ -463,5 +463,5 @@ class CrystalOptimization(ListRWTools):
     
     
 if __name__ == '__main__':
-    ccop = CrystalOptimization(num_RCSD, component)
+    ccop = CrystalOptimization(num_latt, component)
     ccop.main()

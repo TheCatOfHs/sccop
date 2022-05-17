@@ -78,7 +78,7 @@ def generate_CONTROL(born, lattice, atom_name, atom_num, diele, position):
     epsilon(:,1)=%s,
     epsilon(:,2)=%s,
     epsilon(:,3)=%s,%s
-    scell(:)=2 2 2
+    scell(:)=4 4 1
 &end
 &parameters
     T=T-place.

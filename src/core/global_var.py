@@ -29,16 +29,16 @@ num_optims = 6
 
 #Initial Samples
 component = 'XXX'
-num_RCSD = 36
+num_latt = 36
 num_Rand = 120
-num_sampling = 10000
+num_sampling = 1000
 len_mu = 5
 len_sigma = 1
 len_lower = 4
 len_upper = 6
 ang_mu = 90
 ang_sigma = 10
-system_weight = [0, 1/4, 1/4, 1/4, 0, 1/4, 0]
+system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
 
 #Training
 train_batchsize = 128

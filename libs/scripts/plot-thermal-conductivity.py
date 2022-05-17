@@ -16,9 +16,9 @@ def read_file(file_name):
 def plot_kappa(kappa_file):
     T, kappa_x, kappa_y, kappa_z = np.transpose(kappa_file)
     plt.figure(figsize=(8,5))
-    plt.plot(T, kappa_x, label='$\kappa$-$x$', marker='s', linewidth='1', c='r')
-    plt.plot(T, kappa_y, label='$\kappa$-$y$', marker='o', linewidth='1', c='k')
-    plt.plot(T, kappa_z, label='$\kappa$-$z$', marker='+', ms=8, mew=2, linewidth='1', c='b')
+    plt.plot(T, kappa_x, label='$\kappa$-$x$', marker='s', lw='1', c='r')
+    plt.plot(T, kappa_y, label='$\kappa$-$y$', marker='o', lw='1', c='k')
+    plt.plot(T, kappa_z, label='$\kappa$-$z$', marker='+', ms=8, mew=2, lw='1', c='b')
     plt.xlabel('Temperature (K)',fontsize=15)
     plt.ylabel('$\kappa$ (W/mK)', fontsize=15)
     plt.xticks(fontsize=15)
@@ -27,6 +27,26 @@ def plot_kappa(kappa_file):
     plt.savefig('Thermal.png', dpi=500)
     plt.close()
 
+def plot_cum_kappa(kappa_file):
+    T, kappa_x, kappa_y, kappa_z = np.transpose(kappa_file)
+    sum_kappa_x = np.sum(kappa_x)
+    sum_kappa_y = np.sum(kappa_y)
+    sum_kappa_z = np.sum(kappa_z)
+    cum_kappa_x = [np.sum(kappa_x[:i])/sum_kappa_x for i in range(len(kappa_x))]
+    cum_kappa_y = [np.sum(kappa_y[:i])/sum_kappa_y for i in range(len(kappa_y))]
+    cum_kappa_z = [np.sum(kappa_z[:i])/sum_kappa_z for i in range(len(kappa_z))]
+    plt.figure(figsize=(8,5))
+    plt.plot(T, cum_kappa_x, label='$\kappa$-$x$', ls='-', lw='1', c='r')
+    plt.plot(T, cum_kappa_y, label='$\kappa$-$y$', ls='--', lw='1', c='k')
+    plt.plot(T, cum_kappa_z, label='$\kappa$-$z$', ls=':', lw='1', c='b')
+    plt.xlabel('Temperature (K)',fontsize=15)
+    plt.ylabel('Cumulative $\kappa$ (W/mK)', fontsize=15)
+    plt.xticks(fontsize=15)
+    plt.yticks(fontsize=15)
+    plt.legend(fontsize=15)
+    plt.savefig('Cum_Thermal.png', dpi=500)
+    plt.close()
+    
 def plot_scatter(w_file):
     freq, scat = np.transpose(w_file)
     plt.figure(figsize=(8,5))
@@ -66,7 +86,8 @@ if __name__ == '__main__':
     else:
         kappa_file = read_file(kappa_dat)
         plot_kappa(kappa_file)
-    
+        plot_cum_kappa(kappa_file)
+        
     w_dat = 'BTE.w.dat'
     if not os.path.exists(w_dat):
         systemError('File BET.w.dat not found!')

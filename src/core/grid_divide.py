@@ -1,7 +1,10 @@
 import os, sys
 import time
+import copy
+import random
 import argparse
 import numpy as np
+from collections import Counter
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
@@ -13,84 +16,74 @@ from core.utils import ListRWTools, SSHTools, system_echo
 
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--grain', type=float, nargs='+')
-parser.add_argument('--origin', type=int)
-parser.add_argument('--mutate', type=int)
+parser.add_argument('--name', type=int)
 args = parser.parse_args()
 
 
 class ParallelDivide(ListRWTools, SSHTools):
     #divide grid by each node
     def __init__(self, wait_time=0.1):
-        self.num_node = len(nodes)
         self.wait_time = wait_time
-        self.prop_path = f'/local/ccop/{grid_prop_path}'
+        self.local_grid_path = f'/local/ccop/{grid_path}'
     
-    def assign_to_cpu(self, grain, grid_origin, grid_mutate):
+    def assign_to_cpu(self, grid_name):
         """
         send divide jobs to nodes and update nodes
         
         Parameters
         ----------
-        grain [int, 1d]: grain of grid
-        grid_origin [int, 1d]: name of origin grid 
-        grid_mutate [int, 1d]: name of mutate grid 
+        grid_name [int, 1d]: name of grid
         """
-        num_grid = len(grid_mutate)
-        node_assign = self.assign_node(num_grid)
+        grid_num = len(grid_name)
+        node_assign = self.assign_node(grid_num)
         #generate grid and send back to gpu node
-        for origin, mutate, node in zip(grid_origin, grid_mutate, node_assign):
-            self.sub_divide(grain, origin, mutate, node)
-        while not self.is_done(grid_prop_path, num_grid):
+        for grid, node in zip(grid_name, node_assign):
+            self.sub_divide(grid, node)
+        while not self.is_done(grid_path, grid_num):
             time.sleep(self.wait_time)
-        self.zip_file_name(grid_mutate)
+        self.zip_file_name(grid_name)
         self.remove_flag_on_gpu()
-        system_echo(f'Lattice generate number: {num_grid}')
+        system_echo(f'Lattice generate number: {grid_num}')
         #update cpus
         for node in nodes:
             self.send_grid_to_cpu(node)
-        while not self.is_done(grid_prop_path, self.num_node):
+        while not self.is_done(grid_path, len(nodes)):
             time.sleep(self.wait_time)
         self.remove_flag_on_gpu()
         self.remove_flag_on_cpu()
         system_echo(f'Unzip grid file on CPUs')
         #unzip on gpu
         self.unzip_grid_on_gpu()
-        while not self.is_done(grid_prop_path, num_grid):
+        while not self.is_done(grid_path, grid_num):
             time.sleep(self.wait_time)
         self.remove_zip_on_gpu()
         self.remove_flag_on_gpu()
         system_echo(f'Unzip grid file on GPU')
     
-    def sub_divide(self, grain, origin, mutate, node):
+    def sub_divide(self, grid, node):
         """
         SSH to target node and divide grid
 
         Parameters
         ----------
-        grain [float, 1d]: grain of grid
-        origin [int, 0d]: name of origin grid
-        mutate [int, 0d]: name of mutate grid
+        grid [int, 0d]: name of grid
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        file = [f'{mutate:03.0f}_frac_coor.bin',
-                f'{mutate:03.0f}_latt_vec.bin',
-                f'{mutate:03.0f}_nbr_dis.bin',
-                f'{mutate:03.0f}_nbr_idx.bin']
+        file = [f'{grid:03.0f}_nbr_dis.bin',
+                f'{grid:03.0f}_nbr_idx.bin']
         file = ' '.join(file)
-        grain_str = ' '.join([str(i) for i in grain])
-        options = f'--grain {grain_str} --origin {origin} --mutate {mutate}'
         shell_script = f'''
+                        #!/bin/bash
                         cd /local/ccop/
-                        python src/core/grid_divide.py {options}
-                        cd {grid_prop_path}
+                        python src/core/grid_divide.py --name {grid}
+                        cd {grid_path}
                         
-                        touch FINISH-{mutate}                        
-                        tar -zcf {mutate}.tar.gz {file} FINISH-{mutate}
-                        scp {mutate}.tar.gz FINISH-{mutate} {gpu_node}:{self.prop_path}/
+                        touch FINISH-{grid}                        
+                        tar -zcf {grid}.tar.gz {file} FINISH-{grid}
+                        scp {grid}.tar.gz FINISH-{grid} {gpu_node}:{self.local_grid_path}/
                         
-                        rm {file} {mutate}.tar.gz FINISH-{mutate}
+                        rm {grid}.tar.gz FINISH-{grid}
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -114,8 +107,9 @@ class ParallelDivide(ListRWTools, SSHTools):
         zip_file_str = ' '.join(self.zip_file)
         ip = f'node{node}'
         shell_script = f'''
-                        cd /local/ccop/{grid_prop_path}
-                        scp {gpu_node}:{self.prop_path}/{{{','.join(self.zip_file)}}} .
+                        #!/bin/bash
+                        cd {self.local_grid_path}
+                        scp {gpu_node}:{self.local_grid_path}/{{{','.join(self.zip_file)}}} .
                         
                         for i in {zip_file_str}
                         do
@@ -124,7 +118,7 @@ class ParallelDivide(ListRWTools, SSHTools):
                         done
                         
                         touch FINISH-{node}
-                        scp FINISH-{node} {gpu_node}:{self.prop_path}/
+                        scp FINISH-{node} {gpu_node}:{self.local_grid_path}/
                         rm FINISH-{node} {zip_file_str}
                         '''
         self.ssh_node(shell_script, ip)
@@ -135,7 +129,8 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         zip_file_str = ' '.join(self.zip_file)
         shell_script = f'''
-                        cd {grid_prop_path}/
+                        #!/bin/bash
+                        cd {self.local_grid_path}
                         for i in {zip_file_str}
                         do
                             nohup tar -zxf $i >& log-$i &
@@ -148,8 +143,8 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         remove flag file on gpu
         """
-        os.system(f'rm {grid_prop_path}/FINISH*')
-        
+        os.system(f'rm {grid_path}/FINISH*')
+    
     def remove_flag_on_cpu(self):
         """
         remove FINISH flags on cpu
@@ -157,7 +152,8 @@ class ParallelDivide(ListRWTools, SSHTools):
         for node in nodes:
             ip = f'node{node}'
             shell_script = f'''
-                            cd /local/ccop/{grid_prop_path}
+                            #!/bin/bash
+                            cd {self.local_grid_path}
                             rm FINISH*
                             '''
             self.ssh_node(shell_script, ip)
@@ -166,101 +162,647 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         remove zip file
         """
-        os.system(f'rm {grid_prop_path}/*.tar.gz')
+        os.system(f'rm {grid_path}/*.tar.gz')
     
 
 class PlanarSpaceGroup():
-    #
+    #17 planar space groups
     def __init__(self):
         pass    
+    
+    def get_grid_points(self, group, grain, latt):
+        """
+        generate grid point according to space group
+        
+        Parameters
+        ----------
+        group [int, 0d]: international number of group number
+        grain [float, 1d]: grain of grid points
+        latt [obj]: Lattice object of pymatgen
 
-    def unequal_area(self, group):
-        
-        #
+        Returns
+        ----------
+        all_grid [float, 2d]: fraction coordinates of grid points
+        mapping [int, 2d]: mapping between min and all grid
+        """
+        norms = latt.lengths
+        n = [norms[i]//grain[i] for i in range(3)]
+        frac_grain = [1/i for i in n]
+        #monoclinic
         if group == 1:
-            pass
-        
-        
+            min_grid = self.triclinic_1(frac_grain)
+        if group == 2:
+            min_grid = self.triclinic_2(frac_grain)
+        #orthorhombic
+        if group == 3:
+            min_grid = self.orthorhombic_3(frac_grain)
+        if group == 4:
+            min_grid = self.orthorhombic_4(frac_grain)
+        if group == 5:
+            min_grid = self.orthorhombic_5(frac_grain)
+        if group == 25:
+            min_grid = self.orthorhombic_25(frac_grain)
+        if group == 28:
+            min_grid = self.orthorhombic_28(frac_grain)
+        if group == 32:
+            min_grid = self.orthorhombic_32(frac_grain)
+        if group == 35:
+            min_grid = self.orthorhombic_35(frac_grain)
+        #tetragonal
+        if group == 75:
+            min_grid = self.tetragonal_75(frac_grain)
+        if group == 99:
+            min_grid = self.tetragonal_99(frac_grain)
+        if group == 100:
+            min_grid = self.tetragonal_100(frac_grain)
+        #hexagonal
+        if group == 143:
+            min_grid = self.hexagonal_143(frac_grain)
+        if group == 156:
+            min_grid = self.hexagonal_156(frac_grain)
+        if group == 157:
+            min_grid = self.hexagonal_157(frac_grain)
+        if group == 168:
+            min_grid = self.hexagonal_168(frac_grain)
+        if group == 183:
+            min_grid = self.hexagonal_183(frac_grain)
+        #get all equivalent sites and mapping relationship
+        mapping = []
+        all_grid = min_grid.copy()
+        for i, point in enumerate(min_grid):
+            stru = Structure.from_spacegroup(group, latt, [1], [point])
+            equal_coords = stru.frac_coords.tolist()[1:]
+            start = len(all_grid)
+            end = start + len(equal_coords)
+            mapping.append([i] + [j for j in range(start, end)])
+            all_grid += equal_coords
+        return all_grid, mapping
     
+    def assign_by_spacegroup(self, atom_num, symm_site):
+        """
+        generate site assignments by space group
+        
+        Parameters
+        ----------
+        atom_num [dict, int:int]: number of different atoms\\
+        symm_site [dict, int:list]: site position grouped by symmetry
+
+        Returns
+        ----------
+        assign_plan [list, dict, 1d]: site assignment of atom_num
+        """
+        symm = list(symm_site.keys())
+        site_num = [len(i) for i in symm_site.values()]
+        symm_num = dict(zip(symm, site_num))
+        #initialize assignment
+        store = []
+        init_assign = {}
+        for atom in atom_num.keys():
+            init_assign[atom] = []
+        for site in symm_site.keys():
+            for atom in atom_num.keys():
+                num = atom_num[atom]
+                if site <= num:
+                    assign = copy.deepcopy(init_assign)
+                    assign[atom] = [site]
+                    store.append(assign)
+        #find site assignment of different atom_num
+        new_store, assign_plan = [], []
+        while True:
+            for assign in store:
+                for site in symm_site.keys():
+                    for atom in atom_num.keys():
+                        new_assign = copy.deepcopy(assign)
+                        new_assign[atom] += [site]
+                        save = self.check_assign(atom_num, symm_num, new_assign)
+                        if save == 0:
+                            assign_plan.append(new_assign)
+                        if save == 1:
+                            new_store.append(new_assign)
+            if len(new_store) == 0:
+                break
+            store = new_store
+            store = self.delete_same_assign(store)
+            new_store = []
+        assign_plan = self.delete_same_assign(assign_plan)
+        return assign_plan
     
-class GridDivide(ListRWTools):
+    def group_symm_sites(self, mapping):
+        """
+        group sites by symmetry
+        
+        Parameters
+        ----------
+        mapping [int, 2d]: mapping between min and all grid
+
+        Returns
+        ----------
+        symm_site [dict, int:list]: site position grouped by symmetry
+        """
+        symm = [len(i) for i in mapping]
+        last = symm[0]
+        store, symm_site = [], {}
+        for i, s in enumerate(symm):
+            if s == last:
+                store.append(i)
+            else:
+                symm_site[last] = store
+                store = []
+                last = s
+                store.append(i)
+        symm_site[s] = store
+        return symm_site
+    
+    def check_assign(self, atom_num, symm_num_dict, assign):
+        """
+        check site assignment of different atom_num
+        
+        Parameters
+        ----------
+        atom_num [dict, int:int]: number of different atoms\\
+        symm_num [dict, int:int]: number of each symmetry site\\
+        assign [dict, int:list]: site assignment of atom_num
+
+        Returns
+        ----------
+        save [int, 0d]: 0, right. 1, keep. 2, delete.
+        """
+        assign_num, site_used = {}, []
+        #check number of atom_num
+        save = 1
+        for atom in atom_num.keys():
+            site = assign[atom]
+            num = sum(site)
+            if num <= atom_num[atom]:
+                assign_num[atom] = num
+                site_used += site
+            else:
+                save = 2
+                break
+        if save == 1:
+            #check number of used sites
+            site_used = Counter(site_used)
+            for site in site_used.keys():
+                if site_used[site] > symm_num_dict[site]:
+                    save = 2
+                    break
+            #whether find a right assignment
+            if assign_num == atom_num and save == 1:
+                save = 0
+        return save
+    
+    def delete_same_assign(self, store):
+        """
+        delete same site assignment 
+        
+        Parameters
+        ----------
+        store [list, dict, 1d]: assignment of site
+
+        Returns
+        ----------
+        new_store [list, dict, 1d]: unique assignment of site
+        """
+        idx = []
+        num = len(store)
+        for i in range(num):
+            assign_1 = store[i]
+            for j in range(i+1, num):
+                same = True
+                assign_2 = store[j]
+                for k in assign_1.keys():
+                    if sorted(assign_1[k]) != sorted(assign_2[k]):
+                        same = False
+                        break
+                if same:
+                    idx.append(i)
+                    break
+        new_store = np.delete(store, idx, axis=0).tolist()
+        return new_store
+    
+    def judge_crystal_system(self, latt):
+        """
+        judge crystal system by lattice constants
+
+        Parameters
+        ----------
+        latt [obj]: lattice object in pymatgen 
+
+        Returns
+        ----------
+        system [int, 0d]: crystal system number
+        params [float, 1d]: approximal lattice constants
+        """
+        approx = [round(i, 6) for i in latt.parameters]
+        a, b, c, alpha, beta, gamma = approx
+        if a != b and gamma != 90:
+            system = 0
+        if a != b and gamma == 90:
+            system = 2
+        if a == b and gamma == 90:
+            system = 3
+        if a == b and gamma == 120:
+            system = 5
+        c = vacuum_space
+        params = [a, b, c, alpha, beta, gamma]
+        return system, params
+    
+    def triclinic_1(self, frac_grain):
+        """
+        space group P1
+        """
+        equal_1 = []
+        #inner
+        for i in np.arange(0, 1, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
+                equal_1.append([i, j, 0])
+        min_grid = equal_1
+        return min_grid
+    
+    def triclinic_2(self, frac_grain):
+        """
+        space group P2
+        """
+        equal_2 = []
+        #point
+        equal_1 = [[0, 0, 0], [0, .5, 0], [.5, 0, 0], [.5, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_2.append([i, 0, 0])
+                equal_2.append([i, .5, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_2.append([0, j, 0])
+        #inner
+        for i in np.arange(0, 1, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_2.append([i, j, 0])
+        min_grid = equal_1 + equal_2
+        return min_grid
+    
+    def orthorhombic_3(self, frac_grain):
+        """
+        space group P1m1
+        """
+        equal_1, equal_2 = [], []
+        #boundary
+        for j in np.arange(0, 1, frac_grain[1]):
+            equal_1.append([0, j, 0])
+            equal_1.append([.5, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
+                if 0 < i:
+                    equal_2.append([i, j, 0])
+        min_grid = equal_1 + equal_2
+        return min_grid
+    
+    def orthorhombic_4(self, frac_grain):
+        """
+        space group P1g1
+        """
+        equal_2 = []
+        #inner
+        for i in np.arange(0, 1, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                equal_2.append([i, j, 0])
+        min_grid = equal_2
+        return min_grid
+    
+    def orthorhombic_5(self, frac_grain):
+        """
+        space group C1m1
+        """
+        equal_2, equal_4 = [], []
+        #boundary
+        for j in np.arange(0, .5, frac_grain[1]):
+            equal_2.append([0, j, 0])
+            equal_2.append([.5, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_2 + equal_4
+        return min_grid
+    
+    def orthorhombic_25(self, frac_grain):
+        """
+        space group P2mm
+        """
+        equal_2, equal_4 = [], []
+        #point
+        equal_1 = [[0, 0, 0], [0, .5, 0], [.5, 0, 0], [.5, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_2.append([i, 0, 0])
+                equal_2.append([i, .5, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_2.append([0, j, 0])
+                equal_2.append([.5, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_4
+        return min_grid
+    
+    def orthorhombic_28(self, frac_grain):
+        """
+        space group P2mg
+        """
+        equal_4 = []
+        #point
+        equal_2 = [[0, 0, 0], [0, .5, 0]]
+        #boundary
+        for j in np.arange(0, 1, frac_grain[1]):
+            equal_2.append([.25, j, 0])
+        for i in np.arange(0, .25, frac_grain[0]):
+            if 0 < i:
+                equal_4.append([i, 0, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_4.append([0, j, 0])
+        #inner
+        for i in np.arange(0, .25, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_2 + equal_4
+        return min_grid
+    
+    def orthorhombic_32(self, frac_grain):
+        """
+        space group P2gg
+        """
+        equal_4 = []
+        #point
+        equal_2 = [[0, 0, 0], [0, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_4.append([i, 0, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_4.append([0, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_2 + equal_4
+        return min_grid
+    
+    def orthorhombic_35(self, frac_grain):
+        """
+        space group C2mm
+        """
+        equal_8 = []
+        #point
+        equal_2 = [[0, 0, 0], [0, .5, 0]]
+        equal_4 = [[.25, .25, 0], [.25, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i < .25:
+                equal_4.append([i, 0, 0])
+                equal_4.append([i, .5, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_4.append([0, j, 0])
+            if 0 < j < .25:
+                equal_8.append([.25, j, 0])
+        #inner
+        for i in np.arange(0, .25, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_8.append([i, j, 0])
+        min_grid = equal_2 + equal_4 + equal_8
+        return min_grid
+    
+    def tetragonal_75(self, frac_grain):
+        """
+        space group P4
+        """
+        equal_4 = []
+        #point
+        equal_1 = [[0, 0, 0], [.5, .5, 0]]
+        equal_2 = [[0, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_4.append([i, .5, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_4.append([0, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_4
+        return min_grid
+    
+    def tetragonal_99(self, frac_grain):
+        """
+        space group P4mm
+        """
+        equal_4, equal_8 = [], []
+        #point
+        equal_1 = [[0, 0, 0], [.5, .5, 0]]
+        equal_2 = [[0, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_4.append([i, 0, 0])
+                equal_4.append([i, i, 0])
+        for j in np.arange(0, .5, frac_grain[1]):
+            if 0 < j:
+                equal_4.append([.5, j, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j < i:
+                    equal_4.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_4 + equal_8
+        return min_grid
+    
+    def tetragonal_100(self, frac_grain):
+        """
+        space group P4gm
+        """
+        equal_4, equal_8 = [], []
+        #point
+        equal_2 = [[0, 0, 0], [0, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_4.append([i, -i+.5, 0])
+                equal_8.append([i, 0, 0])
+        #inner
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 0 < i and 0 < j < -i+.5:
+                    equal_8.append([i, j, 0])
+        min_grid = equal_2 + equal_4 + equal_8
+        return min_grid
+    
+    def hexagonal_143(self, frac_grain):
+        """
+        space group P3
+        """
+        equal_3 = []
+        #point
+        equal_1 = [[0, 0, 0], [1/3, 2/3, 0], [2/3, 1/3, 0]]
+        #boundary
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            if 0 < i:
+                equal_3.append([i, .5*i, 0])
+        for j in np.arange(0, 2/3, frac_grain[1]):
+            if 0 < j:
+                equal_3.append([.5*j, j, 0])
+        #inner
+        for i in np.arange(0, 1, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
+                if .5*i < j and 2*i-1 < j and j < 2*i and j < .5*i+.5:
+                    equal_3.append([i, j, 0])
+        min_grid = equal_1 + equal_3
+        return min_grid
+
+    def hexagonal_156(self, frac_grain):
+        """
+        space group P3m1
+        """
+        equal_3, equal_6 = [], []
+        #point
+        equal_1 = [[0, 0, 0], [1/3, 2/3, 0], [2/3, 1/3, 0]]
+        #boundary
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            if 0 < i:
+                equal_3.append([i, .5*i, 0])
+            if 1/3 < i:
+                equal_3.append([i, -i+1, 0])
+        for j in np.arange(0, 2/3, frac_grain[1]):
+            if 0 < j:
+                equal_3.append([.5*j, j, 0])
+        #inner
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            for j in np.arange(0, 2/3, frac_grain[1]):
+                if .5*i < j and 0 < j < 2*i and j < -i+1:
+                    equal_6.append([i, j, 0])
+        min_grid = equal_1 + equal_3 + equal_6 
+        return min_grid
+    
+    def hexagonal_157(self, frac_grain):
+        """
+        space group P31m
+        """
+        equal_6 = []
+        #point
+        equal_1 = [[0, 0, 0]]
+        equal_2 = [[1/3, 2/3, 0]]
+        equal_3 = [[.5, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_3.append([i, i, 0])
+                equal_3.append([i, 0, 0])
+        for i in np.arange(.5, 2/3, frac_grain[0]):
+            if .5 < i:
+                equal_6.append([i, 2*i-1, 0])
+        #inner
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 2*i-1 < j and 0 < j < i and j < -i+1:
+                    equal_6.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_3 + equal_6
+        return min_grid
+    
+    def hexagonal_168(self, frac_grain):
+        """
+        space group P6
+        """
+        equal_6 = []
+        #point
+        equal_1 = [[0, 0, 0]]
+        equal_2 = [[1/3, 2/3, 0]]
+        equal_3 = [[.5, .5, 0]]
+        #boundary
+        for i in np.arange(0, .5, frac_grain[0]):
+            if 0 < i:
+                equal_6.append([i, 0, 0])
+        for i in np.arange(.5, 2/3, frac_grain[0]):
+            if .5 < i:
+                equal_6.append([i, 2*i-1, 0])
+        #inner
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            for j in np.arange(0, .5, frac_grain[1]):
+                if 2*i-1 < j and 0 < j < i and j < -i+1:
+                    equal_6.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_3 + equal_6
+        return min_grid
+    
+    def hexagonal_183(self, frac_grain):
+        """
+        space group P6mm
+        """
+        equal_6, equal_12 = [], []
+        #point
+        equal_1 = [[0, 0, 0]]
+        equal_2 = [[1/3, 2/3, 0]]
+        equal_3 = [[.5, .5, 0]]
+        #boundary
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            if 0 < i:
+                equal_6.append([i, .5*i, 0])
+            if 0 < i < .5:
+                equal_6.append([i, 0, 0])
+        for j in np.arange(0, 1/3, frac_grain[1]):
+            if 0 < j:
+                equal_6.append([.5*(j+1), j, 0])
+        #inner
+        for i in np.arange(0, 2/3, frac_grain[0]):
+            for j in np.arange(0, 1/3, frac_grain[1]):
+                if 2*i-1 < j and 0 < j < .5*i:
+                    equal_12.append([i, j, 0])
+        min_grid = equal_1 + equal_2 + equal_3 + equal_6 + equal_12
+        return min_grid
+
+    
+class GridDivide(ListRWTools, PlanarSpaceGroup):
     #Build the grid
     def __init__(self):
-        self.mu = latt_mu
-        self.sigma = latt_sigma
+        pass
     
-    def build_grid(self, grid_name, latt_vec, grain, cutoff, mutate=False):
+    def build(self, grid, cutoff):
         """
-        save POSCAR, latt_vec, frac_coor, nbr_idx, nbr_dis of grid
+        save nbr_idx, nbr_dis of grid
         
         Parameters
         ----------
-        grid_name [str, 0d]: name of grid
-        latt_vec [float, 2d, np]: lattice vector of grid
-        grain [float, 1d]: fraction coordinate of grid points
+        grid [str, 0d]: name of grid
         cutoff [float, 0d]: cutoff distance
-        mutate [bool, 0d]: whether mutate lattice vector
         """
-        self.grid = f'{grid_name:03.0f}'
-        self.prop_path = f'{grid_prop_path}/{self.grid}'
-        self.poscar = f'{grid_poscar_path}/POSCAR_{self.grid}'
-        if mutate:
-            delta = np.identity(3) + self.strain_mat()
-            latt_vec = np.dot(delta, latt_vec)
-            latt_vec = self.lattice_check(latt_vec)
-            system_echo('Lattice mutate!')
+        head = f'{grid_path}/{grid:03.0f}'
+        latt_vec = self.import_list2d(f'{head}_latt_vec.bin',
+                                      float, binary=True)
+        coords = self.import_list2d(f'{head}_frac_coords.bin',
+                                    float, binary=True)
+        atoms = [1 for _ in range(len(coords))]
         #add vacuum layer to structure
         if add_vacuum:
-            latt_vec = self.add_vacuum(latt_vec)
-        frac_coor = self.fraction_coor(grain, latt_vec)
-        self.write_grid_POSCAR(latt_vec, frac_coor)
-        stru = Structure.from_file(self.poscar)
+            latt = self.add_vacuum(latt_vec)
+        #get near neighbors and distance
+        stru = Structure.from_spacegroup(1, latt, atoms, coords)
         nbr_idx, nbr_dis = self.near_property(stru, cutoff)
-        self.write_list2d(f'{self.prop_path}_latt_vec.bin', 
-                          latt_vec, binary=True)
-        self.write_list2d(f'{self.prop_path}_frac_coor.bin',
-                          frac_coor, binary=True)
-        self.write_list2d(f'{self.prop_path}_nbr_idx.bin',
+        self.write_list2d(f'{head}_nbr_idx.bin', 
                           nbr_idx, binary=True)
-        self.write_list2d(f'{self.prop_path}_nbr_dis.bin',
+        self.write_list2d(f'{head}_nbr_dis.bin', 
                           nbr_dis, binary=True)
-    
-    def strain_mat(self):
-        """
-        symmetry stain matrix
-        
-        Returns
-        ----------
-        strain [float, 2d, np]: strain matrix
-        """
-        #get strain matrix
-        gauss_mat = np.random.normal(self.mu, self.sigma, (3, 3))
-        gauss_sym = 0.25*(gauss_mat + np.transpose(gauss_mat)) + \
-            0.5*np.identity(3)*gauss_mat
-        strain = np.clip(gauss_sym, -1, 1)
-        #set free axis
-        free = np.transpose(np.ones((3, 3))*free_aix)
-        strain *= free
-        return strain
-    
-    def lattice_check(self, latt_vec):
-        """
-        make lattice look normal
-        
-        Parameters
-        ----------
-        latt_vec [float, 2d, np]: lattice vector
-
-        Returns
-        ----------
-        latt_vec [float, 2d, np]: modified vector
-        """
-        norms = [np.linalg.norm(i) for i in latt_vec]
-        mat = 2 * np.identity(3)
-        for i, norm in enumerate(norms):
-            if norm < 2:
-                latt_vec[i] += mat[i]    
-        return latt_vec
     
     def add_vacuum(self, latt_vec):
         """
@@ -272,49 +814,17 @@ class GridDivide(ListRWTools):
 
         Returns
         ----------
-        latt_vec [float, 2d, np]: modified vector
+        latt [obj]: lattice object in pymatgen 
         """
         latt = Lattice(latt_vec)
         a, b, c, alpha, beta, gamma = latt.parameters
         if c < vacuum_space:
             c = vacuum_space
-            alpha, beta = 90, 90
         latt = Lattice.from_parameters(a=a, b=b, c=c, 
                                        alpha=alpha,
                                        beta=beta,
                                        gamma=gamma)
-        latt_vec = latt.matrix
-        return latt_vec
-    
-    def fraction_coor(self, grain, latt_vec):
-        """
-        fraction coordinate of grid
-        
-        Parameters
-        ----------
-        grain [float, 1d]: grain of grid
-        latt_vec [float, 2d]: lattice vectors
-        
-        Returns
-        ----------
-        coor [float, 2d, np]: fraction coordinate of grid
-        """
-        norms = [np.linalg.norm(i) for i in latt_vec]
-        n = [norms[i]//grain[i] for i in range(3)]
-        grains = [1/i for i in n]
-        #constrain number of grid plane
-        ends = []
-        for i in range(3):
-            plane_num = plane_upper[i]
-            if n[i] < plane_num:
-                ends.append(1)
-            else:
-                ends.append(grains[i]*plane_num)
-        #get fraction coordinate of grid points
-        coor = [[i, j, k] for i in np.arange(0, ends[0], grains[0])
-                for j in np.arange(0, ends[1], grains[1])
-                for k in np.arange(0, ends[2], grains[2])]
-        return np.array(coor)
+        return latt
     
     def near_property(self, stru, cutoff, near=0):
         """
@@ -322,7 +832,7 @@ class GridDivide(ListRWTools):
         
         Parameters
         ----------
-        stru [obj]: pymatgen object
+        stru [obj]: structure object in pymatgen
         cutoff [float, 0d]: cutoff distance
         
         Returns
@@ -342,36 +852,108 @@ class GridDivide(ListRWTools):
             nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
         return np.array(nbr_idx), np.array(nbr_dis)
     
-    def write_grid_POSCAR(self, latt_vec, frac_coor):
+    def lattice_generate(self):
         """
-        write POSCAR of grid
+        generate lattice by crystal system
+        
+        Returns
+        ----------
+        latt [obj]: Lattice object of pymatgen
+        crystal_system [int, 0d]: crystal system number
+        """
+        volume = 0
+        system = np.arange(0, 7)
+        while volume == 0:
+            crystal_system = np.random.choice(system, p=system_weight)
+            #triclinic
+            if crystal_system == 0:
+                a, b, c = np.random.normal(len_mu, len_sigma, 3)
+                alpha, beta, gamma = np.random.normal(ang_mu, ang_sigma, 3)
+            #monoclinic
+            if crystal_system == 1:
+                a, b, c = np.random.normal(len_mu, len_sigma, 3)
+                alpha, gamma = 90, 90
+                beta = random.normalvariate(ang_mu, ang_sigma)
+            #orthorhombic
+            if crystal_system == 2:
+                a, b, c = np.random.normal(len_mu, len_sigma, 3)
+                alpha, beta, gamma = 90, 90, 90
+            #tetragonal
+            if crystal_system == 3:
+                a, c = np.random.normal(len_mu, len_sigma, 2)
+                b = a
+                alpha, beta, gamma = 90, 90, 90
+            #trigonal
+            if crystal_system == 4:
+                a = random.normalvariate(len_mu, len_sigma)
+                b, c = a, a
+                alpha = random.normalvariate(ang_mu, ang_sigma)
+                beta, gamma = alpha, alpha
+            #hexagonal
+            if crystal_system == 5:
+                a, c = np.random.normal(len_mu, len_sigma, 2)
+                b = a
+                alpha, beta, gamma = 90, 90, 120
+            #cubic
+            if crystal_system == 6:
+                a = random.normalvariate(len_mu, len_sigma)
+                b, c = a, a
+                alpha, beta, gamma = 90, 90, 90
+            #check validity of lattice vector
+            a, b, c = [i if len_lower < i else len_lower for i in (a, b, c)]
+            a, b, c = [i if i < len_upper else len_upper for i in (a, b, c)]
+            if add_vacuum:
+                c = vacuum_space
+                alpha, beta = 90, 90
+            latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
+            volume = latt.volume
+        return latt
+    
+    def get_space_group(self, system):
+        """
+        get space group number according to crystal system
         
         Parameters
         ----------
-        latt_vec [float, 2d]: lattice vector
-        frac_coor [float, 2d]: fraction coordinate of grid
+        system [int, 0d]: crystal system
+
+        Returns
+        ----------
+        space_group [int, 0d]: international number of space group
         """
-        head = ['E = -1', '1']
-        latt_vec_str = self.list2d_to_str(latt_vec, '{0:8.4f}')
-        compn = ['H', f'{len(frac_coor)}', 'Direct']
-        frac_coor_str = self.list2d_to_str(frac_coor, '{0:8.4f}')
-        POSCAR = head + latt_vec_str + compn + frac_coor_str
-        with open(self.poscar, 'w') as f:
-            f.write('\n'.join(POSCAR))
-        
+        #space group of 2-dimensional structure
+        if num_dim == 2:
+            if system == 0:
+                groups = [1, 2]
+            if system == 2:
+                groups = [3, 4, 5, 25, 28, 32, 35]
+            if system == 3:
+                groups = [75, 99, 100]
+            if system == 5:
+                groups = [143, 156, 157, 168, 183]
+        #space group of 3-dimensional structure
+        if num_dim == 3:
+            if system == 0:
+                groups = np.arange(1, 3)
+            if system == 1:
+                groups = np.arange(3, 16)
+            if system == 2:
+                groups = np.arange(16, 75)
+            if system == 3:
+                groups = np.arange(75, 143)
+            if system == 4:
+                groups = np.arange(143, 168)
+            if system == 5:
+                groups = np.arange(168, 195)
+            if system == 6:
+                groups = np.arange(195, 231)
+        space_group = np.random.choice(groups)
+        return space_group
+    
 
 if __name__ == '__main__':
-    grain = args.grain
-    grid_origin = args.origin
-    grid_mutate = args.mutate
+    name = args.name
     
     #Build grid
     grid = GridDivide()
-    rwtools = ListRWTools()
-    latt_file = f'{grid_prop_path}/{grid_origin:03.0f}_latt_vec.bin'
-    latt_vec = rwtools.import_list2d(latt_file, float, binary=True)
-    if grid_origin == grid_mutate:
-        mutate = False
-    else:
-        mutate = True
-    grid.build_grid(grid_mutate, latt_vec, grain, cutoff, mutate=mutate)
+    grid.build(name, cutoff)

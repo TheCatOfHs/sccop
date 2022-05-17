@@ -5,11 +5,8 @@ search_path = 'data/search'
 vasp_out_path = 'data/vasp_out'
 record_path = 'data/record'
 grid_path = 'data/grid'
-grid_prop_path = 'data/grid/property'
-grid_poscar_path = 'data/grid/poscar'
 ccop_out_path = 'data/poscar/CCOP'
 optim_strs_path = 'data/poscar/optim_strs'
-optim_strs_sym_path = 'data/poscar/optim_strs_sym'
 init_strs_path = 'data/poscar/initial_strs'
 
 #DFT directory

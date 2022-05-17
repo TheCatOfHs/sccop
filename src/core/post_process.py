@@ -90,6 +90,7 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
         while not self.is_done(self.optim_strs_path, num_poscar):
             time.sleep(self.wait_time)
         self.remove_flag(self.optim_strs_path)
+        self.add_symmetry_to_structure(self.optim_strs_path)
         self.delete_same_poscars(self.optim_strs_path)
         self.delete_energy_files(self.optim_strs_path, self.energy_path)
         self.get_energy(self.energy_path)
@@ -110,7 +111,6 @@ class VASPoptimize(SSHTools, ListRWTools, GeoCheck):
             anal_stru = SpacegroupAnalyzer(stru)
             sym_stru = anal_stru.get_refined_structure()
             sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
-            sym_stru.to(filename=f'{optim_strs_sym_path}/{i}', fmt='poscar')
     
     def delete_energy_files(self, poscar_path, energy_path):
         """
@@ -172,7 +172,6 @@ class PostProcess(VASPoptimize, GeoCheck):
         self.calculation_path = '/local/ccop/vasp'
         if not os.path.exists(optim_strs_path):
             os.mkdir(optim_strs_path)
-            os.mkdir(optim_strs_sym_path)
         if not os.path.exists('vasp'):
             os.mkdir('vasp')
             os.mkdir(KPOINTS_file)
@@ -333,7 +332,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            phonopy -d --dim="2 2 1"
+                            phonopy -d --dim="4 4 1"
                             n=`ls | grep POSCAR- | wc -l`
                             for i in `seq -f%03g 1 $n`
                             do
@@ -390,7 +389,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             tar -zxf thirdorder-files.tar.gz
                             cp thirdorder-files/* .
                             
-                            python2 thirdorder_vasp.py sow 2 2 1 -5
+                            python2 thirdorder_vasp.py sow 4 4 1 -5
                             file=`ls | grep 3RD.POSCAR.`
                             for i in $file
                             do
@@ -405,7 +404,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 cd ../
                             done
                             
-                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 2 2 1 -5 > log
+                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 4 4 1 -5 > log
                             scp FORCE_CONSTANTS_3RD {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p
                             cd ../
                             touch FINISH-$p
@@ -548,7 +547,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             cd ../
                             touch FINISH-$p
                             scp FINISH-$p {gpu_node}:{self.optim_strs_path}/
-                            rm -rf $p FINISH-$p
+                            #rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
         while not self.is_done(optim_strs_path, num_poscar):
@@ -609,7 +608,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS'], ['EIGENVECTORS']], 
                                 [[' = '] for i in range(6)], 
-                                [['XXX'], ['2 2 1'], [band], [band_label], ['write'], ['.TRUE.']]] # output the file by columns
+                                [['XXX'], ['4 4 1'], [band], [band_label], ['write'], ['.TRUE.']]] # output the file by columns
                 self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')

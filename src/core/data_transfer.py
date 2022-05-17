@@ -8,92 +8,101 @@ from core.utils import ListRWTools
 
 
 class Transfer(ListRWTools):
-    #transfer atoms_pos and atoms_type to the input of gragh network
-    #all configurations with same grid
-    def __init__(self, grid_name, 
-                 nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
+    #transfer data in different form
+    def __init__(self, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
+        self.nbr = nbr
+        self.var = var
+        self.filter = np.arange(dmin, dmax+step, step)
+    
+    def get_all_pos(self, min_pos, mapping):
         """
+        get all equivalnent positions
+        
         Parameters
         ----------
-        grid_name [int, 0d]: name of grid 
+        min_pos [int, 1d]: position in minimum grid
+        mapping [int, 2d]: mapping between min and all grid
+
+        Returns
+        ----------
+        all_pos [int, 1d]: position in all grid
         """
-        self.nbr, self.var = nbr, var
-        file_prefix = f'{grid_prop_path}/{grid_name:03.0f}'
-        self.elem_embed = self.import_list2d(
-            atom_init_file, int, numpy=True)
-        self.latt_vec = self.import_list2d(
-            f'{file_prefix}_latt_vec.bin', float, binary=True)
-        self.frac_coor = self.import_list2d(
-            f'{file_prefix}_frac_coor.bin', float, binary=True)
-        self.grid_nbr_idx = self.import_list2d(
-            f'{file_prefix}_nbr_idx.bin', int, binary=True)
-        self.grid_nbr_dis = self.import_list2d(
-            f'{file_prefix}_nbr_dis.bin', float, binary=True)
-        self.filter = np.arange(dmin, dmax+step, step)
-        self.grid_point_num = len(self.grid_nbr_dis)
-        self.grid_point_array = np.arange(self.grid_point_num)
-        
-    def atom_initializer(self, atom_type):
+        all_pos = np.array(mapping, dtype=object)[min_pos]
+        all_pos = np.concatenate(all_pos).tolist()
+        return all_pos
+    
+    def get_atom_fea(self, atom_type, elem_embed):
         """
-        initialize atom features
+        initialize atom feature vectors
 
         Parameters
         ----------
         atom_type [int, 1d]: type of atoms
+        elem_embed [int, 2d, np]: embedding of elements
         
         Returns
         ----------
-        atom_fea [int, 2d, np]: atom feature
+        atom_fea [int, 2d, np]: atom feature vectors
         """
-        return self.elem_embed[atom_type]
+        atom_fea = elem_embed[atom_type]
+        return atom_fea
     
-    def find_nbr_dis(self, atom_pos):
+    def get_nbr_dis(self, atom_pos, grid_idx, grid_dis):
         """
-        cutoff by n neighboring atoms
+        neighbor distances are cutoff by 12 atoms
     
         Parameters
         ----------
-        atom_pos [int, 1d]: position list
+        atom_pos [int, 1d]: position of atoms
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
-        nbr_dis [float, 2d, np]: neighbor distance 
+        nbr_dis [float, 2d, np]: neighbor distance of atoms
         """
-        mask_len = self.grid_nbr_idx.shape[1]
+        #build mask by atom position
+        mask_len = grid_idx.shape[1]
         mask = np.full(mask_len, False)
         mask[atom_pos] = True
-        point_nbr_idx = self.grid_nbr_idx[atom_pos]
-        point_nbr_dis = self.grid_nbr_dis[atom_pos]
+        point_idx = grid_idx[atom_pos]
+        point_dis = grid_dis[atom_pos]
+        #get neighbor distance
         nbr_dis = np.zeros((len(atom_pos), self.nbr), float)
-        for i, (idx, dis) in enumerate(zip(point_nbr_idx, point_nbr_dis)):
+        for i, (idx, dis) in enumerate(zip(point_idx, point_dis)):
             filter = mask[idx]
             nbr_dis[i,:] = np.compress(filter, dis, axis=0)[:self.nbr]
         return nbr_dis
     
-    def find_nbr(self, atom_pos):
+    def get_nbr_fea(self, atom_pos, grid_idx, grid_dis):
         """
-        cutoff by n neighboring atoms
-    
+        neighbor bond features and index are cutoff by 12 atoms
+        
         Parameters
         ----------
-        atom_pos [int, 1d]: atom list
+        atom_pos [int, 1d]: position of atoms
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
-        nbr_fea [float, 3d, np]: neighbor feature of each atom
-        nbr_fea_idx [int, 2d, np]: neighbor index of each atom
+        nbr_fea [float, 3d, np]: neighbor feature of atoms
+        nbr_fea_idx [int, 2d, np]: neighbor index of atoms
         """
-        mask_len = self.grid_nbr_idx.shape[1]
+        #build mask by atom position
+        mask_len = grid_idx.shape[1]
         mask = np.full(mask_len, False)
         mask[atom_pos] = True
-        point_nbr_idx = self.grid_nbr_idx[atom_pos]
-        point_nbr_dis = self.grid_nbr_dis[atom_pos]
+        point_idx = grid_idx[atom_pos]
+        point_dis = grid_dis[atom_pos]
+        #get neighbor distance and index
         nbr_idx = np.zeros((len(atom_pos), self.nbr), int)
         nbr_dis = np.zeros((len(atom_pos), self.nbr), float)
-        for i, (idx, dis) in enumerate(zip(point_nbr_idx, point_nbr_dis)):
+        for i, (idx, dis) in enumerate(zip(point_idx, point_dis)):
             filter = mask[idx]
             nbr_idx[i,:] = np.compress(filter, idx, axis=0)[:self.nbr]
             nbr_dis[i,:] = np.compress(filter, dis, axis=0)[:self.nbr]
+        #get bond features
         nbr_fea = self.expand(nbr_dis)
         nbr_fea_idx = self.idx_transfer(atom_pos, nbr_idx)
         return nbr_fea, nbr_fea_idx
@@ -104,7 +113,7 @@ class Transfer(ListRWTools):
     
         Parameters
         ----------
-        atom_pos [int, 1d]: atom list
+        atom_pos [int, 1d]: position of atoms
         nbr_idx [int, 2d, np]: near index of atoms
         
         Returns
@@ -130,14 +139,18 @@ class Transfer(ListRWTools):
         return np.exp(-(distances[:, :, np.newaxis] - self.filter)**2 /
                       self.var**2)
 
-    def single(self, atom_pos, atom_type):
+    def get_ppm_input(self, atom_pos, atom_type,
+                      elem_embed, grid_idx, grid_dis):
         """
-        transfer configurations by single
-                
+        get input of property prediction model
+        
         Parameters
         ----------
-        atom_pos [int, 1d]: position of atoms in grid
-        atom_type [int, 1d]: type of atoms in grid
+        atom_pos [int, 1d]: position of atoms
+        atom_type [int, 1d]: type of atoms
+        elem_embed [int, 2d, np]: embedding of elements
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
@@ -145,137 +158,198 @@ class Transfer(ListRWTools):
         nbr_fea [float, 3d, np]: neighbor feature
         nbr_fea_idx [float, 2d, np]: neighbor index
         """
-        atom_fea = self.atom_initializer(atom_type)
-        nbr_fea, nbr_fea_idx = self.find_nbr(atom_pos)
-        return atom_fea, nbr_fea, \
-                nbr_fea_idx
+        #get atom features
+        atom_fea = self.get_atom_fea(atom_type, elem_embed)
+        #get bond features and neighbor index
+        nbr_fea, nbr_fea_idx = \
+            self.get_nbr_fea(atom_pos, grid_idx, grid_dis)
+        return atom_fea, nbr_fea, nbr_fea_idx
     
-    def batch(self, atom_pos, atom_type):
+    def get_all_pos_seq(self, min_pos, grid):
         """
-        transfer configurations by batch
-                
+        get position in all grid under same grid
+    
         Parameters
         ----------
-        atom_pos [int, 2d]: position of atoms in grid
-        atom_type [int, 2d]: type of atoms in grid
-        
+        min_pos [int, 2d]: position in minimum grid
+        grid [int, 0d]: name of grid
+
         Returns
         ----------
-        batch_atom_fea [int, 3d]: batch atom feature
-        batch_nbr_fea [float, 4d]: batch neighbor feature
-        batch_nbr_fea_idx [float, 3d]: batch neighbor index
+        all_pos_seq [int, 2d]: position in all grid
         """
-        batch_atom_fea, batch_nbr_fea, \
-            batch_nbr_fea_idx = [], [], []
-        for pos, type in zip(atom_pos, atom_type):
-            atom_fea, nbr_fea, nbr_fea_idx = \
-                self.single(pos, type)
-            batch_atom_fea.append(atom_fea)
-            batch_nbr_fea.append(nbr_fea)
-            batch_nbr_fea_idx.append(nbr_fea_idx)
-        return batch_atom_fea, batch_nbr_fea, \
-                batch_nbr_fea_idx
-
-
-class MultiGridTransfer:
-    #transfer configurations in different grid into input of PPM
-    def __init__(self):
-        pass
+        mapping = self.import_data('mapping', grid)
+        all_pos_seq = [self.get_all_pos(pos, mapping) for pos in min_pos]
+        return all_pos_seq
     
-    def find_nbr_dis(self, atom_pos, grid_name):
+    def get_nbr_dis_seq(self, atom_pos, grid):
         """
-        calculate neighbor distance of structures
-        
+        get neighbor distance under same grid
+    
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms
-        grid_name [int, 1d]: name of grids  
+        grid [int, 0d]: name of grid
 
         Returns
         ----------
-        nbr_dis [float, 3d]: neighbor distance of structures
+        nbr_dis_bh [float, 3d]: neighbor distance
         """
-        last_grid = grid_name[0]
-        transfer = Transfer(last_grid)
-        nbr_dis = []
-        i = 0
-        for j, grid in enumerate(grid_name):
-            if not grid == last_grid:
-                batch_nbr_dis = \
-                    [transfer.find_nbr_dis(pos) for pos in atom_pos[i:j]]
-                nbr_dis += batch_nbr_dis
-                transfer = Transfer(grid)
-                last_grid = grid
-                i = j
-        batch_nbr_dis = [transfer.find_nbr_dis(pos) for pos in atom_pos[i:]]
-        nbr_dis += batch_nbr_dis
-        return nbr_dis
+        grid_idx, grid_dis = self.import_data('grid', grid)
+        nbr_dis_seq = \
+            [self.get_nbr_dis(pos, grid_idx, grid_dis) for pos in atom_pos]
+        return nbr_dis_seq
     
-    def batch(self, atom_pos, atom_type, grid_name):
+    def get_ppm_input_seq(self, atom_pos, atom_type, grid):
         """
-        transfer configurations into input of PPM in batch
+        get input of ppm under same grid
         
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: name of grids
+        grid [int, 0d]: name of grid
 
-        Returns:
-        atom_feas [float, 3d]: atom feature of configurations 
-        nbr_feas [float, 4d]: bond feature of configurations
-        nbr_fea_idxes [int, 3d]: near index of configurations
+        Returns
+        ----------
+        atom_fea_seq [float, 3d]: atom feature
+        nbr_fea_seq [float, 4d]: bond feature
+        nbr_fea_idx_seq [int, 3d]: near index
         """
-        last_grid = grid_name[0]
-        transfer = Transfer(last_grid)
-        atom_feas, nbr_feas, nbr_fea_idxes = [], [], []
-        i = 0
-        for j, grid in enumerate(grid_name):
-            if not grid == last_grid:
-                atom_fea, nbr_fea, nbr_fea_idx = \
-                    transfer.batch(atom_pos[i:j], atom_type[i:j])
-                atom_feas += atom_fea
-                nbr_feas += nbr_fea
-                nbr_fea_idxes += nbr_fea_idx
-                transfer = Transfer(grid)
-                last_grid = grid
-                i = j
-        atom_fea, nbr_fea, nbr_fea_idx = \
-            transfer.batch(atom_pos[i:], atom_type[i:])
-        atom_feas += atom_fea
-        nbr_feas += nbr_fea
-        nbr_fea_idxes += nbr_fea_idx
-        return atom_feas, nbr_feas, nbr_fea_idxes
+        #import element embeddings and grid neighbors
+        elem_embed = self.import_data('elem', grid)
+        grid_idx, grid_dis = self.import_data('grid', grid)
+        #transform pos, type into input of ppm
+        atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = [], [], []
+        for pos, type in zip(atom_pos, atom_type):
+            atom_fea, nbr_fea, nbr_fea_idx = \
+                self.get_ppm_input(pos, type, elem_embed, grid_idx, grid_dis)
+            atom_fea_seq.append(atom_fea)
+            nbr_fea_seq.append(nbr_fea)
+            nbr_fea_idx_seq.append(nbr_fea_idx)
+        return atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq
     
-    def put_into_grid(self, stru_frac, stru_latt, grid_frac, grid_latt):
+    def import_data(self, task, grid):
         """
-        approximate target configuration in grid, 
-        return corresponding index of grid point
+        import data according to task
         
         Parameters
         ----------
-        stru_frac [float, 2d, np]: fraction coordinate of test configuration
-        stru_latt [float, 2d, np]: lattice vector of structure
-        grid_frac [float, 2d, np]: fraction coordinate of grid point
-        grid_latt [float, 2d, np]: lattice vector of grid
+        task [str, 0d]: name of import data
+        grid [int, 0d]: name of grid
+        """
+        head = f'{grid_path}/{grid:03.0f}'
+        #import element embedding file
+        if task == 'elem':
+            elem_embed = self.import_list2d(
+                atom_init_file, int, numpy=True)
+            return elem_embed
+        #import grid index and distance file
+        if task == 'grid':
+            grid_idx = self.import_list2d(
+                f'{head}_nbr_idx.bin', int, binary=True)
+            grid_dis =  self.import_list2d(
+                f'{head}_nbr_dis.bin', float, binary=True)
+            return grid_idx, grid_dis
+        #import mapping between minimum and all grid
+        if task == 'mapping':
+            mapping = self.import_list2d(
+                f'{head}_nbr_idx.bin', int, binary=True)
+            return mapping
+    
+    
+class MultiGridTransfer(Transfer):
+    #positoin, type, symmetry should be sorted in grid order
+    def __init__(self):
+        Transfer.__init__(self)
+    
+    def get_all_pos_bh(self, min_pos, grid_name):
+        """
+        get position in all grid under different grids
         
+        Parameters
+        ----------
+        min_pos [int, 2d]: position in minimum grid
+        grid_name [int, 1d]: name of grid
+
         Returns
         ----------
-        pos [int, 1d]: postion of atoms in grid
+        all_pos_bh [int, 2d]: batch position in all grid
         """
-        stru_coor = np.dot(stru_frac, stru_latt)
-        grid_coor = np.dot(grid_frac, grid_latt)
-        distance = np.zeros((len(stru_coor), len(grid_coor)))
-        for i, atom_coor in enumerate(stru_coor):
-            for j, point_coor in enumerate(grid_coor):
-                distance[i, j] = np.sqrt(np.sum((atom_coor - point_coor)**2))
-        pos = list(map(lambda x: np.argmin(x), distance))
-        return pos
+        last_grid = grid_name[0]
+        i, all_pos_bh = 0, []
+        #pos convert under different grids
+        for j, grid in enumerate(grid_name):
+            if not grid == last_grid:
+                all_pos_seq = self.get_all_pos_seq(min_pos[i:j], grid)
+                all_pos_bh += all_pos_seq
+                last_grid = grid
+                i = j
+        all_pos_seq = self.get_all_pos_seq(min_pos[i:], grid)
+        all_pos_bh += all_pos_seq
+        return all_pos_bh
+    
+    def get_nbr_dis_bh(self, atom_pos, grid_name):
+        """
+        calculate neighbor distance of structures
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms in all grid
+        grid_name [int, 1d]: name of grids  
 
+        Returns
+        ----------
+        nbr_dis_bh [float, 3d]: batch neighbor distance
+        """
+        last_grid = grid_name[0]
+        i, nbr_dis_bh = 0, []
+        #get neighbor distance under different grids
+        for j, grid in enumerate(grid_name):
+            if not grid == last_grid:
+                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:], grid)
+                nbr_dis_bh += nbr_dis_seq
+                last_grid = grid
+                i = j
+        nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:], grid)
+        nbr_dis_bh += nbr_dis_seq
+        return nbr_dis_bh
+    
+    def get_ppm_input_bh(self, atom_pos, atom_type, grid_name):
+        """
+        get input of ppm under different grids
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms in all grid
+        atom_type [int, 2d]: type of atoms in all grid
+        grid_name [int, 1d]: name of grids
 
+        Returns
+        ----------
+        atom_fea_bh [float, 3d]: batch atom feature
+        nbr_fea_bh [float, 4d]: batch bond feature
+        nbr_fea_idx_bh [int, 3d]: batch near index
+        """
+        last_grid = grid_name[0]
+        i, atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh = 0, [], [], []
+        #get input of ppm under different grids
+        for j, grid in enumerate(grid_name):
+            if not grid == last_grid:
+                atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = \
+                    self.get_ppm_input_seq(atom_pos[i:j], atom_type[i:j], grid)
+                atom_fea_bh += atom_fea_seq
+                nbr_fea_bh += nbr_fea_seq
+                nbr_fea_idx_bh += nbr_fea_idx_seq
+                last_grid = grid
+                i = j
+        atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = \
+            self.get_ppm_input_seq(atom_pos[i:], atom_type[i:], grid)
+        atom_fea_bh += atom_fea_seq
+        nbr_fea_bh += nbr_fea_seq
+        nbr_fea_idx_bh += nbr_fea_idx_seq
+        return atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh
+        
+        
 if __name__ == "__main__":
-    rwtools = ListRWTools()
-    print(rwtools.import_list2d(f'data/grid/property/034_nbr_idx.bin', int, binary=True).shape)
-    print(rwtools.import_list2d(f'data/grid/property/034_nbr_dis.bin', int, binary=True).shape)
-    print(rwtools.import_list2d(f'data/grid/property/034_frac_coor.bin', int, binary=True))
-    print(rwtools.import_list2d(f'data/grid/property/034_latt_vec.bin', int, binary=True))
+    mul = MultiGridTransfer()
