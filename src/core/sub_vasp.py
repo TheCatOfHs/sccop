@@ -20,7 +20,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         calculate POSCARs and return energys
         
         POSCAR file notation: POSCAR-round-number-node
-        e.g., POSCAR-001-0001-136
+        e.g., POSCAR-001-136
         
         Parameters
         ----------
@@ -29,7 +29,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         """
         round = f'{round:03.0f}'
         poscars = os.listdir(f'{poscar_path}/{round}')
-        poscars = sorted(poscars, key=lambda x: int(x.split('-')[2]))
+        poscars = sorted(poscars, key=lambda x: int(x.split('-')[1]))
         num_poscar = len(poscars)
         check_poscar = poscars
         for i in range(self.repeat):
@@ -83,7 +83,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
             self.sub_job_with_ssh(job, round, repeat, vdW)
         work_node_num = len(jobs)
         return work_node_num
-        
+    
     def sub_job_with_ssh(self, job, round, repeat, vdW=False):
         """
         SSH to target node and call vasp for calculation

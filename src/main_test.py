@@ -6,7 +6,6 @@ from core.global_var import *
 from core.dir_path import *
 from core.initialize import InitSampling, UpdateNodes
 from core.grid_divide import ParallelDivide
-from core.data_transfer import MultiGridTransfer
 from core.sample_select import Select, OptimSelect
 from core.sub_vasp import ParallelSubVASP
 from core.search import ParallelWorkers, GeoCheck
@@ -22,7 +21,6 @@ class CrystalOptimization(ListRWTools):
         self.init = InitSampling(number, component)
         self.cpu_nodes = UpdateNodes()
         self.divide = ParallelDivide()
-        self.transfer = MultiGridTransfer()
         self.workers = ParallelWorkers()
         self.vasp = ParallelSubVASP()
         self.check = GeoCheck()
@@ -40,17 +38,16 @@ class CrystalOptimization(ListRWTools):
         for recycle in range(num_recycle):
             system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #Generate structures
-            atom_pos, atom_type, atom_symm, grid_name, grid_init = self.init.generate(recycle)
+            atom_pos, atom_type, atom_symm, grid_name, space_group = self.init.generate(recycle)
             system_echo('New initial samples generated')
-            break
-    '''
+            
             #Write POSCARs
             select = Select(start)
-            idx = np.arange(len(atom_pos))
-            select.write_POSCARs(idx, atom_pos, atom_type, grid_name)
+            select.write_POSCARs(atom_pos, atom_type, grid_name, space_group)
             #VASP calculate
-            self.vasp.sub_job(start, vdW=add_vdW)
-            
+            #self.vasp.sub_job(start, vdW=add_vdW)
+            break
+        '''
             #CCOP optimize
             num_round = num_ml_list[recycle]
             grid_store = np.concatenate((grid_store, grid_init))

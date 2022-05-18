@@ -4,7 +4,6 @@ import shutil
 import torch
 import numpy as np
 
-from collections import Counter
 from sklearn.manifold import TSNE
 from sklearn.cluster import KMeans
 
@@ -13,10 +12,10 @@ from core.global_var import *
 from core.dir_path import *
 from core.utils import *
 from core.predict import *
-from core.data_transfer import Transfer
+from core.data_transfer import DeleteDuplicates
 
 
-class Select(ListRWTools, SSHTools, ClusterTools):
+class Select(SSHTools, DeleteDuplicates):
     #Select training samples by active learning
     def __init__(self, round, batch_size=1024, num_workers=0):
         self.batch_size = batch_size
@@ -40,9 +39,9 @@ class Select(ListRWTools, SSHTools, ClusterTools):
 
         Parameters
         ----------
-        atom_pos [int, 2d]: position of atom
-        atom_type [int, 2d]: type of atom
-        grid_name [int, 2d]: name of grid
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 2d]: name of grids
         train_pos [int, 2d]: position in training set
         train_type [int, 2d]: type in training set
         train_grid [int, 1d]: grid in training set
@@ -73,42 +72,6 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         clusters = self.cluster(crys_embedded, num_clusters)
         idx_slt = self.min_in_cluster(idx_few, mean_pred_few, clusters)
         self.write_POSCARs(idx_slt, atom_pos, atom_type, grid_name)
-        
-    def delete_duplicates(self, atom_pos, atom_type, grid_name):
-        """
-        delete same configurations
-        
-        Parameters
-        ----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d, np or list]: grid of atoms
-        
-        Returns
-        ----------
-        atom_pos [int, 2d]: reduced position of atoms
-        atom_type [int, 2d]: reduced type of atoms
-        grid_name [int, 1d]: reduced grid of atoms
-        index [int, 1d]: index of sample in origin array
-        """
-        #different length of atoms convert to string
-        grid_name = np.transpose([grid_name])
-        pos_str = self.list2d_to_str(atom_pos, '{0}')
-        type_str = self.list2d_to_str(atom_type, '{0}')
-        grid_str = self.list2d_to_str(grid_name, '{0}')
-        pos_type_grid = [i+'-'+j+'-'+k for i, j, k in 
-                         zip(pos_str, type_str, grid_str)]
-        #delete same structure accroding to pos, type and grid
-        _, index = np.unique(pos_type_grid, return_index=True)
-        atom_pos = np.array(atom_pos, dtype=object)[index]
-        atom_type = np.array(atom_type, dtype=object)[index]
-        grid_name = grid_name.flatten()[index]
-        #convert to list
-        atom_pos = atom_pos.tolist()
-        atom_type = atom_type.tolist()
-        grid_name = grid_name.tolist()
-        index = index.tolist()
-        return atom_pos, atom_type, grid_name, index
     
     def delete_same_selected(self, atom_pos, atom_type, grid_name,
                              train_pos, train_type, train_grid):
@@ -378,83 +341,24 @@ class Select(ListRWTools, SSHTools, ClusterTools):
                         random_state=0).fit(crys_embedded)
         return kmeans.labels_
     
-    def write_POSCARs(self, idx, pos, type, grid_name):
-        """
-        write POSCAR files and corresponding pos, type file
-        
-        Parameters
-        ----------
-        idx [int, 1d, np]: index of select samples
-        pos [int, 2d]: input position
-        type [int, 2d]: input type
-        grid_name [int, 1d]: input grid name
-        
-        Returns
-        ----------
-        idx_order [int, 1d, np]: index of select samples sorted by grid
-        """
-        #sorted by grid name
-        num_jobs = len(idx)
+    def write_POSCARs(self, atom_pos, atom_type, grid_name, space_group):
+        #
+        num_jobs = len(grid_name)
         node_assign = self.assign_node(num_jobs)
-        grid_slt = np.array(grid_name)[idx]
-        order = np.argsort(grid_slt)
-        grid_order = grid_slt[order]
-        idx_order = idx[order]
-        #export poscars
-        grid_last = grid_slt[0]
-        transfer = Transfer(grid_last)
-        pos_order, type_order = [], []
-        elements = self.import_list2d(elements_file,
-                                      str, numpy=True).ravel()
-        for i, grid in enumerate(grid_order):
-            idx_slt = idx_order[i]
-            pos_order.append(pos[idx_slt])
-            type_order.append(type[idx_slt])
-            if grid_last == grid:
-                self.write_POSCAR(pos[idx_slt], type[idx_slt],
-                                  i+1, node_assign[i], 
-                                  transfer, elements)
-            else:
-                grid_last = grid
-                transfer = Transfer(grid)
-                self.write_POSCAR(pos[idx_slt], type[idx_slt],
-                                  i+1, node_assign[i], 
-                                  transfer, elements)
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
+        for i, stru in enumerate(strus):
+            file_name = f'{self.poscar_save_path}/POSCAR-{i:03.0f}-{node_assign[i]}'
+            stru.to(filename=file_name, fmt='poscar')
         #export dat file of select structures
         self.write_list2d(f'{self.sh_save_path}/atom_pos_select.dat',
-                          pos_order)
+                          atom_pos)
         self.write_list2d(f'{self.sh_save_path}/atom_type_select.dat', 
-                          type_order)
+                          atom_type)
         self.write_list2d(f'{self.sh_save_path}/grid_name_select.dat', 
-                          np.transpose([grid_order]))
-        return idx_order
+                          np.transpose([grid_name]))
+        self.write_list2d(f'{self.sh_save_path}/space_group_select.dat', 
+                          np.transpose([space_group]))    
     
-    def write_POSCAR(self, pos, type, num, node, transfer, elements):
-        """
-        write POSCAR file of one configuration
-        
-        Parameters
-        ----------
-        pos [int, 1d]: atom position
-        type [int, 1d]: atom type
-        round [int, 0d]: searching round
-        num [int, 0d]: configuration number
-        node [int, 0d]: calculate node
-        """
-        head_str = ['E = -1', '1']
-        latt_str = self.list2d_to_str(transfer.latt_vec, '{0:4.6f}')
-        compn = elements[type]
-        compn_dict = dict(Counter(compn))
-        compn_str = [' '.join(list(compn_dict.keys())),
-                     ' '.join([str(i) for i in compn_dict.values()]),
-                     'Direct']
-        frac_coor = transfer.frac_coor[pos]
-        frac_coor_str = self.list2d_to_str(frac_coor, '{0:4.6f}')
-        file = f'{self.poscar_save_path}/POSCAR-{self.round}-{num:04.0f}-{node}'
-        POSCAR = head_str + latt_str + compn_str + frac_coor_str
-        with open(file, 'w') as f:
-            f.write('\n'.join(POSCAR))
-
     def export(self, recyc, atom_pos, atom_type, energy, grid_name):
         """
         export configurations after ccop
@@ -611,7 +515,7 @@ class Select(ListRWTools, SSHTools, ClusterTools):
         self.write_list2d(f'{dir}/grid_name_select.dat', grid_name_np[index])
         
 
-class OptimSelect(ListRWTools, SSHTools, ClusterTools):
+class OptimSelect(SSHTools, DeleteDuplicates):
     #Select structures from low level optimization
     def __init__(self):
         if not os.path.exists(ccop_out_path):

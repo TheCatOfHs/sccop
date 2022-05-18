@@ -183,7 +183,7 @@ class PlanarSpaceGroup():
 
         Returns
         ----------
-        all_grid [float, 2d]: fraction coordinates of grid points
+        all_grid [float, 2d, np]: fraction coordinates of grid points
         mapping [int, 2d]: mapping between min and all grid
         """
         norms = latt.lengths
@@ -237,7 +237,7 @@ class PlanarSpaceGroup():
             end = start + len(equal_coords)
             mapping.append([i] + [j for j in range(start, end)])
             all_grid += equal_coords
-        return all_grid, mapping
+        return np.array(all_grid), mapping
     
     def assign_by_spacegroup(self, atom_num, symm_site):
         """

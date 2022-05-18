@@ -1,6 +1,9 @@
 import os, sys
 import numpy as np
 
+from pymatgen.core.lattice import Lattice
+from pymatgen.core.structure import Structure
+
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -27,8 +30,6 @@ class Transfer(ListRWTools):
         ----------
         all_pos [int, 1d]: position in all grid
         """
-        print(mapping)
-        print(min_pos)
         all_pos = np.array(mapping, dtype=object)[min_pos]
         all_pos = np.concatenate(all_pos).tolist()
         return all_pos
@@ -166,6 +167,26 @@ class Transfer(ListRWTools):
         nbr_fea, nbr_fea_idx = \
             self.get_nbr_fea(atom_pos, grid_idx, grid_dis)
         return atom_fea, nbr_fea, nbr_fea_idx
+        
+    def get_stru(self, atom_pos, atom_type, latt, grid_coords, sg):
+        """
+        get structure object in pymatgen
+        
+        Parameters
+        ----------
+        atom_pos [int, 1d]: position of atoms
+        atom_type [int, 1d]: type of atoms
+        latt [obj, 0d]: lattice object in pymatgen
+        grid_coords [float, 2d]: fraction coordinates of grid
+        sg [int, 0d]: space group number
+
+        Returns
+        ----------
+        stru [obj, 0d]: structure object in pymatgen
+        """
+        coords = grid_coords[atom_pos]
+        stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
+        return stru
     
     def get_all_pos_seq(self, min_pos, grid):
         """
@@ -231,6 +252,30 @@ class Transfer(ListRWTools):
             nbr_fea_idx_seq.append(nbr_fea_idx)
         return atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq
     
+    def get_stru_seq(self, atom_pos, atom_type, grid, sg):
+        """
+        get strucutre object in same grid
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid [int, 0d]: grid number 
+        sg [int, 0d]: space group number
+
+        Returns
+        ----------
+        stru_seq [obj, 1d]: structure object in pymatgen
+        """
+        latt_vec, grid_coords = self.import_data('stru', grid)
+        #get structure objects in same grid
+        latt = Lattice(latt_vec)
+        stru_seq = []
+        for pos, type in zip(atom_pos, atom_type):
+            stru = self.get_stru(pos, type, latt, grid_coords, sg)
+            stru_seq.append(stru)
+        return stru_seq
+    
     def import_data(self, task, grid):
         """
         import data according to task
@@ -258,6 +303,13 @@ class Transfer(ListRWTools):
             mapping = self.import_list2d(
                 f'{head}_mapping.bin', int, binary=True)
             return mapping
+        #import lattice vector and fraction coordinates of grid
+        if task == 'stru':
+            latt_vec = self.import_list2d(
+                f'{head}_latt_vec.bin', float, binary=True)
+            grid_coords = self.import_list2d(
+                f'{head}_frac_coords.bin', float, binary=True)
+            return latt_vec, grid_coords
 
     
 class MultiGridTransfer(Transfer):
@@ -267,7 +319,7 @@ class MultiGridTransfer(Transfer):
     
     def get_all_pos_bh(self, min_pos, grid_name):
         """
-        get position in all grid under different grids
+        get position in all grid in different grids
         
         Parameters
         ----------
@@ -281,7 +333,6 @@ class MultiGridTransfer(Transfer):
         last_grid = grid_name[0]
         i, all_pos_bh = 0, []
         #pos convert under different grids
-        print(grid_name)
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
                 all_pos_seq = self.get_all_pos_seq(min_pos[i:j], last_grid)
@@ -294,7 +345,7 @@ class MultiGridTransfer(Transfer):
     
     def get_nbr_dis_bh(self, atom_pos, grid_name):
         """
-        calculate neighbor distance of structures
+        get neighbor distance in different grids
         
         Parameters
         ----------
@@ -310,7 +361,7 @@ class MultiGridTransfer(Transfer):
         #get neighbor distance under different grids
         for j, grid in enumerate(grid_name):
             if not grid == last_grid:
-                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:], last_grid)
+                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:j], last_grid)
                 nbr_dis_bh += nbr_dis_seq
                 last_grid = grid
                 i = j
@@ -320,7 +371,7 @@ class MultiGridTransfer(Transfer):
     
     def get_ppm_input_bh(self, atom_pos, atom_type, grid_name):
         """
-        get input of ppm under different grids
+        get input of ppm in different grids
         
         Parameters
         ----------
@@ -352,7 +403,196 @@ class MultiGridTransfer(Transfer):
         nbr_fea_bh += nbr_fea_seq
         nbr_fea_idx_bh += nbr_fea_idx_seq
         return atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh
+    
+    def get_stru_bh(self, atom_pos, atom_type, grid_name, space_group):
+        """
+        get strucutre object in different grids
         
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
         
+        Returns
+        ----------
+        stru_bh [obj, 1d]: batch structure objects
+        """
+        last_grid = grid_name[0]
+        last_sg = space_group[0]
+        i, stru_bh = 0, []
+        #get structure object in different grids
+        for j, grid in enumerate(grid_name):
+            if not last_grid == grid:
+                stru_seq = self.get_stru_seq(atom_pos[i:j], atom_type[i:j], 
+                                             last_grid, last_sg)
+                stru_bh += stru_seq
+                last_grid = grid
+                last_sg = space_group[j]
+                i = j
+        sg = space_group[j]
+        stru_seq = self.get_stru_seq(atom_pos[i:], atom_type[i:], grid, sg)
+        stru_bh += stru_seq
+        return stru_bh
+
+
+class DeleteDuplicates(MultiGridTransfer):
+    #
+    def __init__(self):
+        MultiGridTransfer.__init__(self)
+    
+    def min_in_cluster(self, idx, value, clusters):
+        """
+        select lowest value sample in each cluster
+
+        Parameters
+        ----------
+        idx [int, 1d, np]: index of samples in input
+        value [float, 1d, np]: average prediction
+        clusters [int, 1d, np]: cluster labels of samples
+        
+        Returns
+        ----------
+        idx_slt [int, 1d, np]: index of select samples
+        """
+        order = np.argsort(clusters)
+        sort_idx = idx[order]
+        sort_value = value[order]
+        sort_clusters = clusters[order]
+        min_idx, min_value = 0, 1e10
+        last_cluster = sort_clusters[0]
+        idx_slt = []
+        for i, cluster in enumerate(sort_clusters):
+            if cluster == last_cluster:
+                pred = sort_value[i]
+                if min_value > pred:
+                    min_idx = sort_idx[i]
+                    min_value = pred                     
+            else:
+                idx_slt.append(min_idx)
+                last_cluster = cluster
+                min_idx = sort_idx[i]
+                min_value = sort_value[i]
+        idx_slt.append(min_idx)
+        return np.array(idx_slt)
+    
+    def delete_duplicates(self, atom_pos, atom_type, atom_symm, grid_name):
+        """
+        delete same structures by pos, type, symm, grid
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms 
+        grid_name [int, 1d]: grid of atoms
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of unique samples 
+        """
+        #different length of atoms convert to string
+        grid_name = np.transpose([grid_name])
+        pos_str = self.list2d_to_str(atom_pos, '{0}')
+        type_str = self.list2d_to_str(atom_type, '{0}')
+        symm_str = self.list2d_to_str(atom_symm, '{0}')
+        grid_str = self.list1d_to_str(grid_name, '{0}')
+        label = [i+'-'+j+'-'+k+'-'+l for i, j, k, l in 
+                 zip(pos_str, type_str, symm_str, grid_str)]
+        #delete same structure accroding to pos, type and grid
+        _, idx = np.unique(label, return_index=True)
+        return idx
+    
+    def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
+                                   grid_name, space_group):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: grid of atoms
+        space_group [int, 1d]: space group number
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of different poscars
+        """
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
+        strus_num = len(strus)
+        idx = []
+        #compare structure by pymatgen
+        for i in range(strus_num):
+            stru_1 = strus[i]
+            for j in range(i+1, strus_num):
+                stru_2 = strus[j]
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    idx.append(i)
+                    break
+        all_idx = np.arange(strus_num)
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
+    
+    def delete_same_poscars(self, path, poscars):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        path [str, 0d]: path of poscars
+        poscars [str, 1d]: name of poscars
+        
+        Returns
+        ----------
+        index [int, 1d, np]: index of different poscars
+        """
+        poscars_num = len(poscars)
+        same_poscars = []
+        for i in range(poscars_num):
+            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
+            for j in range(i+1, poscars_num):
+                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_poscars.append(i)
+        same_poscars = np.unique(same_poscars)
+        all_index = [i for i in range(poscars_num)]
+        index = np.setdiff1d(all_index, same_poscars)
+        return index, same_poscars
+    
+    def compare_poscars(self, poscar_1, poscar_2):
+        """
+        find common structures in poscar_1 
+        
+        Parameters
+        ----------
+        poscar_1 [str, 1d]: name of poscars
+        poscar_2 [str, 1d]: name of poscars
+
+        Returns
+        ----------
+        same_index [int, 1d]: index of common structures in poscar_1
+        """
+        same_index = []
+        for index, i in enumerate(poscar_1):
+            stru_1 = Structure.from_file(i)
+            for j in poscar_2:
+                stru_2 = Structure.from_file(j)
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    same_index.append(index)
+                    break
+        return same_index
+
+    
 if __name__ == "__main__":
     mul = MultiGridTransfer()

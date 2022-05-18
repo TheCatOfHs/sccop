@@ -13,7 +13,7 @@ sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.utils import *
-from core.data_transfer import MultiGridTransfer
+from core.data_transfer import DeleteDuplicates
 from core.grid_divide import GridDivide, ParallelDivide
 from core.search import GeoCheck
 
@@ -47,6 +47,7 @@ class UpdateNodes(SSHTools):
                         mkdir ccop/
                         cd ccop/
                         
+                        mkdir vasp
                         scp -r {gpu_node}:/local/ccop/data .
                         scp -r {gpu_node}:/local/ccop/src .
                         scp -r {gpu_node}:/local/ccop/libs .
@@ -104,11 +105,13 @@ class UpdateNodes(SSHTools):
         os.system(shell_script)
     
 
-class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridTransfer):
+class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
+                   GeoCheck, DeleteDuplicates):
     #generate initial structures of ccop
     def __init__(self, number, component):
         UpdateNodes.__init__(self)
         ParallelDivide.__init__(self)
+        DeleteDuplicates.__init__(self)
         self.create_dir()
         self.initial_poscars(number, component)
     
@@ -159,23 +162,25 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
         """
         if recyc > 0:
             grain = grain_fine
         else:
             grain = grain_coarse
         #structures generated randomly
-        atom_pos, atom_type, atom_symm, grid_name = \
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.random_sampling(recyc, grain)
         #build grid
         self.build_grid(grid_name)
         system_echo('New grids have been built')
         #geometry check
-        atom_pos, atom_type, atom_symm, grid_name = \
-            self.geo_constrain(atom_pos, atom_type, atom_symm, grid_name)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.geo_constrain(atom_pos, atom_type, atom_symm,
+                               grid_name, space_group)
         #add random samples
         system_echo(f'Sampling number: {len(atom_pos)}')    
-        return atom_pos, atom_type, atom_symm, grid_name
+        return atom_pos, atom_type, atom_symm, grid_name, space_group
     
     def random_sampling(self, recyc, grain):
         """
@@ -192,11 +197,12 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
         """
         grid_num = self.count_latt_num()
         init_path = f'{init_strs_path}_{recyc}'
         file_name = os.listdir(init_path)
-        atom_pos, atom_type, atom_symm, grid_name = [], [], [], []
+        atom_pos, atom_type, atom_symm, grid_name, space_group = [], [], [], [], []
         for i, poscar in enumerate(file_name):
             #import lattice
             stru = Structure.from_file(f'{init_path}/{poscar}', sort=True)
@@ -206,14 +212,15 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
             latt = Lattice.from_parameters(*params)
             #sampling
             grid = grid_num + i
-            pos_sample, type_sample, symm_sample, grid_sample = \
+            pos_sample, type_sample, symm_sample, grid_sample, group_sample = \
                 self.put_atoms_into_latt(atom_num, cry_system, grain, latt, grid)
             #append to buffer
             atom_pos += pos_sample
             atom_type += type_sample
             atom_symm += symm_sample
             grid_name += grid_sample
-        return atom_pos, atom_type, atom_symm, grid_name
+            space_group += group_sample
+        return atom_pos, atom_type, atom_symm, grid_name, space_group
     
     def put_atoms_into_latt(self, atom_num, system, grain, latt, grid):
         """
@@ -222,7 +229,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         Parameters
         ----------
         atom_num [dict, int:int]: number of different atoms\\
-        system [int, 0d]: number of crystal system
+        system [int, 0d]: crystal system
         grain [float, 1d]: grain of grid
         latt [obj]: lattice object in pymatgen
         grid [int, 0d]: name of grid 
@@ -233,14 +240,15 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
         """
         #choose symmetry by space group
-        space_group = self.get_space_group(system)
-        all_grid, mapping = self.get_grid_points(space_group, grain, latt)
+        sg = self.get_space_group(system)
+        all_grid, mapping = self.get_grid_points(sg, grain, latt)
         symm_site = self.group_symm_sites(mapping)
         assign_plan = self.assign_by_spacegroup(atom_num, symm_site)
         #put atoms into grid with symmetry constrain
-        atom_pos, atom_type, atom_symm, grid_name = [], [], [], []
+        atom_pos, atom_type, atom_symm, grid_name, space_group = [], [], [], [], []
         if len(assign_plan) > 0:
             for assign in assign_plan:
                 type, symm = self.get_type_and_symm(assign)
@@ -250,12 +258,13 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
                 atom_type += [type for _ in range(num_sampling)]
                 atom_symm += [symm for _ in range(num_sampling)]
                 grid_name += [grid for _ in range(num_sampling)]
+                space_group += [sg for _ in range(num_sampling)]
             #write lattice file and mapping relationship
             head = f'{grid_path}/{grid:03.0f}'
             self.write_list2d(f'{head}_latt_vec.bin', latt.matrix, binary=True)
             self.write_list2d(f'{head}_frac_coords.bin', all_grid, binary=True)
             self.write_list2d(f'{head}_mapping.bin', mapping, binary=True)
-        return atom_pos, atom_type, atom_symm, grid_name
+        return atom_pos, atom_type, atom_symm, grid_name, space_group
     
     def get_type_and_symm(self, assign):
         """
@@ -347,7 +356,8 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_types = [i for i in atom_types if num_min_atom <= len(i)]
         return atom_types
     
-    def geo_constrain(self, atom_pos, atom_type, atom_symm, grid_name):
+    def geo_constrain(self, atom_pos, atom_type,
+                      atom_symm, grid_name, space_group):
         """
         geometry constrain to reduce structures
         
@@ -357,6 +367,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
         
         Returns
         ----------
@@ -364,16 +375,20 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         atom_type [int, 2d]: type of atoms after constrain
         atom_symm [int, 2d]: symmetry of atoms after constrain
         grid_name [int, 1d]: name of grids after constrain
+        space_group [int, 1d]: space group number after constrain
         """
+        #delete same samples
+        idx = self.delete_duplicates(atom_pos, atom_type, atom_symm, grid_name)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, 
+                                atom_symm, grid_name, space_group)
         #check overlay of atoms
         check_overlay = [self.overlay(i, len(i)) for i in atom_pos]
         check_num = len(check_overlay)
         idx = np.arange(check_num)[check_overlay]
-        #select samples that are not overlayed
-        atom_pos = np.array(atom_pos, dtype=object)[idx]
-        atom_type = np.array(atom_type, dtype=object)[idx]
-        atom_symm = np.array(atom_symm, dtype=object)[idx]
-        grid_name = np.array(grid_name, dtype=object)[idx]
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, 
+                                atom_symm, grid_name, space_group)
         #check neighbor distance of atoms
         all_pos = self.get_all_pos_bh(atom_pos, grid_name)
         nbr_dis = self.get_nbr_dis_bh(all_pos, grid_name)
@@ -383,12 +398,44 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide, GeoCheck, MultiGridT
         idx = np.arange(check_num)[check_near]
         grids = np.array(grid_name)[check_near]
         idx = self.balance_sampling(num_Rand, idx, grids)
-        #add right samples into buffer
-        atom_pos = np.array(atom_pos, dtype=object)[idx].tolist()
-        atom_type = np.array(atom_type, dtype=object)[idx].tolist()
-        atom_symm = np.array(atom_symm, dtype=object)[idx].tolist()
-        grid_name = np.array(grid_name, dtype=object)[idx].tolist()
-        return atom_pos, atom_type, atom_symm, grid_name
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type,
+                                atom_symm, grid_name, space_group)
+        #delete same samples by method in pymatgen
+        idx = self.delete_duplicates_pymatgen(atom_pos, atom_type, grid_name, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, 
+                                atom_symm, grid_name, space_group)
+        return atom_pos, atom_type, atom_symm, grid_name, space_group
+    
+    def filter_samples(self, index, atom_pos, atom_type,
+                       atom_symm, grid_name, space_group):
+        """
+        filter samples by index
+        
+        Parameters
+        ----------
+        index [int, 1d]: index of select samples
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
+        grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
+        
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atoms after constrain
+        atom_type [int, 2d]: type of atoms after constrain
+        atom_symm [int, 2d]: symmetry of atoms after constrain
+        grid_name [int, 1d]: name of grids after constrain
+        space_group [int, 1d]: space group number after constrain
+        """
+        atom_pos = np.array(atom_pos, dtype=object)[index].tolist()
+        atom_type = np.array(atom_type, dtype=object)[index].tolist()
+        atom_symm = np.array(atom_symm, dtype=object)[index].tolist()
+        grid_name = np.array(grid_name, dtype=object)[index].tolist()
+        space_group = np.array(space_group, dtype=object)[index].tolist()
+        return atom_pos, atom_type, atom_symm, grid_name, space_group
     
     def balance_sampling(self, n, index, grids):
         """

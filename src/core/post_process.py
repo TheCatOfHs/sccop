@@ -389,7 +389,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                             tar -zxf thirdorder-files.tar.gz
                             cp thirdorder-files/* .
                             
-                            python2 thirdorder_vasp.py sow 4 4 1 -5
+                            python2 thirdorder_vasp.py sow 3 3 1 -5
                             file=`ls | grep 3RD.POSCAR.`
                             for i in $file
                             do
@@ -404,7 +404,7 @@ class PostProcess(VASPoptimize, GeoCheck):
                                 cd ../
                             done
                             
-                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 4 4 1 -5 > log
+                            find disp-* -name vasprun.xml | sort -n | python2 thirdorder_vasp.py reap 3 3 1 -5 > log
                             scp FORCE_CONSTANTS_3RD {gpu_node}:{self.phonon_path}/FORCE_CONSTANTS_3RD-$p
                             cd ../
                             touch FINISH-$p
@@ -647,5 +647,5 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    post.get_k_points(['POSCAR-B1C1N1-001-136'], 'phonon', dimension=2)
+    post.get_k_points(['POSCAR'], 'phonon', dimension=2)
     

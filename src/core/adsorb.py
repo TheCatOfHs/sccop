@@ -29,7 +29,7 @@ from core.post_process import PostProcess
 from core.search import GeoCheck
 
 
-class AdsorbSites(ListRWTools, SSHTools, ClusterTools):
+class AdsorbSites(SSHTools, ClusterTools):
     #Find unequal adsorbtion sites and calculate formation energy
     def __init__(self, wait_time=1):
         self.wait_time = wait_time

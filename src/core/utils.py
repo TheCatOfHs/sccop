@@ -4,8 +4,6 @@ import paramiko
 import pickle
 import numpy as np
 
-from pymatgen.core.structure import Structure
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
@@ -299,102 +297,6 @@ class SSHTools:
             flag = True
         return flag
     
-    
-class ClusterTools:
-    #
-    def __init__(self):
-        pass
-    
-    def min_in_cluster(self, idx, value, clusters):
-        """
-        select lowest value sample in each cluster
-
-        Parameters
-        ----------
-        idx [int, 1d, np]: index of samples in input
-        value [float, 1d, np]: average prediction
-        clusters [int, 1d, np]: cluster labels of samples
-        
-        Returns
-        ----------
-        idx_slt [int, 1d, np]: index of select samples
-        """
-        order = np.argsort(clusters)
-        sort_idx = idx[order]
-        sort_value = value[order]
-        sort_clusters = clusters[order]
-        min_idx, min_value = 0, 1e10
-        last_cluster = sort_clusters[0]
-        idx_slt = []
-        for i, cluster in enumerate(sort_clusters):
-            if cluster == last_cluster:
-                pred = sort_value[i]
-                if min_value > pred:
-                    min_idx = sort_idx[i]
-                    min_value = pred                     
-            else:
-                idx_slt.append(min_idx)
-                last_cluster = cluster
-                min_idx = sort_idx[i]
-                min_value = sort_value[i]
-        idx_slt.append(min_idx)
-        return np.array(idx_slt)
-    
-    def delete_same_names(self, path, poscars):
-        """
-        delete same structures
-        
-        Parameters
-        -----------
-        path [str, 0d]: path of poscars
-        poscars [str, 1d]: name of poscars
-        
-        Returns
-        ----------
-        index [int, 1d, np]: index of different poscars
-        """
-        poscars_num = len(poscars)
-        same_poscars = []
-        for i in range(poscars_num):
-            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
-            for j in range(i+1, poscars_num):
-                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    same_poscars.append(i)
-        same_poscars = np.unique(same_poscars)
-        all_index = [i for i in range(poscars_num)]
-        index = np.setdiff1d(all_index, same_poscars)
-        return index, same_poscars
-    
-    def compare_poscars(self, poscar_1, poscar_2):
-        """
-        find common structures in poscar_1 
-        
-        Parameters
-        ----------
-        poscar_1 [str, 1d]: name of poscars
-        poscar_2 [str, 1d]: name of poscars
-
-        Returns
-        ----------
-        same_index [int, 1d]: index of common structures in poscar_1
-        """
-        same_index = []
-        for index, i in enumerate(poscar_1):
-            stru_1 = Structure.from_file(i)
-            for j in poscar_2:
-                stru_2 = Structure.from_file(j)
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    same_index.append(index)
-                    break
-        return same_index
-
 
 if __name__ == '__main__':
     import pandas as pd
