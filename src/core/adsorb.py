@@ -27,24 +27,25 @@ from core.dir_path import *
 from core.utils import *
 from core.post_process import PostProcess
 from core.search import GeoCheck
+from core.data_transfer import DeleteDuplicates
 
 
-class AdsorbSites(SSHTools, ClusterTools):
+class AdsorbSites(SSHTools, DeleteDuplicates):
     #Find unequal adsorbtion sites and calculate formation energy
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
         self.calculation_path = '/local/ccop/vasp'
-        self.local_optim_strs_path = f'/local/ccop/{optim_strs_path}'
-        self.local_anode_strs_path = f'/local/ccop/{anode_strs_path}'
+        self.local_optim_strus_path = f'/local/ccop/{optim_strus_path}'
+        self.local_anode_strus_path = f'/local/ccop/{anode_strus_path}'
         self.local_anode_energy_path = f'/local/ccop/{anode_energy_path}'
-        self.local_adsorb_strs_path = f'/local/ccop/{adsorb_strs_path}'
+        self.local_adsorb_strus_path = f'/local/ccop/{adsorb_strus_path}'
         self.local_adsorb_energy_path = f'/local/ccop/{adsorb_energy_path}'
         self.post = PostProcess()
         if not os.path.exists(adsorb_path):
             os.mkdir(adsorb_path)
-            os.mkdir(anode_strs_path)
+            os.mkdir(anode_strus_path)
             os.mkdir(anode_energy_path)
-            os.mkdir(adsorb_strs_path)
+            os.mkdir(adsorb_strus_path)
             os.mkdir(adsorb_energy_path)
             os.mkdir(adsorb_analysis_path)
     
@@ -53,20 +54,20 @@ class AdsorbSites(SSHTools, ClusterTools):
         generate slab structure
         """
         #rotate monolayer to xy plane
-        self.rotate_axis(optim_strs_path, 0, repeat=2)
-        self.rotate_axis(optim_strs_path, 15)
+        self.rotate_axis(optim_strus_path, 0, repeat=2)
+        self.rotate_axis(optim_strus_path, 15)
         #assign node
-        poscars = os.listdir(optim_strs_path)
+        poscars = os.listdir(optim_strus_path)
         poscar_num = len(poscars)
         assign = self.assign_node(poscar_num)
         for i, poscar in enumerate(poscars):
-            file_name = f'{optim_strs_path}/{poscar}-{assign[i]}'
-            os.rename(f'{optim_strs_path}/{poscar}', file_name)
+            file_name = f'{optim_strus_path}/{poscar}-{assign[i]}'
+            os.rename(f'{optim_strus_path}/{poscar}', file_name)
         #optimize slab
-        poscars = os.listdir(optim_strs_path)
-        self.run_optimization(poscars, 3, optim_strs_path, 
-                              self.local_optim_strs_path, 
-                              self.local_optim_strs_path,
+        poscars = os.listdir(optim_strus_path)
+        self.run_optimization(poscars, 3, optim_strus_path, 
+                              self.local_optim_strus_path, 
+                              self.local_optim_strus_path,
                               out=False, vdW=False, cover=True)
     
     def rotate_axis(self, path, vacuum_size, repeat=1):
@@ -163,9 +164,9 @@ class AdsorbSites(SSHTools, ClusterTools):
         repeat [int, tuple]: size of supercell
         """
         #energy of host structure
-        hosts = sorted(os.listdir(anode_strs_path))
-        self.run_SinglePointEnergy(hosts, anode_strs_path,
-                                   self.local_anode_strs_path, 
+        hosts = sorted(os.listdir(anode_strus_path))
+        self.run_SinglePointEnergy(hosts, anode_strus_path,
+                                   self.local_anode_strus_path, 
                                    self.local_anode_energy_path)
         #find stable adsorption sites
         for host in hosts:
@@ -173,8 +174,8 @@ class AdsorbSites(SSHTools, ClusterTools):
             adsorbs = self.generate_poscar(host, atom, repeat)
             system_echo(f'adsorb poscar generate --- {host}')
             #optimize adsorb poscars
-            monitor_path = f'{adsorb_strs_path}/{host}'
-            local_strs_path = f'{self.local_adsorb_strs_path}/{host}' 
+            monitor_path = f'{adsorb_strus_path}/{host}'
+            local_strs_path = f'{self.local_adsorb_strus_path}/{host}' 
             local_energy_path = f'{self.local_adsorb_energy_path}/{host}'
             os.mkdir(f'{adsorb_energy_path}/{host}')
             self.run_optimization(adsorbs, 2, monitor_path, 
@@ -197,7 +198,7 @@ class AdsorbSites(SSHTools, ClusterTools):
         adsorb_names [str, 1d]: name of adsorb poscars
         """
         #get adsorb structure
-        surface = Structure.from_file(f'{anode_strs_path}/{host}')
+        surface = Structure.from_file(f'{anode_strus_path}/{host}')
         slab = SlabGenerator(surface, miller_index=(0,0,1),
                              min_slab_size=.1, min_vacuum_size=0, center_slab=True)
         slab = slab.get_slab()
@@ -209,11 +210,11 @@ class AdsorbSites(SSHTools, ClusterTools):
         node_assign = self.assign_node(site_num)
         adsorb_names = []
         #adsorb from one side
-        os.mkdir(f'{adsorb_strs_path}/{host}')
+        os.mkdir(f'{adsorb_strus_path}/{host}')
         for i, poscar in enumerate(ads_strus_site):
             node = node_assign[i]
             name = f'{host}-adsorb-{i:03.0f}-{node}'
-            poscar.to(filename=f'{adsorb_strs_path}/{host}/{name}', fmt='poscar')
+            poscar.to(filename=f'{adsorb_strus_path}/{host}/{name}', fmt='poscar')
             adsorb_names.append(name)
         return adsorb_names
     
@@ -389,12 +390,12 @@ class AdsorbSites(SSHTools, ClusterTools):
         ----------
         sites [float, 2d, np]: position of adsorbates
         """
-        files = os.listdir(f'{adsorb_strs_path}/{poscar}')
+        files = os.listdir(f'{adsorb_strus_path}/{poscar}')
         poscars = sorted([i for i in files if i.endswith('Relax')])
         #get stable adsorption sites
         names, sites = [], []
         for i in poscars:
-            stru = Structure.from_file(f'{adsorb_strs_path}/{poscar}/{i}')
+            stru = Structure.from_file(f'{adsorb_strus_path}/{poscar}/{i}')
             sites.append(stru.cart_coords[-1])
             names.append([i])
         return np.concatenate((names, sites), axis=1)
@@ -451,7 +452,7 @@ class AdsorbSites(SSHTools, ClusterTools):
             file = f'{adsorb_analysis_path}/{poscar}.dat'
             sites = self.import_list2d(file, str, numpy=True)
             #delete duplicates
-            path = f'{adsorb_strs_path}/{poscar}'
+            path = f'{adsorb_strus_path}/{poscar}'
             index, _ = self.delete_same_names(path, sites[:,0])
             sites = sites[index]
             #cluster sites
@@ -491,7 +492,7 @@ class AdsorbSites(SSHTools, ClusterTools):
             cm = plt.cm.get_cmap('jet')
             plt.scatter(x, y, c=v, cmap=cm, s=160, marker='x', zorder=1000)
             #plot adsorbate
-            slab = Structure.from_file(f'{anode_strs_path}/{poscar}')
+            slab = Structure.from_file(f'{anode_strus_path}/{poscar}')
             slab.make_supercell(repeat)
             plot_slab(slab, ax, adsorption_sites=False, window=0.9, repeat=1)
             #appearance of figure
@@ -751,10 +752,10 @@ class Arrangement(ListRWTools):
         ----------
         equal_sites [obj, 1d]: equivalent adsorb sites
         """
-        stru = Structure.from_file(f'{anode_strs_path}/{host}')
+        stru = Structure.from_file(f'{anode_strus_path}/{host}')
         stru.make_supercell(repeat)
         latt = stru.lattice
-        adsorb_stru = Structure.from_file(f'{adsorb_strs_path}/{host}/{poscar}')
+        adsorb_stru = Structure.from_file(f'{adsorb_strus_path}/{host}/{poscar}')
         adsorb_coor = adsorb_stru.frac_coords[-1]
         #get all equivalent sites
         analy = SpacegroupAnalyzer(stru)
@@ -812,14 +813,14 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         repeat [int, tuple]: size of supercell
         sides [str, 1d]: adsorb from which side
         """
-        hosts = sorted(os.listdir(anode_strs_path))
+        hosts = sorted(os.listdir(anode_strus_path))
         for host in hosts:
             #optimize arrangement
             sites = self.search(atom, host, repeat)
             for side in sides:
                 #generate adsorb poscars
                 side_name = f'{host}-Fill-{side}'
-                fill_path = f'{adsorb_strs_path}/{side_name}'
+                fill_path = f'{adsorb_strus_path}/{side_name}'
                 energy_path = f'{adsorb_energy_path}/{side_name}'
                 if not os.path.exists(fill_path):
                     os.mkdir(fill_path)
@@ -829,7 +830,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 poscars = self.generate_poscar(fill_path, atom, sites,
                                                host, repeat, side)
                 #optimize adsorb poscars
-                local_strs_path = f'{self.local_adsorb_strs_path}/{side_name}' 
+                local_strs_path = f'{self.local_adsorb_strus_path}/{side_name}' 
                 local_energy_path = f'{self.local_adsorb_energy_path}/{side_name}'
                 self.run_optimization(poscars, 2, fill_path,
                                       local_strs_path, local_energy_path)
@@ -856,7 +857,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         poscar_num = len(sites)
         node_assign = self.assign_node(poscar_num, order=False)
         for i, opt_sites in enumerate(sites):
-            stru = Structure.from_file(f'{anode_strs_path}/{host}')
+            stru = Structure.from_file(f'{anode_strus_path}/{host}')
             stru.make_supercell(repeat)
             for site in opt_sites:
                 coor = site.frac_coords
@@ -880,7 +881,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         sides [str, 1d]: adsorb from which side
         """
         ratio = reduce(lambda x, y: x*y, repeat)
-        hosts = sorted(os.listdir(anode_strs_path))
+        hosts = sorted(os.listdir(anode_strus_path))
         for host in hosts:
             for side in sides:
                 compound = ratio*self.get_energy(f'{anode_energy_path}/out-{host}')
@@ -911,7 +912,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         out_path = f'{adsorb_energy_path}/{side_name}'
         outs = sorted(os.listdir(out_path))
         #
-        strs_path = f'{adsorb_strs_path}/{side_name}'
+        strs_path = f'{adsorb_strus_path}/{side_name}'
         poscars = os.listdir(strs_path)
         poscars = sorted([i for i in poscars if i.endswith('Relax')])
         coplane = self.check_coplane(strs_path, poscars)
@@ -931,7 +932,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
             ocv = (-(energys[i] - compound) + (num*single))/num
             ocvs.append(ocv)
         #
-        stru = Structure.from_file(f'{anode_strs_path}/{host}')
+        stru = Structure.from_file(f'{anode_strus_path}/{host}')
         stru.make_supercell(repeat)
         mass = stru.composition.weight.real
         #
@@ -1008,7 +1009,7 @@ class NEBSolver(MultiAdsorbSites):
         atom [int, 0d]: atomic number
         repeat [int, tuple]: size of supercell
         """
-        hosts = os.listdir(anode_strs_path)
+        hosts = os.listdir(anode_strus_path)
         for host in hosts:
             path = f'{neb_path}/{host}-path-barrier'
             #generate diffusion path
@@ -1072,7 +1073,7 @@ class NEBSolver(MultiAdsorbSites):
         sites_num = len(near_sites)
         node_assign = self.assign_node(sites_num)
         for i, point in enumerate(near_sites):
-            stru = Structure.from_file(f'{anode_strs_path}/{host}')
+            stru = Structure.from_file(f'{anode_strus_path}/{host}')
             stru.make_supercell(repeat)
             stru.append(atom, point)
             file_name = f'{path}/POSCAR-Site-{i:02.0f}-{node_assign[i]}'

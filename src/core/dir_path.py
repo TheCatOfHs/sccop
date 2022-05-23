@@ -6,8 +6,8 @@ vasp_out_path = 'data/vasp_out'
 record_path = 'data/record'
 grid_path = 'data/grid'
 ccop_out_path = 'data/poscar/CCOP'
-optim_strs_path = 'data/poscar/optim_strs'
-init_strs_path = 'data/poscar/initial_strs'
+optim_strus_path = 'data/poscar/optim_strus'
+init_strus_path = 'data/poscar/initial_strus'
 
 #DFT directory
 vasp_files_path = 'libs/VASP_inputs'
@@ -32,9 +32,9 @@ thermalconductivity_path = f'{optim_vasp_path}/thermalconductivity'
 
 #adsorb file
 adsorb_path = 'data/adsorb'
-anode_strs_path = f'{adsorb_path}/anode_strs'
+anode_strus_path = f'{adsorb_path}/anode_strus'
 anode_energy_path = f'{adsorb_path}/anode_energy'
-adsorb_strs_path = f'{adsorb_path}/adsorb_strs'
+adsorb_strus_path = f'{adsorb_path}/adsorb_strus'
 adsorb_energy_path = f'{adsorb_path}/adsorb_energy'
 adsorb_analysis_path = f'{adsorb_path}/adsorb_analysis'
 

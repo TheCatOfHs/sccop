@@ -203,10 +203,10 @@ class ConvLayer(nn.Module):
         atom_in_fea [float, 2d]: atom feature vector
         nbr_fea [float, 3d]: bond feature vector
         nbr_fea_idx [int, 2d]: index of neighbors
-
+        
         Returns
         ----------
-        out [float, 2d]: embedded atom vector
+        out [float, 2d]: crystal feature vector
         """
         N, M = nbr_fea_idx.shape
         atom_nbr_fea = atom_in_fea[nbr_fea_idx, :]
@@ -331,8 +331,8 @@ class PPModel(ListRWTools):
         #set learning rate
         if use_pretrain_model:
             out_layer_id = list(map(id, model.module.fc_out.parameters()))
-            rest_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
-            params = [{'params': rest_layer, 'lr': self.lr/5},
+            crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
+            params = [{'params': crysfea_layer, 'lr': self.lr/5},
                       {'params': model.module.fc_out.parameters()}]
         else:
             params = model.parameters()
@@ -360,7 +360,8 @@ class PPModel(ListRWTools):
         model.to(self.device)
         self.validate(test_loader, model, criterion, epoch, normalizer, best_model_test=True)
         self.write_list2d(f'{self.model_save_path}/validation.dat', mae_buffer, style='{0:6.4f}')
-    
+        self.remove_checkpoints()
+        
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
         train model one batch
@@ -515,6 +516,16 @@ class PPModel(ListRWTools):
         if is_best:
             shutil.copyfile(filename, f'{self.model_save_path}/model_best.pth.tar')
 
+    def remove_checkpoints(self):
+        """
+        remove checkpoints of prediction model
+        """
+        shell_script = f'''
+                        #!/bin/bash
+                        rm {self.model_save_path}/checkpoint*
+                        '''
+        os.system(shell_script)
+        
 
 class Normalizer():
     #Normalize a Tensor and restore it later

@@ -341,8 +341,19 @@ class Select(SSHTools, DeleteDuplicates):
                         random_state=0).fit(crys_embedded)
         return kmeans.labels_
     
-    def write_POSCARs(self, atom_pos, atom_type, grid_name, space_group):
-        #
+    def write_POSCARs(self, atom_pos, atom_type, atom_symm, grid_name, space_group):
+        """
+        position and type are sorted by grid name and space group
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: 
+        grid_name [int, 1d]: name of grids
+        space_group [int, 1d]: space group number
+        """
+        #convert to structure object
         num_jobs = len(grid_name)
         node_assign = self.assign_node(num_jobs)
         strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
@@ -354,6 +365,8 @@ class Select(SSHTools, DeleteDuplicates):
                           atom_pos)
         self.write_list2d(f'{self.sh_save_path}/atom_type_select.dat', 
                           atom_type)
+        self.write_list2d(f'{self.sh_save_path}/atom_symm_select.dat', 
+                          atom_symm)
         self.write_list2d(f'{self.sh_save_path}/grid_name_select.dat', 
                           np.transpose([grid_name]))
         self.write_list2d(f'{self.sh_save_path}/space_group_select.dat', 
@@ -485,8 +498,8 @@ class Select(SSHTools, DeleteDuplicates):
         """
         full_poscars = []
         for i in range(1, recyc+1):
-            poscars = os.listdir(f'{init_strs_path}_{i}')
-            full_poscars += [f'{init_strs_path}_{i}/{j}' for j in poscars] 
+            poscars = os.listdir(f'{init_strus_path}_{i}')
+            full_poscars += [f'{init_strus_path}_{i}/{j}' for j in poscars] 
         return full_poscars
     
     def write_recycle(self, recyc, index, atom_pos, atom_type, grid_name):
@@ -513,7 +526,42 @@ class Select(SSHTools, DeleteDuplicates):
         self.write_list2d(f'{dir}/atom_pos_select.dat', atom_pos_np[index])
         self.write_list2d(f'{dir}/atom_type_select.dat', atom_type_np[index])
         self.write_list2d(f'{dir}/grid_name_select.dat', grid_name_np[index])
+    
+    def min_in_cluster(self, idx, value, clusters):
+        """
+        select lowest value sample in each cluster
+
+        Parameters
+        ----------
+        idx [int, 1d, np]: index of samples in input
+        value [float, 1d, np]: average prediction
+        clusters [int, 1d, np]: cluster labels of samples
         
+        Returns
+        ----------
+        idx_slt [int, 1d, np]: index of select samples
+        """
+        order = np.argsort(clusters)
+        sort_idx = idx[order]
+        sort_value = value[order]
+        sort_clusters = clusters[order]
+        min_idx, min_value = 0, 1e10
+        last_cluster = sort_clusters[0]
+        idx_slt = []
+        for i, cluster in enumerate(sort_clusters):
+            if cluster == last_cluster:
+                pred = sort_value[i]
+                if min_value > pred:
+                    min_idx = sort_idx[i]
+                    min_value = pred                     
+            else:
+                idx_slt.append(min_idx)
+                last_cluster = cluster
+                min_idx = sort_idx[i]
+                min_value = sort_value[i]
+        idx_slt.append(min_idx)
+        return np.array(idx_slt)
+    
 
 class OptimSelect(SSHTools, DeleteDuplicates):
     #Select structures from low level optimization
@@ -553,7 +601,7 @@ class OptimSelect(SSHTools, DeleteDuplicates):
         """
         poscars, poscars_full, energys = [], [], []
         for i in range(num_recycle):
-            recyc = f'initial_strs_{i+1}'
+            recyc = f'initial_strus_{i+1}'
             stru_path = f'{poscar_path}/{recyc}'
             energy_file = f'{vasp_out_path}/{recyc}/Energy.dat'
             energy_dat = self.import_list2d(energy_file, str, numpy=True)

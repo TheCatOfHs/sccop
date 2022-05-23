@@ -18,7 +18,6 @@ mut_ratio = 0.9
 mut_freq = 1
 latt_mu = 0.
 latt_sigma = 0.2
-free_aix = [1, 1, 0]
 
 #Recycling
 num_recycle = 2
@@ -29,9 +28,10 @@ num_optims = 6
 
 #Initial Samples
 component = 'B1C3'
-num_latt = 36
+num_latt = 72
 num_Rand = 120
-num_sampling = 500
+num_ave_sg = 1
+num_per_sg = 20
 len_mu = 5
 len_sigma = 1
 len_lower = 4
@@ -51,11 +51,9 @@ use_pretrain_model = True
 T = .1
 decay = .99
 steps = 300
-num_move = 3
-num_paths_min = 40
-num_paths_rand = 80
-num_paths_atom = 30
-num_paths_order = 30
+num_jump = 3
+num_path_min = 80
+num_path_rand = 80
 min_bond = 1.2
 
 #Sample Select

@@ -71,8 +71,8 @@ class ParallelDivide(ListRWTools, SSHTools):
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        file = [f'{grid:03.0f}_nbr_dis.bin',
-                f'{grid:03.0f}_nbr_idx.bin']
+        file = [f'{grid:03.0f}_nbr_dis_*.bin',
+                f'{grid:03.0f}_nbr_idx_*.bin']
         file = ' '.join(file)
         shell_script = f'''
                         #!/bin/bash
@@ -166,7 +166,7 @@ class ParallelDivide(ListRWTools, SSHTools):
         os.system(f'rm {grid_path}/*.tar.gz')
     
 
-class PlanarSpaceGroup():
+class PlanarSpaceGroup:
     #17 planar space groups
     def __init__(self):
         pass    
@@ -298,7 +298,7 @@ class PlanarSpaceGroup():
 
         Returns
         ----------
-        symm_site [dict, int:list]: site position grouped by symmetry
+        symm_site [dict, int:list]: site position in min grouped by symmetry
         """
         symm = [len(i) for i in mapping]
         last = symm[0]
@@ -797,26 +797,50 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
         
         Parameters
         ----------
-        grid [str, 0d]: name of grid
+        grid [int, 0d]: name of grid
         cutoff [float, 0d]: cutoff distance
         """
         head = f'{grid_path}/{grid:03.0f}'
         latt_vec = self.import_list2d(f'{head}_latt_vec.bin',
                                       float, binary=True)
-        coords = self.import_list2d(f'{head}_frac_coords.bin',
-                                    float, binary=True)
-        atoms = [1 for _ in range(len(coords))]
         #add vacuum layer to structure
         if add_vacuum:
             latt = self.add_vacuum(latt_vec)
         #get near neighbors and distance
-        stru = Structure.from_spacegroup(1, latt, atoms, coords)
-        nbr_idx, nbr_dis = self.near_property(stru, cutoff)
-        self.write_list2d(f'{head}_nbr_idx.bin', 
-                          nbr_idx, binary=True)
-        self.write_list2d(f'{head}_nbr_dis.bin', 
-                          nbr_dis, binary=True)
+        space_group = self.grid_space_group(grid)
+        for sg in space_group:
+            coords = self.import_list2d(f'{head}_frac_coords_{sg}.bin',
+                                        float, binary=True)
+            mapping = self.import_list2d(f'{head}_mapping_{sg}.bin',
+                                        int, binary=True)
+            atoms = [1 for _ in range(len(coords))]
+            stru = Structure.from_spacegroup(1, latt, atoms, coords)
+            #export neighbor index and distance in min area
+            nbr_idx, nbr_dis = self.near_property(stru, cutoff, mapping)
+            self.write_list2d(f'{head}_nbr_idx_{sg}.bin', 
+                              nbr_idx, binary=True)
+            self.write_list2d(f'{head}_nbr_dis_{sg}.bin', 
+                              nbr_dis, binary=True)
     
+    def grid_space_group(self, grid):
+        """
+        get space groups of grid
+
+        Parameters
+        ----------
+        grid [int, 0d]: name of grid
+        
+        Returns
+        ---------
+        space_group [str, 1d]: space group number
+        """
+        grid_file = os.listdir(grid_path)
+        coords_file = [i for i in grid_file 
+                       if i.startswith(f'{grid:03.0f}_frac')]
+        name = [i.split('.')[0] for i in coords_file]
+        space_group = [i.split('_')[-1] for i in name]
+        return space_group
+        
     def add_vacuum(self, latt_vec):
         """
         add vacuum layer
@@ -839,7 +863,7 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
                                        gamma=gamma)
         return latt
     
-    def near_property(self, stru, cutoff, near=0):
+    def near_property(self, stru, cutoff, mapping, near=0):
         """
         index and distance of near grid points
         
@@ -850,8 +874,8 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
         
         Returns
         ----------
-        nbr_idx [int, 2d]: index of near neighbor 
-        nbr_dis [float, 2d]: distance of near neighbor 
+        nbr_idx [int, 2d, np]: index of near neighbor in min
+        nbr_dis [float, 2d, np]: distance of near neighbor in min
         """
         all_nbrs = stru.get_all_neighbors(cutoff)
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
@@ -863,7 +887,34 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
         for nbr in all_nbrs:
             nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
             nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
-        return np.array(nbr_idx), np.array(nbr_dis)
+        nbr_idx, nbr_dis = self.reduce_to_min(nbr_idx, nbr_dis, mapping)
+        return nbr_idx, nbr_dis
+    
+    def reduce_to_min(self, nbr_idx, nbr_dis, mapping):
+        """
+        reduce neighbors to min unequal area
+        
+        Parameters
+        ----------
+        nbr_idx [int, 2d]: index of near neighbor 
+        nbr_dis [float, 2d]: distance of near neighbor 
+        mapping [int, 2d]: mapping between min and all grid
+
+        Returns
+        ----------
+        nbr_idx [int, 2d, np]: index of near neighbor in min
+        nbr_dis [float, 2d, np]: distance of near neighbor in min
+        """
+        min_atom_num = len(mapping)
+        nbr_idx = np.array(nbr_idx)[:min_atom_num]
+        nbr_dis = np.array(nbr_dis)[:min_atom_num]
+        #reduce to min area
+        for line in mapping:
+            if len(line) > 1:
+                min_atom = line[0]
+                for atom in line[1:]:
+                    nbr_idx[nbr_idx==atom] = min_atom
+        return nbr_idx, nbr_dis
     
     def lattice_generate(self):
         """
@@ -922,17 +973,18 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
             volume = latt.volume
         return latt
     
-    def get_space_group(self, system):
+    def get_space_group(self, num, system):
         """
         get space group number according to crystal system
         
         Parameters
         ----------
+        num [int, 0d]: number of space groups
         system [int, 0d]: crystal system
 
         Returns
         ----------
-        space_group [int, 0d]: international number of space group
+        space_group [int, 1d, np]: international number of space group
         """
         #space group of 2-dimensional structure
         if num_dim == 2:
@@ -960,7 +1012,7 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
                 groups = np.arange(168, 195)
             if system == 6:
                 groups = np.arange(195, 231)
-        space_group = np.random.choice(groups)
+        space_group = np.sort(np.random.choice(groups, num*len(groups)))
         return space_group
     
 
