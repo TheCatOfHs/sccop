@@ -49,10 +49,10 @@ class ListRWTools:
                 ct = f.readlines()
             list = self.str_to_list2d(ct, dtype)
             if numpy:
-                return np.array(list)
+                return np.array(list, dtype=dtype)
             else:
                 return list
-
+    
     def str_to_list2d(self, string, dtype):
         """
         convert string list to 2-dimensional list

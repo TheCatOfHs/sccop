@@ -1,6 +1,5 @@
 import os, sys
 import time
-import re
 import numpy as np
 
 from pymatgen.core.structure import Structure
@@ -17,28 +16,22 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
-        self.ccop_out_path = f'/local/ccop/{ccop_out_path}'
         self.optim_strus_path = f'/local/ccop/{optim_strus_path}'
         self.dielectric_path = f'/local/ccop/{dielectric_path}'
         self.elastic_path = f'/local/ccop/{elastic_path}'
-        self.energy_path = f'/local/ccop/{energy_path}'
         self.pbe_band_path = f'/local/ccop/{pbe_band_path}'
         self.phonon_path = f'/local/ccop/{phonon_path}'
         self.thermalconductivity_path = f'/local/ccop/{thermalconductivity_path}'
         self.KPOINTS = f'/local/ccop/{KPOINTS_file}'
         self.bandconf = f'/local/ccop/{bandconf_file}'
         self.calculation_path = '/local/ccop/vasp'
-        if not os.path.exists(optim_strus_path):
-            os.mkdir(optim_strus_path)
         if not os.path.exists('data/post'):
             os.mkdir('data/post')
             os.mkdir(KPOINTS_file)
             os.mkdir(bandconf_file)
-        if not os.path.exists(optim_vasp_path):
-            os.mkdir(optim_vasp_path)
+        if not os.path.exists(dielectric_path):
             os.mkdir(dielectric_path)
             os.mkdir(elastic_path)
-            os.mkdir(energy_path)
             os.mkdir(pbe_band_path)
             os.mkdir(phonon_path)
             os.mkdir(thermalconductivity_path)

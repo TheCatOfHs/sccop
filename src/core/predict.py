@@ -360,7 +360,6 @@ class PPModel(ListRWTools):
         model.to(self.device)
         self.validate(test_loader, model, criterion, epoch, normalizer, best_model_test=True)
         self.write_list2d(f'{self.model_save_path}/validation.dat', mae_buffer, style='{0:6.4f}')
-        self.remove_checkpoints()
         
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
@@ -515,16 +514,6 @@ class PPModel(ListRWTools):
         torch.save(state, filename)
         if is_best:
             shutil.copyfile(filename, f'{self.model_save_path}/model_best.pth.tar')
-
-    def remove_checkpoints(self):
-        """
-        remove checkpoints of prediction model
-        """
-        shell_script = f'''
-                        #!/bin/bash
-                        rm {self.model_save_path}/checkpoint*
-                        '''
-        os.system(shell_script)
         
 
 class Normalizer():

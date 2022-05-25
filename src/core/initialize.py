@@ -108,45 +108,11 @@ class UpdateNodes(SSHTools):
 class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
                    GeoCheck, DeleteDuplicates):
     #generate initial structures of ccop
-    def __init__(self, number, component):
+    def __init__(self):
         UpdateNodes.__init__(self)
         ParallelDivide.__init__(self)
         DeleteDuplicates.__init__(self)
         self.create_dir()
-        self.initial_poscars(number, component)
-    
-    def initial_poscars(self, number, component):
-        """
-        generate initial poscars randomly
-        
-        Parameters
-        ----------
-        number [int, 0d]: number of poscars
-        component [str, 0d]: component of searching system
-        """
-        system_echo(f'Generate Initial Data Randomly')
-        #transfer component to atom type list
-        elements= re.findall('[A-Za-z]+', component)
-        ele_num = [int(i) for i in re.findall('[0-9]+', component)]
-        atom_type = []
-        for ele, num in zip(elements, ele_num):
-            for _ in range(num):
-                atom_type.append(ele)
-        atom_types = self.control_atom_number(atom_type)
-        #make directory of initial poscars
-        dir = f'{poscar_path}/initial_strus_0'
-        if not os.path.exists(dir):
-            os.mkdir(dir)
-        #generate poscars from crystal system randomly
-        num = len(atom_types)
-        for i in range(number):
-            latt = self.lattice_generate()
-            seed = random.randint(0, num-1)
-            atom_type = atom_types[seed]
-            atom_num = len(atom_type)
-            coors = np.random.rand(atom_num, 3)
-            stru = Structure(latt, atom_type, coors)
-            stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
     
     def generate(self, recyc):
         """
@@ -164,10 +130,8 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         grid_name [int, 1d]: name of grids
         space_group [int, 1d]: space group number
         """
-        if recyc > 0:
-            grain = grain_fine
-        else:
-            grain = grain_coarse
+        #generate initial lattice
+        self.initial_poscars(recyc, num_latt, component)
         #structures generated randomly
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.random_sampling(recyc, grain)
@@ -181,6 +145,40 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         #add random samples
         system_echo(f'Sampling number: {len(atom_pos)}')    
         return atom_pos, atom_type, atom_symm, grid_name, space_group
+    
+    def initial_poscars(self, recyc, number, component):
+        """
+        generate initial poscars randomly
+        
+        Parameters
+        ----------
+        recyc [int, 0d]: times of recycle
+        number [int, 0d]: number of poscars
+        component [str, 0d]: component of searching system
+        """
+        system_echo(f'Generate Initial Data Randomly')
+        #transfer component to atom type list
+        elements= re.findall('[A-Za-z]+', component)
+        ele_num = [int(i) for i in re.findall('[0-9]+', component)]
+        atom_type = []
+        for ele, num in zip(elements, ele_num):
+            for _ in range(num):
+                atom_type.append(ele)
+        atom_types = self.control_atom_number(atom_type)
+        #make directory of initial poscars
+        dir = f'{poscar_path}/initial_strus_{recyc}'
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+        #generate poscars from crystal system randomly
+        num = len(atom_types)
+        for i in range(number):
+            latt = self.lattice_generate()
+            seed = random.randint(0, num-1)
+            atom_type = atom_types[seed]
+            atom_num = len(atom_type)
+            coors = np.random.rand(atom_num, 3)
+            stru = Structure(latt, atom_type, coors)
+            stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
     
     def random_sampling(self, recyc, grain):
         """
@@ -399,16 +397,16 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
+        #sort structure in order of grid and space group
+        idx = self.sort_by_grid_sg(grid_name, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
+                                grid_name, space_group)
         #check neighbor distance of atoms
         nbr_dis = self.get_nbr_dis_bh(atom_pos, grid_name, space_group)
-        check_near = [self.near(i) for i in nbr_dis]
-        check_num = len(check_near)
-        #sampling correct random samples
-        idx = np.arange(check_num)[check_near]
-        sgs = np.array(space_group)[check_near]
-        idx = self.balance_sampling(num_Rand, idx, sgs)
+        mask = [self.near(i) for i in nbr_dis]
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
-            self.filter_samples(idx, atom_pos, atom_type, atom_symm,
+            self.filter_samples(mask, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
         #delete same samples by method in pymatgen
         idx = self.delete_duplicates_pymatgen(atom_pos, atom_type,
@@ -416,36 +414,41 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
+        #sampling random samples by space group
+        idx = self.balance_sampling(num_Rand, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, atom_symm,
+                                grid_name, space_group)
         return atom_pos, atom_type, atom_symm, grid_name, space_group
     
-    def balance_sampling(self, num, index, space_group):
+    def balance_sampling(self, num, space_group):
         """
         select samples from different space groups
         
         Parameters
         ----------
         num [int, 0d]: number of samples
-        index [int, 1d]: index of samples
         space_group [int, 1d]: space group number
 
         Returns
         ----------
         sample [int, 1d]: index of samples
         """
-        array = np.stack((index, space_group), axis=1)
+        idx = np.arange(len(space_group))
+        array = np.stack((idx, space_group), axis=1)
         array = sorted(array, key=lambda x: x[1])
-        index, space_group = np.transpose(array)
+        idx, space_group = np.transpose(array)
         #group index by space group
         store, clusters = [], []
         last_sg = space_group[0]
         for i, sg in enumerate(space_group):
             if sg == last_sg:
-                store.append(index[i])
+                store.append(idx[i])
             else:
                 clusters.append(store)
                 last_sg = sg
                 store = []
-                store.append(index[i])
+                store.append(idx[i])
         clusters.append(store)
         #get sampling number of each space group
         cluster_num = len(clusters)
@@ -498,13 +501,23 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         """
         make directory
         """
-        os.mkdir(poscar_path)
-        os.mkdir(model_path)
-        os.mkdir(search_path)
-        os.mkdir(vasp_out_path)
-        os.mkdir(record_path)
-        os.mkdir(grid_path)
+        if not os.path.exists(poscar_path):
+            os.mkdir(poscar_path)
+            os.mkdir(model_path)
+            os.mkdir(search_path)
+            os.mkdir(vasp_out_path)
+            os.mkdir(grid_path)
     
 
 if __name__ == '__main__':
-    pass
+    init = InitSampling()
+    init_path = f'{init_strus_path}_{1}'
+    file_name = os.listdir(init_path)
+    for i, poscar in enumerate(file_name):
+        #import lattice
+        stru = Structure.from_file(f'{init_path}/{poscar}', sort=True)
+        latt = stru.lattice
+        atom_num = init.get_atom_number(stru)
+        cry_system, params = init.judge_crystal_system(latt)
+        latt = Lattice.from_parameters(*params)
+        print(latt)

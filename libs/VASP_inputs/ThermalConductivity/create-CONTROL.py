@@ -66,7 +66,7 @@ def generate_CONTROL(born, lattice, atom_name, atom_num, diele, position):
     control = """&allocations
     nelements=%d,
     natoms=%d,
-    ngrid(:)=10 10 5
+    ngrid(:)=10 10 1
 &end
 &crystal
     lfactor=0.1,
@@ -87,7 +87,7 @@ def generate_CONTROL(born, lattice, atom_name, atom_num, diele, position):
 &flags
     nonanalytic=.TRUE.
     nanowires=.FLASE.
-    convergence=.FALSE.
+    convergence=.TRUE.
 &end"""%(len(atom_name),np.sum(atom_num),lattice[0],lattice[1],lattice[2],elements,types,pos,diele[0],diele[1],diele[2],born_ct)
     with open('CONTROL', 'w') as obj:
         obj.write(control)

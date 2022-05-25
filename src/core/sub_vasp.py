@@ -1,8 +1,10 @@
 import os, sys
 import time
+import numpy as np
 
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
+from core.data_transfer import DeleteDuplicates
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
@@ -172,7 +174,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         system_echo(f'Energy file generated successfully!')
 
 
-class VASPoptimize(SSHTools, ListRWTools):
+class VASPoptimize(SSHTools, DeleteDuplicates):
     #optimize structure by VASP
     def __init__(self, recycle, wait_time=1):
         self.wait_time = wait_time
@@ -186,7 +188,7 @@ class VASPoptimize(SSHTools, ListRWTools):
         if not os.path.exists(self.optim_strus_path):
             os.mkdir(self.optim_strus_path)
             os.mkdir(self.energy_path)
-
+    
     def run_optimization_low(self, vdW=False):
         '''
         optimize configurations at low level
@@ -199,7 +201,7 @@ class VASPoptimize(SSHTools, ListRWTools):
         if vdW:
             flag_vdW = 1
         files = sorted(os.listdir(self.ccop_out_path))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
+        poscars = [i for i in files if i.startswith('POSCAR')]
         num_poscar = len(poscars)
         system_echo(f'Start VASP calculation --- Optimization')
         for poscar in poscars:
@@ -248,71 +250,12 @@ class VASPoptimize(SSHTools, ListRWTools):
         while not self.is_done(self.optim_strus_path, num_poscar):
             time.sleep(self.wait_time)
         self.remove_flag(self.optim_strus_path)
-        self.add_symmetry_to_structure(self.optim_strus_path)
         self.delete_same_poscars(self.optim_strus_path)
         self.delete_energy_files(self.optim_strus_path, self.energy_path)
         self.get_energy(self.energy_path)
         system_echo(f'All jobs are completed --- Optimization')
-        
-    def add_symmetry_to_structure(self, path):
-        """
-        find symmetry unit of structure
-
-        Parameters
-        ----------
-        path [str, 0d]: structure save path 
-        """
-        files = sorted(os.listdir(path))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
-        for i in poscars:
-            stru = Structure.from_file(f'{path}/{i}')
-            anal_stru = SpacegroupAnalyzer(stru)
-            sym_stru = anal_stru.get_refined_structure()
-            sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
     
-    def delete_energy_files(self, poscar_path, energy_path):
-        """
-        delete duplicate energy files
-
-        Parameters
-        ----------
-        poscar_path [str, 0d]: poscars path
-        energy_path [str, 0d]: energy file path
-        """
-        poscars = os.listdir(poscar_path)
-        out = [i[4:] for i in os.listdir(energy_path)]
-        del_poscars = np.setdiff1d(out, poscars)
-        for i in del_poscars:
-            os.remove(f'{energy_path}/out-{i}')
-        
-    def get_energy(self, path):
-        """
-        generate energy file of vasp outputs directory
-        
-        Parameters
-        ----------
-        path [str, 0d]: energy file path
-        """
-        energys = []
-        vasp_out = os.listdir(f'{path}')
-        vasp_out_order = sorted(vasp_out)
-        for out in vasp_out_order:
-            VASP_output_file = f'{path}/{out}'
-            with open(VASP_output_file, 'r') as f:
-                ct = f.readlines()
-            for line in ct[:15]:
-                if 'POSCAR found :' in line:
-                    atom_num = int(line.split()[-2])
-            for line in ct[-15:]:
-                if 'F=' in line:
-                    energy = float(line.split()[2])
-            cur_E = energy/atom_num
-            system_echo(f'{out}, {cur_E:18.9f}')
-            energys.append([out, cur_E])
-        self.write_list2d(f'{path}/Energy.dat', energys)
-        system_echo(f'Energy file generated successfully!')
-    
-    def run_optimization(self, vdW=False):
+    def run_optimization_high(self, vdW=False):
         '''
         optimize configurations from low to high level
         
@@ -320,12 +263,21 @@ class VASPoptimize(SSHTools, ListRWTools):
         ----------
         vdW [bool, 0d]: whether add vdW modify
         '''
+        #set path and make directory
+        self.optim_strus_path = f'/local/ccop/{optim_strus_path}'   
+        self.ccop_out_path = f'/local/ccop/{ccop_out_path}'
+        self.energy_path = f'/local/ccop/{energy_path}'
+        if not os.path.exists(optim_strus_path):
+            os.mkdir(optim_strus_path)
+            os.mkdir(optim_vasp_path)
+            os.mkdir(energy_path)
+        #sub optimization script to each node
         flag_vdW = 0
         if vdW:
             flag_vdW = 1
         files = sorted(os.listdir(ccop_out_path))
-        poscars = [i for i in files if re.match(r'POSCAR', i)]
-        num_poscar = len(poscars)
+        poscars = [i for i in files if i.startswith('POSCAR')]
+        poscar_num = len(poscars)
         system_echo(f'Start VASP calculation --- Optimization')
         for poscar in poscars:
             node = poscar.split('-')[-1]
@@ -368,7 +320,7 @@ class VASPoptimize(SSHTools, ListRWTools):
                             rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
-        while not self.is_done(optim_strus_path, num_poscar):
+        while not self.is_done(optim_strus_path, poscar_num):
             time.sleep(self.wait_time)
         self.add_symmetry_to_structure(optim_strus_path)
         self.remove_flag(optim_strus_path)
@@ -377,6 +329,64 @@ class VASPoptimize(SSHTools, ListRWTools):
         self.get_energy(energy_path)
         system_echo(f'All jobs are completed --- Optimization')
     
+    def add_symmetry_to_structure(self, path):
+        """
+        find symmetry unit of structure
+
+        Parameters
+        ----------
+        path [str, 0d]: structure save path 
+        """
+        files = sorted(os.listdir(path))
+        poscars = [i for i in files if i.startswith('POSCAR')]
+        for i in poscars:
+            stru = Structure.from_file(f'{path}/{i}')
+            anal_stru = SpacegroupAnalyzer(stru)
+            sym_stru = anal_stru.get_refined_structure()
+            sym_stru.to(filename=f'{path}/{i}', fmt='poscar')
+    
+    def delete_energy_files(self, poscar_path, energy_path):
+        """
+        delete duplicate energy files
+
+        Parameters
+        ----------
+        poscar_path [str, 0d]: poscars path
+        energy_path [str, 0d]: energy file path
+        """
+        poscars = os.listdir(poscar_path)
+        out = [i[4:] for i in os.listdir(energy_path)]
+        del_poscars = np.setdiff1d(out, poscars)
+        for i in del_poscars:
+            os.remove(f'{energy_path}/out-{i}')
+        
+    def get_energy(self, path):
+        """
+        generate energy file of vasp outputs directory
+        
+        Parameters
+        ----------
+        path [str, 0d]: energy file path
+        """
+        energys = []
+        vasp_out = os.listdir(f'{path}')
+        vasp_out_order = sorted(vasp_out)
+        for out in vasp_out_order:
+            energy = 1E6
+            VASP_output_file = f'{path}/{out}'
+            with open(VASP_output_file, 'r') as f:
+                ct = f.readlines()
+            for line in ct[:15]:
+                if 'POSCAR found :' in line:
+                    atom_num = int(line.split()[-2])
+            for line in ct[-15:]:
+                if 'F=' in line:
+                    energy = float(line.split()[2])
+            cur_E = energy/atom_num
+            system_echo(f'{out}, {cur_E:18.9f}')
+            energys.append([out, cur_E])
+        self.write_list2d(f'{path}/Energy.dat', energys)
+        system_echo(f'Energy file generated successfully!')
     
     
 if __name__ == "__main__":

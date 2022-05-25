@@ -1,9 +1,8 @@
 #Grid
-cutoff = 8
+cutoff = 10
 num_min_atom = 5
 num_max_atom = 10
-grain_coarse = [.5, .5, 1.2]
-grain_fine = [.25, .25, 1.2]
+grain = [.5, .5, 1.2]
 plane_upper = [100, 100, 1]
 
 #Dimension
@@ -21,7 +20,7 @@ latt_sigma = 0.2
 
 #Recycling
 num_recycle = 2
-num_ml_list = [1, 2]
+num_ml_list = [1, 1]
 num_seed = 40
 num_poscars = 12
 num_optims = 6
@@ -29,9 +28,9 @@ num_optims = 6
 #Initial Samples
 component = 'B1C3'
 num_latt = 72
-num_Rand = 120
+num_Rand = 90
 num_ave_sg = 1
-num_per_sg = 20
+num_per_sg = 10
 len_mu = 5
 len_sigma = 1
 len_lower = 4
@@ -51,7 +50,7 @@ use_pretrain_model = True
 T = .1
 decay = .99
 steps = 300
-num_jump = 3
+num_jump = 1
 num_path_min = 80
 num_path_rand = 80
 min_bond = 1.2

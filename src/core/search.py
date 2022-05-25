@@ -5,12 +5,11 @@ import torch
 import argparse
 from functools import reduce
 
-from core.grid_divide import GridDivide
-
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.data_transfer import Transfer
+from core.space_group import PlanarSpaceGroup
 from core.utils import ListRWTools, SSHTools, system_echo
 from core.predict import CrystalGraphConvNet, Normalizer
 
@@ -115,8 +114,10 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         #!/bin/bash
                         cd /local/ccop/
                         mkdir {self.sh_save_path}
-                        cd data/
-                        scp -r {gpu_node}:/local/ccop/{self.model_save_path} ppmodel/
+                        mkdir {self.model_save_path}
+                        cd {self.model_save_path}
+                        
+                        scp {gpu_node}:/local/ccop/{self.model_save_path}/model_best.pth.tar .
                         
                         touch FINISH-{ip}
                         scp FINISH-{ip} {gpu_node}:/local/ccop/{self.sh_save_path}/
@@ -261,6 +262,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
             else:
                 lack.append(pos_file)
         system_echo(f'Lack files: {lack}')
+        system_echo(f'Number of samples: {len(grid_name)}')
         self.export_results(atom_pos, atom_type, atom_symm, grid_name, space_group)
     
     def export_results(self, atom_pos, atom_type, atom_symm,
@@ -355,7 +357,8 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         #!/bin/bash
                         cd {self.sh_save_path}
                         rm FINISH*
-                        rm pos* type* symm* energy*
+                        rm pos-* type-* symm-*
+                        rm grid-* sg-* energy-*
                         '''
         os.system(shell_script)
     
@@ -406,9 +409,10 @@ class GeoCheck:
             return False
     
     
-class Search(GeoCheck, GridDivide, Transfer):
+class Search(GeoCheck, PlanarSpaceGroup, Transfer):
     #Searching on PES by machine-learned potential
     def __init__(self, round):
+        Transfer.__init__(self)
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([]))
         self.round = f'{round:03.0f}'
@@ -470,22 +474,32 @@ class Search(GeoCheck, GridDivide, Transfer):
         new_pos [int, 1d]: position of atom after 1 SA step
         """
         new_pos = pos.copy()
+        atom_num = len(new_pos)
         for _ in range(num_jump):
             #generate actions
-            idx = np.random.randint(0, len(new_pos))
+            idx = np.random.randint(0, atom_num)
             action_mv = self.action_filter(idx, new_pos, symm)
             action_ex = self.exchange_action(idx, type, symm)
             mask_ex = [-1 for _ in action_ex]
             actions = np.concatenate((action_mv, mask_ex))
             #exchange atoms or move atom
             if len(actions) > 0:
+                actions = np.array(actions, dtype=int)
                 point = np.random.choice(actions)
                 if point == -1:
+                    action_num = len(action_ex)
+                    idx = np.random.randint(0, action_num)
                     idx_1, idx_2 = action_ex[idx]
                     new_pos[idx_1], new_pos[idx_2] = \
                         new_pos[idx_2], new_pos[idx_1]
                 else:
-                    new_pos[idx] = point    
+                    check_pos = new_pos.copy()
+                    check_pos[idx] = point
+                    #check distance of new symmetry atoms
+                    nbr_dis = self.get_nbr_dis(check_pos, self.grid_idx, self.grid_dis)
+                    flag = self.near(nbr_dis)
+                    if flag:
+                        new_pos = check_pos
         return new_pos
     
     def action_filter(self, idx, pos, symm):
@@ -502,11 +516,6 @@ class Search(GeoCheck, GridDivide, Transfer):
         ----------
         allow [int, 1d, np]: allowed actions
         """
-        #get vacancy by symmetry
-        symm_slt = symm[idx]
-        sites = self.symm_site[symm_slt]
-        occupy = self.get_occupy(symm_slt, pos, symm)
-        vacancy = np.setdiff1d(sites, occupy)
         #get forbidden sites
         forbid_idx = []
         nbr_dis = self.grid_dis[pos]
@@ -520,6 +529,11 @@ class Search(GeoCheck, GridDivide, Transfer):
                     break
         actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
         forbid = reduce(np.union1d, actions)
+        #get vacancy by symmetry
+        symm_slt = symm[idx]
+        sites = self.symm_site[symm_slt]
+        occupy = self.get_occupy(symm_slt, pos, symm)
+        vacancy = np.setdiff1d(sites, occupy)
         #get allow sites
         forbid = np.intersect1d(sites, forbid)
         allow = np.setdiff1d(vacancy, forbid)
@@ -554,10 +568,10 @@ class Search(GeoCheck, GridDivide, Transfer):
         idx [int, 0d]: index of select atom
         type [int, 1d]: type of atoms
         symm [int, 1d]: symmetry of atoms
-
+        
         Returns
         ----------
-        allow_action [int, 2d]: effective exchange actions
+        allow [int, 2d]: effective exchange actions
         """
         #get index of different elements of same symmetry
         ele_idx = self.get_ele_idx(idx, type, symm)
@@ -615,7 +629,10 @@ class Search(GeoCheck, GridDivide, Transfer):
         """
         delta = value_2 - value_1
         if np.exp(-delta/T) > np.random.rand():
-            return True
+            if delta == 0:
+                return False
+            else:
+                return True
         else:
             return False
     
@@ -630,7 +647,7 @@ class Search(GeoCheck, GridDivide, Transfer):
         self.model.load_state_dict(paras['state_dict'])
         self.normalizer.load_state_dict(paras['normalizer'])
     
-    def predict(self, pos, type, elem_embed, grid_idx, grid_dis):
+    def predict(self, pos, type):
         """
         predict energy of one structure
 
@@ -638,9 +655,6 @@ class Search(GeoCheck, GridDivide, Transfer):
         ----------
         pos [int, 1d]: position of atoms
         type [int ,1d]: type of atoms
-        elem_embed [int, 2d]: element embeddings
-        grid_idx [int, 2d, np]: neighbor index of grid
-        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
@@ -648,7 +662,8 @@ class Search(GeoCheck, GridDivide, Transfer):
         """
         #transfer into input of ppm
         atom_fea, nbr_fea, nbr_fea_idx = \
-            self.get_ppm_input(pos, type, elem_embed, grid_idx, grid_dis)
+            self.get_ppm_input(pos, type, self.elem_embed,
+                               self.grid_idx, self.grid_dis)
         crystal_atom_idx = np.arange(len(atom_fea))
         input_var = (torch.Tensor(atom_fea),
                      torch.Tensor(nbr_fea),

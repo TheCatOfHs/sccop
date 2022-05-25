@@ -41,7 +41,7 @@ if __name__ == '__main__':
     
     plane = PlanarSpaceGroup()
     sg = groups[1]
-    all_grid, mapping = plane.get_grid_points(sg, grain_coarse, latt)
+    all_grid, mapping = plane.get_grid_points(sg, grain, latt)
     
     pos = [i for i in range(4)]
     type = [i for i in range(4)]
@@ -127,6 +127,26 @@ if __name__ == '__main__':
     print(get_pos(symm, symm_site))
     #rwtools = ListRWTools()
     #rwtools.write_list2d(f'test/test.dat', coors)
+    
+    def sort_by_grid_sg(grid, sg):
+        """
+        sort pos, type, symm in order of grid and space group
+        
+        Parameters
+        ----------
+        grid [int, 1d]: name of grid
+        sg [int, 1d]: space group number 
+
+        Returns
+        ----------
+        idx [int, 1d, np]: index of grid-sg order
+        """
+        idx = np.arange(len(sg))
+        grid_sg = np.stack((idx, grid, sg), axis=1).tolist()
+        order = sorted(grid_sg, key=lambda x:(x[1], x[2]))
+        idx = np.array(order)[:,0]
+        return idx
+
     '''
     min_grid, area = [], []
     sg = groups[3]

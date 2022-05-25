@@ -56,7 +56,7 @@ class Transfer(ListRWTools):
         nbr_dis = np.zeros((min_atom_num, self.nbr))
         for i, point in enumerate(point_idx):
             #find nearest atoms
-            atom_idx = np.where(point==atom_pos[:,None])[-1]
+            atom_idx = np.where(point==atom_pos[:, None])[-1]
             order = np.argsort(atom_idx)[:self.nbr]
             atom_idx = atom_idx[order]
             #get neighbor distance
@@ -327,9 +327,25 @@ class MultiGridTransfer(Transfer):
     def __init__(self):
         Transfer.__init__(self)
     
-    def sort_by_grid_and_sg(self,):
-        pass
-    
+    def sort_by_grid_sg(self, grid, sg):
+        """
+        sort pos, type, symm in order of grid and space group
+        
+        Parameters
+        ----------
+        grid [int, 1d]: name of grid
+        sg [int, 1d]: space group number 
+
+        Returns
+        ----------
+        idx [int, 1d, np]: index of grid-sg order
+        """
+        idx = np.arange(len(sg))
+        grid_sg = np.stack((idx, grid, sg), axis=1).tolist()
+        order = sorted(grid_sg, key=lambda x:(x[1], x[2]))
+        idx = np.array(order)[:,0]
+        return idx
+        
     def get_nbr_dis_bh(self, atom_pos, grid_name, space_group):
         """
         get neighbor distance in different grids
@@ -453,7 +469,7 @@ class DeleteDuplicates(MultiGridTransfer):
         ----------
         idx [int, 1d, np]: index of unique samples 
         """
-        #different length of atoms convert to string
+        #convert to string list
         pos_str = self.list2d_to_str(atom_pos, '{0}')
         type_str = self.list2d_to_str(atom_type, '{0}')
         symm_str = self.list2d_to_str(atom_symm, '{0}')
@@ -461,7 +477,7 @@ class DeleteDuplicates(MultiGridTransfer):
         group_str = self.list1d_to_str(space_group, '{0}')
         label = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
                  zip(pos_str, type_str, symm_str, grid_str, group_str)]
-        #delete same structure accroding to pos, type and grid
+        #delete same structure
         _, idx = np.unique(label, return_index=True)
         return idx
     
@@ -499,61 +515,82 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.setdiff1d(all_idx, idx)
         return idx
     
-    def delete_same_poscars(self, path, poscars):
+    def delete_same_selected(self, pos_1, type_1, symm_1, grid_1, sg_1,
+                             pos_2, type_2, symm_2, grid_2, sg_2):
         """
-        delete same structures
+        delete same structures that are in set2
         
         Parameters
-        -----------
-        path [str, 0d]: path of poscars
-        poscars [str, 1d]: name of poscars
+        ----------
+        pos_1 [int, 2d]: position of atoms in set1
+        type_1 [int, 2d]: type of atoms in set1
+        symm_1 [int, 2d]: symmetry of atoms in set1
+        grid_1 [int, 2d]: name of grids in set1
+        sg_1 [int, 2d]: space group number in set1
+        pos_2 [int, 2d]: position of atoms in set2
+        type_2 [int, 2d]: type of atoms in set2
+        symm_2 [int, 2d]: symmetry of atoms in set2
+        grid_2 [int, 1d]: name of grids in set2
+        sg_2 [int, 1d]: space group number in set2
         
         Returns
         ----------
-        index [int, 1d, np]: index of different poscars
+        idx [int, 1d]: index of sample in set 1
         """
-        poscars_num = len(poscars)
-        same_poscars = []
-        for i in range(poscars_num):
-            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
-            for j in range(i+1, poscars_num):
-                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    same_poscars.append(i)
-        same_poscars = np.unique(same_poscars)
-        all_index = [i for i in range(poscars_num)]
-        index = np.setdiff1d(all_index, same_poscars)
-        return index, same_poscars
-    
-    def compare_poscars(self, poscar_1, poscar_2):
+        #convert to string list
+        pos_str_1 = self.list2d_to_str(pos_1, '{0}')
+        type_str_1 = self.list2d_to_str(type_1, '{0}')
+        symm_str_1 = self.list2d_to_str(symm_1, '{0}')
+        grid_str_1 = self.list1d_to_str(grid_1, '{0}')
+        sg_str_1 = self.list1d_to_str(sg_1, '{0}')
+        pos_str_2 = self.list2d_to_str(pos_2, '{0}')
+        type_str_2 = self.list2d_to_str(type_2, '{0}')
+        symm_str_2 = self.list2d_to_str(symm_2, '{0}')
+        grid_str_2 = self.list1d_to_str(grid_2, '{0}')
+        sg_str_2 = self.list1d_to_str(sg_2, '{0}')
+        #find unique structures
+        array_1 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
+                   zip(pos_str_1, type_str_1, symm_str_1, grid_str_1, sg_str_1)]
+        array_2 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
+                   zip(pos_str_2, type_str_2, symm_str_2, grid_str_2, sg_str_2)]
+        array = np.concatenate((array_1, array_2))
+        _, idx, counts = np.unique(array, return_index=True, return_counts=True)
+        #delete structures same as training set
+        same = []
+        for i, repeat in enumerate(counts):
+            if repeat > 1:
+                same.append(i)
+        num = len(grid_1)
+        idx = np.delete(idx, same)
+        idx = [i for i in idx if i < num]
+        return idx
+
+    def delete_same_selected_pymatgen(self, strus_1, strus_2):
         """
-        find common structures in poscar_1 
+
         
         Parameters
         ----------
-        poscar_1 [str, 1d]: name of poscars
-        poscar_2 [str, 1d]: name of poscars
+        strus_1 []: 
+        strus_2 []: 
 
         Returns
         ----------
-        same_index [int, 1d]: index of common structures in poscar_1
+        idx [int, 1d]: index of sample in set 1
         """
-        same_index = []
-        for index, i in enumerate(poscar_1):
-            stru_1 = Structure.from_file(i)
-            for j in poscar_2:
-                stru_2 = Structure.from_file(j)
+        idx = []
+        for i, stru_1 in enumerate(strus_1):
+            for stru_2 in strus_2:
                 same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
-                    same_index.append(index)
+                    idx.append(i)
                     break
-        return same_index
-
+        all_idx = np.arange(len(strus_1))
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
+    
     def delete_same_poscars(self, path):
         """
         delete same structures
@@ -574,11 +611,43 @@ class DeleteDuplicates(MultiGridTransfer):
                                       attempt_supercell=False, allow_subset=False)
                 if same:
                     same_poscars.append(poscars[i])
-        same_poscars = np.unique(same_poscars)
+                    break
         for i in same_poscars:
             os.remove(f'{path}/{i}')
         same_poscars_num = len(same_poscars)
         system_echo(f'Delete same structures: {same_poscars_num}')
+    
+    def delete_same_strus_energy(self, strus, energys):
+        """
+
+        Parameters
+        ----------
+        strus []: 
+        energys []:
+        
+        Returns
+        ----------
+        idx []: 
+        """
+        strus_num = len(strus)
+        idx = []
+        #compare structure by pymatgen
+        for i in range(strus_num):
+            stru_1 = strus[i]
+            for j in range(i+1, strus_num):
+                stru_2 = strus[j]
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    if energys[i] < energys[j]:
+                        idx.append(j)
+                    else:
+                        idx.append(i)
+        all_idx = np.arange(strus_num)
+        idx = np.unique(idx)
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
     
     def filter_samples(self, idx, atom_pos, atom_type,
                        atom_symm, grid_name, space_group):
@@ -612,3 +681,14 @@ class DeleteDuplicates(MultiGridTransfer):
     
 if __name__ == "__main__":
     mul = MultiGridTransfer()
+    rw = ListRWTools()
+    file = '003-011-131'
+    atom_pos = rw.import_list2d(f'test/pos-{file}.dat', int)
+    atom_type = rw.import_list2d(f'test/type-{file}.dat', int)
+    atom_symm = rw.import_list2d(f'test/symm-{file}.dat', int)
+    grid_name = rw.import_list2d(f'test/grid-{file}.dat', int)
+    space_group = rw.import_list2d(f'test/sg-{file}.dat', int)
+    space_group = np.array(space_group).flatten()
+    strus = mul.get_stru_seq(atom_pos, atom_type, grid_name[0][0], space_group)
+    for i, stru in enumerate(strus):
+        stru.to(filename=f'test/POSCAR-{i:02.0f}', fmt='poscar')
