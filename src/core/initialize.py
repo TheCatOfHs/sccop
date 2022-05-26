@@ -200,6 +200,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         grid_num = self.get_latt_num()
         init_path = f'{init_strus_path}_{recyc}'
         file_name = os.listdir(init_path)
+        file_name = [i for i in file_name if i.startswith('POSCAR-RCSD')]
         atom_pos, atom_type, atom_symm, grid_name, space_group = [], [], [], [], []
         for i, poscar in enumerate(file_name):
             #import lattice

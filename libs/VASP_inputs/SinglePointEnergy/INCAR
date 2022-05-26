@@ -1,5 +1,5 @@
 ALGO=Normal
-PREC=Accurate
+PREC=PREC
 ISYM=0
 ISMEAR=0
 NEW=50

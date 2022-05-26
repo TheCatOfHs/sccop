@@ -2,7 +2,7 @@
 cutoff = 10
 num_min_atom = 5
 num_max_atom = 10
-grain = [.5, .5, 1.2]
+grain = [.4, .4, 1.2]
 plane_upper = [100, 100, 1]
 
 #Dimension
@@ -10,13 +10,6 @@ num_dim = 2
 add_vacuum = True
 vacuum_space = 15
 add_vdW = False
-
-#Mutate
-num_mutate = 6
-mut_ratio = 0.9
-mut_freq = 1
-latt_mu = 0.
-latt_sigma = 0.2
 
 #Recycling
 num_recycle = 2
@@ -26,9 +19,9 @@ num_poscars = 12
 num_optims = 6
 
 #Initial Samples
-component = 'B1C3'
+component = 'XXX'
 num_latt = 72
-num_Rand = 90
+num_Rand = 120
 num_ave_sg = 1
 num_per_sg = 10
 len_mu = 5
@@ -50,7 +43,7 @@ use_pretrain_model = True
 T = .1
 decay = .99
 steps = 300
-num_jump = 1
+num_jump = 2
 num_path_min = 80
 num_path_rand = 80
 min_bond = 1.2

@@ -682,7 +682,7 @@ class DeleteDuplicates(MultiGridTransfer):
 if __name__ == "__main__":
     mul = MultiGridTransfer()
     rw = ListRWTools()
-    file = '003-011-131'
+    file = '003-048-132'
     atom_pos = rw.import_list2d(f'test/pos-{file}.dat', int)
     atom_type = rw.import_list2d(f'test/type-{file}.dat', int)
     atom_symm = rw.import_list2d(f'test/symm-{file}.dat', int)

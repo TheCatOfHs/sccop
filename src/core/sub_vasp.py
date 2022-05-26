@@ -4,12 +4,12 @@ import numpy as np
 
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
-from core.data_transfer import DeleteDuplicates
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.dir_path import *
 from core.utils import ListRWTools, SSHTools, system_echo
+from core.data_transfer import DeleteDuplicates
 
 
 class ParallelSubVASP(ListRWTools, SSHTools):
