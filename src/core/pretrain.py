@@ -1,7 +1,7 @@
 import os, sys
-
 import numpy as np
 import pandas as pd
+
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')

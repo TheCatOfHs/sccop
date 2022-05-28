@@ -20,7 +20,37 @@ from core.grid_divide import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
+    strus = [1,1,2,3,4,5,6,7,1,2,3,4,9,0]
+    strus_num = len(strus)
+    strus_idx = np.arange(strus_num)
+    idx, store, delet = [], [], []
+    while True:
+        i = strus_idx[0]
+        stru_1 = strus[i]
+        for k in range(1, len(strus_idx)):
+            j = strus_idx[k]
+            stru_2 = strus[j]
+            same = stru_1==stru_2
+            if same:
+                store.append(j)
+                delet.append(k)
+        #update
+        idx += store
+        strus_idx = np.delete(strus_idx, [0]+delet)
+        store, delet = [], []
+        if len(strus_idx) == 0:
+            break
     
+    all_idx = np.arange(strus_num)
+    idx = np.setdiff1d(all_idx, idx)
+    print(np.array(strus)[idx])
+    
+    
+    
+    
+    
+    
+    '''
     crystal_system = 5
     
     #space group
@@ -38,7 +68,6 @@ if __name__ == '__main__':
     latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
     atoms = [1]
     
-    
     plane = PlanarSpaceGroup()
     sg = groups[1]
     all_grid, mapping = plane.get_grid_points(sg, grain, latt)
@@ -46,107 +75,9 @@ if __name__ == '__main__':
     pos = [i for i in range(4)]
     type = [i for i in range(4)]
     symm = [1, 2, 3, 6]
+    '''
     
-    def get_all_pos(min_pos, mapping):
-        """
-        get all equivalnent pos and type
-        
-        Parameters
-        ----------
-        min_pos [int, 1d]: pos in minimum grid
-        mapping [int, 2d]: mapping between min and all grid
-
-        Returns
-        ----------
-        all_pos [int, 1d]: pos in all grid
-        """
-        all_pos = np.array(mapping, dtype=object)[min_pos]
-        all_pos = np.concatenate(all_pos).tolist()
-        return all_pos
-    print(get_all_pos(pos, mapping))
     
-    #all_pos, all_type = plane.get_all_sites(pos, type, mapping)
-    symm_site = plane.group_symm_sites(mapping)
-    assign = plane.assign_by_spacegroup({5:2, 6:6}, symm_site)
-    
-    import json
-    with open('test/test.json', 'w') as f:
-        json.dump(assign, f)
-    
-    with open('test/test.json', 'r') as f:
-        json_dict = json.load(f)
-    
-    print(assign)
-    print(symm_site)
-    
-    def get_type_and_symm(assign):
-        """
-        get list of atom type and symmetry
-        
-        Parameters
-        ----------
-        assign [dict, int:list]: site assignment of atom_num
-
-        Returns
-        ----------
-        type [int, 1d]: type of atoms
-        symm [int, 1d]: symmetry of atoms
-        """
-        type, symm = [], []
-        for atom in assign.keys():
-            value = assign[atom]
-            symm += sorted(value)
-            type += [atom for _ in range(len(value))]
-        return type, symm
-
-    def get_pos(symm, symm_site):
-        """
-        sampling position of atoms by symmetry
-        
-        Parameters
-        ----------
-        symm [int, 1d]: symmetry of atoms
-        symm_site [dict, int:list]: site position grouped by symmetry
-
-        Returns
-        ----------
-        pos [int, 1d]: position of atoms
-        """
-        site_copy = copy.deepcopy(symm_site)
-        pos = []
-        for i in symm:
-            pool = site_copy[i]
-            sample = np.random.choice(pool)
-            pos.append(sample)
-            pool.remove(sample)
-        return pos
-    
-    type, symm = get_type_and_symm(assign[0])
-    print(type)
-    print(get_type_and_symm(assign[0]))
-    print(get_pos(symm, symm_site))
-    #rwtools = ListRWTools()
-    #rwtools.write_list2d(f'test/test.dat', coors)
-    
-    def sort_by_grid_sg(grid, sg):
-        """
-        sort pos, type, symm in order of grid and space group
-        
-        Parameters
-        ----------
-        grid [int, 1d]: name of grid
-        sg [int, 1d]: space group number 
-
-        Returns
-        ----------
-        idx [int, 1d, np]: index of grid-sg order
-        """
-        idx = np.arange(len(sg))
-        grid_sg = np.stack((idx, grid, sg), axis=1).tolist()
-        order = sorted(grid_sg, key=lambda x:(x[1], x[2]))
-        idx = np.array(order)[:,0]
-        return idx
-
     '''
     min_grid, area = [], []
     sg = groups[3]

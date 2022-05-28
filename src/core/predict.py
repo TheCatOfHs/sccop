@@ -332,7 +332,7 @@ class PPModel(ListRWTools):
         if use_pretrain_model:
             out_layer_id = list(map(id, model.module.fc_out.parameters()))
             crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
-            params = [{'params': crysfea_layer, 'lr': self.lr/5},
+            params = [{'params': crysfea_layer, 'lr': self.lr/100},
                       {'params': model.module.fc_out.parameters()}]
         else:
             params = model.parameters()
@@ -518,7 +518,7 @@ class PPModel(ListRWTools):
 
 class Normalizer():
     #Normalize a Tensor and restore it later
-    def __init__(self, tensor, num_database=500):
+    def __init__(self, tensor, num_database=100):
         self.num_old = num_database
         self.num_add = len(tensor)
         if self.num_add == 0:

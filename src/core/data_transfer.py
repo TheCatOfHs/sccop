@@ -515,10 +515,54 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.setdiff1d(all_idx, idx)
         return idx
     
+    def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
+                                   grid_name, space_group):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: grid of atoms
+        space_group [int, 1d]: space group number
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of different poscars
+        """
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
+        strus_num = len(strus)
+        strus_idx = np.arange(strus_num)
+        idx, store, delet = [], [], []
+        #compare structure by pymatgen
+        while True:
+            i = strus_idx[0]
+            stru_1 = strus[i]
+            for k in range(1, len(strus_idx)):
+                j = strus_idx[k]
+                stru_2 = strus[j]
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    store.append(j)
+                    delet.append(k)
+            #update
+            idx += store
+            strus_idx = np.delete(strus_idx, [0]+delet)
+            store, delet = [], []
+            if len(strus_idx) == 0:
+                break
+        all_idx = np.arange(strus_num)
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
+    
     def delete_same_selected(self, pos_1, type_1, symm_1, grid_1, sg_1,
                              pos_2, type_2, symm_2, grid_2, sg_2):
         """
-        delete same structures that are in set2
+        delete common structures of set1 and set2
+        return unique index of set1
         
         Parameters
         ----------
@@ -567,12 +611,13 @@ class DeleteDuplicates(MultiGridTransfer):
 
     def delete_same_selected_pymatgen(self, strus_1, strus_2):
         """
-
+        delete common structures of set1 and set2 by pymatgen
+        return unique index of set1
         
         Parameters
         ----------
-        strus_1 []: 
-        strus_2 []: 
+        strus_1 [obj, 1d]: structure objects in set1
+        strus_2 [obj, 1d]: structure objects in set2
 
         Returns
         ----------
@@ -619,15 +664,16 @@ class DeleteDuplicates(MultiGridTransfer):
     
     def delete_same_strus_energy(self, strus, energys):
         """
-
+        delete same structures and retain structure with lower energy
+        
         Parameters
         ----------
-        strus []: 
-        energys []:
+        strus [obj, 1d]: structure objects in pymatgen
+        energys [float, 1d]: corresponding energy
         
         Returns
         ----------
-        idx []: 
+        idx [int, 1d, np]: index of different structures
         """
         strus_num = len(strus)
         idx = []
@@ -677,17 +723,24 @@ class DeleteDuplicates(MultiGridTransfer):
         grid_name = np.array(grid_name, dtype=object)[idx].tolist()
         space_group = np.array(space_group, dtype=object)[idx].tolist()
         return atom_pos, atom_type, atom_symm, grid_name, space_group
-    
+
     
 if __name__ == "__main__":
+    #
+    files = os.listdir('test')
+    poscars = [i for i in files if i.startswith('POSCAR')]
+    if len(poscars) > 0:
+        for poscar in poscars:
+            os.remove(f'test/{poscar}')
+    #
     mul = MultiGridTransfer()
     rw = ListRWTools()
-    file = '003-048-132'
-    atom_pos = rw.import_list2d(f'test/pos-{file}.dat', int)
-    atom_type = rw.import_list2d(f'test/type-{file}.dat', int)
-    atom_symm = rw.import_list2d(f'test/symm-{file}.dat', int)
-    grid_name = rw.import_list2d(f'test/grid-{file}.dat', int)
-    space_group = rw.import_list2d(f'test/sg-{file}.dat', int)
+    file = '003-135-136'
+    atom_pos = rw.import_list2d(f'test/file/pos-{file}.dat', int)
+    atom_type = rw.import_list2d(f'test/file/type-{file}.dat', int)
+    atom_symm = rw.import_list2d(f'test/file/symm-{file}.dat', int)
+    grid_name = rw.import_list2d(f'test/file/grid-{file}.dat', int)
+    space_group = rw.import_list2d(f'test/file/sg-{file}.dat', int)
     space_group = np.array(space_group).flatten()
     strus = mul.get_stru_seq(atom_pos, atom_type, grid_name[0][0], space_group)
     for i, stru in enumerate(strus):

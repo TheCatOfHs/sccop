@@ -22,7 +22,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         calculate POSCARs and return energys
         
         POSCAR file notation: POSCAR-round-number-node
-        e.g., POSCAR-001-136
+        e.g. POSCAR-001-136
         
         Parameters
         ----------

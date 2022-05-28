@@ -36,81 +36,119 @@ class ParallelDivide(ListRWTools, SSHTools):
         grid_num = len(grid_name)
         node_assign = self.assign_node(grid_num)
         #generate grid and send back to gpu node
-        for grid, node in zip(grid_name, node_assign):
-            self.sub_divide(grid, node)
-        while not self.is_done(grid_path, grid_num):
+        work_node_num = self.sub_jobs(grid_name, node_assign)
+        while not self.is_done(grid_path, work_node_num):
             time.sleep(self.wait_time)
-        self.zip_file_name(grid_name)
         self.remove_flag_on_gpu()
         system_echo(f'Lattice generate number: {grid_num}')
         #update cpus
-        for node in nodes:
+        for node in nodes[:work_node_num]:
             self.send_grid_to_cpu(node)
-        while not self.is_done(grid_path, len(nodes)):
+        while not self.is_done(grid_path, work_node_num):
             time.sleep(self.wait_time)
         self.remove_flag_on_gpu()
         self.remove_flag_on_cpu()
         system_echo(f'Unzip grid file on CPUs')
         #unzip on gpu
         self.unzip_grid_on_gpu()
-        while not self.is_done(grid_path, grid_num):
+        while not self.is_done(grid_path, work_node_num):
             time.sleep(self.wait_time)
         self.remove_zip_on_gpu()
         self.remove_flag_on_gpu()
         system_echo(f'Unzip grid file on GPU')
     
-    def sub_divide(self, grid, node):
+    def sub_jobs(self, grid_name, node_assign):
+        """
+        sub grid divide to cpu nodes
+        
+        Parameters
+        ----------
+        grid_name [int, 1d]: name of grid
+        node_assign [int, 1d]: node assign
+
+        Returns
+        ----------
+        work_node_num [int, 0d]: number of work node
+        """
+        #grid grouped by nodes
+        jobs, store = [], []
+        for node in nodes:
+            for i, assign in enumerate(node_assign):
+                if node == assign:
+                    store.append(grid_name[i])
+            jobs.append(store)
+            store = []
+        #submit grid divide jobs to each node
+        for i, grids in enumerate(jobs):
+            self.sub_divide(grids, nodes[i])
+        work_node_num = len(jobs)
+        return work_node_num
+    
+    def sub_divide(self, grids, node):
         """
         SSH to target node and divide grid
 
         Parameters
         ----------
-        grid [int, 0d]: name of grid
+        grids [int, 1d]: name of grid
         node [int, 0d]: name of node
         """
         ip = f'node{node}'
-        file = [f'{grid:03.0f}_nbr_dis_*.bin',
-                f'{grid:03.0f}_nbr_idx_*.bin']
-        file = ' '.join(file)
+        file = [] 
+        for grid in grids:
+            file.append(f'{grid:03.0f}_nbr_dis_*.bin')
+            file.append(f'{grid:03.0f}_nbr_idx_*.bin')
+        file_str = ' '.join(file)
+        grid_str = ' '.join([str(i) for i in grids])
+        #condition of job finish
+        frac, nbr = [], []
+        for grid in grids:
+            frac.append(f'{grid:03.0f}_frac')
+            nbr.append(f'{grid:03.0f}_nbr_dis')
+        frac_str = '|'.join(frac)
+        nbr_str = '|'.join(nbr)
+        frac_num = f'`ls -l | grep -E \"{frac_str}\" | wc -l`'
+        nbr_num = f'`ls -l | grep -E \"{nbr_str}\" | wc -l`'
+        #shell script of grid divide
         shell_script = f'''
                         #!/bin/bash
                         cd /local/ccop/
-                        python src/core/grid_divide.py --name {grid}
+                        for i in {grid_str}
+                        do
+                            nohup python src/core/grid_divide.py --name $i >& log&
+                        done
+                        rm log
+                        
                         cd {grid_path}
+                        while true;
+                        do
+                            num1={frac_num}
+                            num2={nbr_num}
+                            if [ $num1 -eq $num2 ]; then
+                                sleep 1s
+                                break
+                            fi
+                            sleep 1s
+                        done
                         
-                        touch FINISH-{grid}                        
-                        tar -zcf {grid}.tar.gz {file} FINISH-{grid}
-                        scp {grid}.tar.gz FINISH-{grid} {gpu_node}:{self.local_grid_path}/
-                        
-                        rm {grid}.tar.gz FINISH-{grid}
+                        touch FINISH-{node}            
+                        tar -zcf {ip}.tar.gz {file_str} FINISH-{node}
+                        scp {ip}.tar.gz FINISH-{node} {gpu_node}:{self.local_grid_path}/
+                        rm {ip}.tar.gz FINISH-{node}
                         '''
         self.ssh_node(shell_script, ip)
-    
-    def zip_file_name(self, grid_name):
-        """
-        zip file is used to transport between nodes
-        
-        Parameters
-        ----------
-        grid_name [int, 1d]: name of new grid 
-        """
-        file = []
-        for grid in grid_name:
-            file.append(f'{grid}.tar.gz')
-        self.zip_file = file
     
     def send_grid_to_cpu(self, node):
         """
         update grid of each node
         """
-        zip_file_str = ' '.join(self.zip_file)
         ip = f'node{node}'
         shell_script = f'''
                         #!/bin/bash
                         cd {self.local_grid_path}
-                        scp {gpu_node}:{self.local_grid_path}/{{{','.join(self.zip_file)}}} .
+                        scp {gpu_node}:{self.local_grid_path}/*.tar.gz .
                         
-                        for i in {zip_file_str}
+                        for i in *tar.gz
                         do
                             nohup tar -zxf $i >& log-$i &
                             rm log-$i
@@ -118,7 +156,7 @@ class ParallelDivide(ListRWTools, SSHTools):
                         
                         touch FINISH-{node}
                         scp FINISH-{node} {gpu_node}:{self.local_grid_path}/
-                        rm FINISH-{node} {zip_file_str}
+                        rm FINISH-{node} *.tar.gz
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -126,11 +164,10 @@ class ParallelDivide(ListRWTools, SSHTools):
         """
         unzip grid property on gpu node
         """
-        zip_file_str = ' '.join(self.zip_file)
         shell_script = f'''
                         #!/bin/bash
                         cd {self.local_grid_path}
-                        for i in {zip_file_str}
+                        for i in *.tar.gz
                         do
                             nohup tar -zxf $i >& log-$i &
                             rm log-$i

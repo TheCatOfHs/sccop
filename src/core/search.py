@@ -203,7 +203,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         tar -zcf search-{ip}.tar.gz *
                         touch FINISH-{ip}
                         scp search-{ip}.tar.gz FINISH-{ip} {gpu_node}:{local_sh_save_path}
-                        #rm *
+                        rm *
                         '''
         self.ssh_node(shell_script, ip)
     
@@ -220,7 +220,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
                         for i in {zip_file}
                         do
                             tar -zxf $i
-                            rm $i
+                            #rm $i
                         done
                         '''
         os.system(shell_script)

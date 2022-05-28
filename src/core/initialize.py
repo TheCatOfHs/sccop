@@ -200,7 +200,6 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         grid_num = self.get_latt_num()
         init_path = f'{init_strus_path}_{recyc}'
         file_name = os.listdir(init_path)
-        file_name = [i for i in file_name if i.startswith('POSCAR-RCSD')]
         atom_pos, atom_type, atom_symm, grid_name, space_group = [], [], [], [], []
         for i, poscar in enumerate(file_name):
             #import lattice
@@ -322,7 +321,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         
         Parameters
         ----------
-        grid_name [str, 1d]: name of grid
+        grid_name [int, 1d]: name of grid
         """
         #get lattice files
         latt_file = []
@@ -409,14 +408,26 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(mask, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
-        #delete same samples by method in pymatgen
+        #sampling random samples by space group
+        idx = self.balance_sampling(2*num_Rand, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, atom_symm,
+                                grid_name, space_group)
+        #sort structure in order of grid and space group
+        idx = self.sort_by_grid_sg(grid_name, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
+                                grid_name, space_group)
+        #delete same samples by pymatgen
         idx = self.delete_duplicates_pymatgen(atom_pos, atom_type,
                                               grid_name, space_group)
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
-        #sampling random samples by space group
-        idx = self.balance_sampling(num_Rand, space_group)
+        #shuffle samples
+        idx = np.arange(len(grid_name))
+        random.shuffle(idx)
+        idx = idx[:num_Rand]
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
@@ -471,16 +482,24 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         sample = []
         for i, cluster in zip(assign, clusters):
             sample += random.sample(cluster, i)
-        random.shuffle(sample)
         return sample
     
     def get_latt_num(self):
         """
         count number of grids
+        
+        Returns
+        ----------
+        num [int, 0d]: number of grids
         """
-        command = f'ls -l {grid_path} | grep latt_vec.bin | wc -l'
-        num = os.popen(command)
-        return int(num.read())
+        file = os.listdir(grid_path)
+        grids = [i for i in file if i.endswith('latt_vec.bin')]
+        if len(grids) == 0:
+            num = 0
+        else:
+            grid = sorted(grids)[-1]
+            num = int(grid.split('_')[0]) + 1
+        return num
     
     def get_atom_number(self, stru):
         """

@@ -1,5 +1,5 @@
 #Grid
-cutoff = 10
+cutoff = 8
 num_min_atom = 5
 num_max_atom = 10
 grain = [.4, .4, 1.2]
@@ -44,8 +44,8 @@ T = .1
 decay = .99
 steps = 300
 num_jump = 2
-num_path_min = 80
-num_path_rand = 80
+num_path_min = 100
+num_path_rand = 100
 min_bond = 1.2
 
 #Sample Select
