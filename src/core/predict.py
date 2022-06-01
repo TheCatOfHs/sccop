@@ -518,7 +518,7 @@ class PPModel(ListRWTools):
 
 class Normalizer():
     #Normalize a Tensor and restore it later
-    def __init__(self, tensor, num_database=100):
+    def __init__(self, tensor, num_database=2000):
         self.num_old = num_database
         self.num_add = len(tensor)
         if self.num_add == 0:

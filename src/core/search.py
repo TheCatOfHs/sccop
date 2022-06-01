@@ -478,28 +478,30 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         for _ in range(num_jump):
             #generate actions
             idx = np.random.randint(0, atom_num)
+            action_no = [-1]
             action_mv = self.action_filter(idx, new_pos, symm)
             action_ex = self.exchange_action(idx, type, symm)
-            mask_ex = [-1 for _ in action_ex]
-            actions = np.concatenate((action_mv, mask_ex))
-            #exchange atoms or move atom
-            if len(actions) > 0:
-                actions = np.array(actions, dtype=int)
-                point = np.random.choice(actions)
-                if point == -1:
-                    action_num = len(action_ex)
-                    idx = np.random.randint(0, action_num)
-                    idx_1, idx_2 = action_ex[idx]
-                    new_pos[idx_1], new_pos[idx_2] = \
-                        new_pos[idx_2], new_pos[idx_1]
-                else:
-                    check_pos = new_pos.copy()
-                    check_pos[idx] = point
-                    #check distance of new symmetry atoms
-                    nbr_dis = self.get_nbr_dis(check_pos, self.grid_idx, self.grid_dis)
-                    flag = self.near(nbr_dis)
-                    if flag:
-                        new_pos = check_pos
+            mask_ex = [-2 for _ in action_ex]
+            actions = np.concatenate((action_no, action_mv, mask_ex))
+            #keep or exchange atoms or move atom
+            actions = np.array(actions, dtype=int)
+            point = np.random.choice(actions)
+            if point == -1:
+                new_pos = new_pos
+            if point == -2:
+                action_num = len(action_ex)
+                idx = np.random.randint(0, action_num)
+                idx_1, idx_2 = action_ex[idx]
+                new_pos[idx_1], new_pos[idx_2] = \
+                    new_pos[idx_2], new_pos[idx_1]
+            if point >= 0:
+                check_pos = new_pos.copy()
+                check_pos[idx] = point
+                #check distance of new symmetry atoms
+                nbr_dis = self.get_nbr_dis(check_pos, self.grid_idx, self.grid_dis)
+                flag = self.near(nbr_dis)
+                if flag:
+                    new_pos = check_pos
         return new_pos
     
     def action_filter(self, idx, pos, symm):

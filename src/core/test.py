@@ -20,33 +20,11 @@ from core.grid_divide import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
-    strus = [1,1,2,3,4,5,6,7,1,2,3,4,9,0]
-    strus_num = len(strus)
-    strus_idx = np.arange(strus_num)
-    idx, store, delet = [], [], []
-    while True:
-        i = strus_idx[0]
-        stru_1 = strus[i]
-        for k in range(1, len(strus_idx)):
-            j = strus_idx[k]
-            stru_2 = strus[j]
-            same = stru_1==stru_2
-            if same:
-                store.append(j)
-                delet.append(k)
-        #update
-        idx += store
-        strus_idx = np.delete(strus_idx, [0]+delet)
-        store, delet = [], []
-        if len(strus_idx) == 0:
-            break
-    
-    all_idx = np.arange(strus_num)
-    idx = np.setdiff1d(all_idx, idx)
-    print(np.array(strus)[idx])
-    
-    
-    
+    stru = Structure.from_file('test/POSCAR')
+    latt = stru.lattice
+    stru = Structure(latt, stru.species, stru.frac_coords)
+    print(dir(stru))
+    print(stru.types_of_specie)
     
     
     

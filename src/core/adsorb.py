@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from functools import reduce
 from collections import Counter
 from sklearn.cluster import KMeans
-from scipy import interpolate
 from scipy.optimize import fsolve
 
 from pymatgen.core.lattice import Lattice
@@ -27,10 +26,10 @@ from core.dir_path import *
 from core.utils import *
 from core.post_process import PostProcess
 from core.search import GeoCheck
-from core.data_transfer import DeleteDuplicates
+from core.sample_select import Select
 
 
-class AdsorbSites(SSHTools, DeleteDuplicates):
+class AdsorbSites(Select):
     #Find unequal adsorbtion sites and calculate formation energy
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
@@ -55,7 +54,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
         """
         #rotate monolayer to xy plane
         self.rotate_axis(optim_strus_path, 0, repeat=2)
-        self.rotate_axis(optim_strus_path, 15)
+        self.add_vacuum(optim_strus_path, 15)
         #assign node
         poscars = os.listdir(optim_strus_path)
         poscar_num = len(poscars)
@@ -65,11 +64,11 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
             os.rename(f'{optim_strus_path}/{poscar}', file_name)
         #optimize slab
         poscars = os.listdir(optim_strus_path)
-        self.run_optimization(poscars, 3, optim_strus_path, 
+        self.run_optimization(poscars, 5, optim_strus_path, 
                               self.local_optim_strus_path, 
                               self.local_optim_strus_path,
-                              out=False, vdW=False, cover=True)
-    
+                              out=False, cover=True)
+        
     def rotate_axis(self, path, vacuum_size, repeat=1):
         """
         rotate axis to make atoms in xy plane and add vaccum layer
@@ -94,6 +93,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
                 slab = SlabGenerator(stru, miller_index=miller_index, min_slab_size=.1,
                                      min_vacuum_size=vacuum_size, center_slab=True)
                 surface = slab.get_slab()
+                surface = Structure(latt, surface.species, surface.frac_coords)
                 surface.to(filename=f'{path}/{i}', fmt='poscar')
     
     def get_miller_index(self, lattice, cart_coor, frac_coor):
@@ -154,6 +154,30 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
                 volume += np.abs(np.dot(normal, i))
         return volume
     
+    def add_vacuum(self, path, vacuum_size):
+        """
+        add vacuum layer
+        
+        Parameters
+        ----------
+        path [str, 0d]: optimized structure save path
+        vaccum_size [float, 0d]: size of vaccum layer
+        """
+        poscars = sorted(os.listdir(path))
+        for poscar in poscars:
+            #import structure
+            stru = Structure.from_file(f'{path}/{poscar}')
+            latt = stru.lattice
+            a, b, c, alpha, beta, gamma = latt.parameters
+            c = vacuum_size
+            alpha, beta = 90, 90
+            latt = Lattice.from_parameters(a=a, b=b, c=c, 
+                                           alpha=alpha,
+                                           beta=beta,
+                                           gamma=gamma)
+            stru = Structure(latt, stru.species, stru.frac_coords)
+            stru.to(filename=f'{path}/{poscar}', fmt='poscar')
+    
     def relax(self, atom, repeat):
         """
         optimize adsorbate structures
@@ -178,7 +202,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
             local_strs_path = f'{self.local_adsorb_strus_path}/{host}' 
             local_energy_path = f'{self.local_adsorb_energy_path}/{host}'
             os.mkdir(f'{adsorb_energy_path}/{host}')
-            self.run_optimization(adsorbs, 2, monitor_path, 
+            self.run_optimization(adsorbs, 3, monitor_path, 
                                   local_strs_path, local_energy_path)
             system_echo(f'adsorb structure relaxed --- {host}')
     
@@ -220,7 +244,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
     
     def run_optimization(self, poscars, times, monitor_path, 
                          local_strs_path, local_energy_path,
-                         out=True, vdW=True, cover=False):
+                         out=True, cover=False):
         """
         optimize configurations
         
@@ -232,14 +256,11 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
         local_strs_path [str, 0d]: structure path in GPU node
         local_energy_path [str, 0d]: energy path in GPU node
         out [bool, 0d]: whether copy vasp.out
-        vdW [bool, 0d]: whether add vdW modify
         cover [bool, 0d]: whether cover POSCAR
         """
-        flag_out, flag_vdW, flag_cover = 0, 0, 0
+        flag_out, flag_cover = 0, 0
         if out:
             flag_out = 1
-        if vdW:
-            flag_vdW = 1
         if cover:
             flag_cover = 1
         opt_times = ' '.join([str(i) for i in range(1, times+1)])
@@ -258,9 +279,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
                             
                             cp POSCAR POSCAR_0
                             DPT -v potcar
-                            if [ {flag_vdW} -eq 1 ]; then
-                                DPT --vdW DFT-D3
-                            fi
+                            DPT --vdW DFT-D3
                             
                             for i in {opt_times}
                             do
@@ -407,8 +426,8 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
         Parameters
         ----------
         poscar [str, 0d]: name of poscar
-        energy_single [float, 0d]: energy of simple substance
-        energy_compound [float, 0d]: energy of compound
+        single [float, 0d]: energy of simple substance
+        compound [float, 0d]: energy of compound
         
         Returns
         ----------
@@ -437,7 +456,7 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
                 energy = float(line.split()[2])
         return energy
 
-    def cluster_sites(self, max_sites=5):
+    def cluster_sites(self, max_sites=8):
         """
         cluster adsorb sites by cartesian coordinates 
         and choose the lowest energy sites as adsorb site
@@ -451,10 +470,6 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
             #cluster adsorb sites
             file = f'{adsorb_analysis_path}/{poscar}.dat'
             sites = self.import_list2d(file, str, numpy=True)
-            #delete duplicates
-            path = f'{adsorb_strus_path}/{poscar}'
-            index, _ = self.delete_same_names(path, sites[:,0])
-            sites = sites[index]
             #cluster sites
             coors = np.array(sites[:,1:3], dtype=float)
             if len(coors) < max_sites:
@@ -505,11 +520,11 @@ class AdsorbSites(SSHTools, DeleteDuplicates):
             file = f'{adsorb_analysis_path}/{poscar}{notation}.png'
             plt.savefig(file, dpi=600)
             plt.close('all')
-    
+
 
 class Arrangement(ListRWTools):
     #disperse atoms on surface as much as possible
-    def search(self, atom, host, repeat, max_sites=5, n_times=120):
+    def search(self, atom, host, repeat, max_sites=8, path_num=100):
         """
         optimize arrangement of adsorbates by SA
         
@@ -519,11 +534,11 @@ class Arrangement(ListRWTools):
         host [str, 0d]: name of host structure
         repeat [int, tuple]: size of supercell
         max_sites [int, 0d]: max equivalent adsorption sites
-        n_times [int, 0d]: times of SA. Defaults to 30.
+        path_num [int, 0d]: number of SA path
         
         Returns
         ----------
-        sites_buffer [obj, 2d]: optimal sites of different adsorbates
+        sites_buffer [obj, 3d]: optimal sites of different adsorbates
         """
         #cluster adsorb sites
         file = f'{adsorb_analysis_path}/{host}-Cluster.dat'
@@ -541,24 +556,33 @@ class Arrangement(ListRWTools):
         dis_mat = self.get_distance_matrix(sites)
         #get radiu of adsorbate atom
         self.radiu = Element(sites[0].specie).atomic_radius.real
-        #perform n times of SA
+        #perform n SA paths
         sites_buffer = []
         for i in range(1, pos_num):
             pos_buffer, value_buffer, flag_buffer = [], [], []
-            for _ in range(n_times):
+            for _ in range(path_num):
                 pos, value, flag = self.explore(i, dis_mat, site_energys, pos_seq)
                 pos_buffer.append(pos)
                 value_buffer.append(value)
                 flag_buffer.append(flag)
+            #delete duplicates
+            pos_buffer, idx = np.unique(pos_buffer, axis=0, return_index=True)
+            value_buffer = np.array(value_buffer)[idx]
+            flag_buffer = np.array(flag_buffer)[idx]
             #get optimal position
-            index = np.argmin(value_buffer)
-            flag = flag_buffer[index]
-            if flag:
-                opt_pos = pos_buffer[index]
-                opt_sites = np.array(sites)[opt_pos]
-                sites_buffer.append(opt_sites)
-            else:
+            flags, store = [], []
+            index = np.argsort(value_buffer)[:10]
+            for idx in index:
+                flag = flag_buffer[idx]
+                if flag:
+                    opt_pos = pos_buffer[idx]
+                    opt_sites = np.array(sites)[opt_pos]
+                    store.append(opt_sites)
+                    flags.append(flag)
+            if len(flags) == 0:
                 break
+            else:
+                sites_buffer.append(store)
         return sites_buffer
     
     def explore(self, number, dis_mat, site_energys, pos_seq):
@@ -832,8 +856,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 #optimize adsorb poscars
                 local_strs_path = f'{self.local_adsorb_strus_path}/{side_name}' 
                 local_energy_path = f'{self.local_adsorb_energy_path}/{side_name}'
-                self.run_optimization(poscars, 2, fill_path,
-                                      local_strs_path, local_energy_path)
+                #self.run_optimization(poscars, 3, fill_path,
+                #                      local_strs_path, local_energy_path)
             system_echo(f'adsorb structure relaxed --- {host}')
     
     def generate_poscar(self, path, atom, sites, host, repeat, side):
@@ -844,7 +868,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         ----------
         path [str, 0d]: path of filling adsorbates
         atom [int, 1d]: adsorbate atom
-        sites [obj, 2d]: optimal sites of adsorbates
+        sites [obj, 3d]: optimal sites of adsorbates
         host [str, 0d]: name of host structure
         repeat [int, tuple]: size of supercell
         side [str, 0d]: adsorb side
@@ -853,21 +877,28 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         ----------
         poscars [str, 1d]: name of poscars
         """
-        #export adsorbates poscar
         poscar_num = len(sites)
         node_assign = self.assign_node(poscar_num, order=False)
-        for i, opt_sites in enumerate(sites):
-            stru = Structure.from_file(f'{anode_strus_path}/{host}')
-            stru.make_supercell(repeat)
-            for site in opt_sites:
-                coor = site.frac_coords
-                stru.append(atom, coor)
-                if side == 'Two':
-                    coor = np.abs(np.array([0,0,1])-coor)
+        for i, comp in enumerate(sites):
+            #put adsorbates upon base structure
+            strus = []
+            for j, opt_sites in enumerate(comp):
+                stru = Structure.from_file(f'{anode_strus_path}/{host}')
+                stru.make_supercell(repeat)
+                for site in opt_sites:
+                    coor = site.frac_coords
                     stru.append(atom, coor)
-            file_name = f'{path}/{host}-Fill-{side}-{i+1:02.0f}-{node_assign[i]}'
-            stru.to(filename=file_name, fmt='poscar')
-        poscars = os.listdir(f'{path}')
+                    if side == 'Two':
+                        coor = np.abs(np.array([0,0,1])-coor)
+                        stru.append(atom, coor)
+                strus.append(stru)
+            #export poscars
+            index = self.delete_same_strus(strus)
+            for j, idx in enumerate(index):
+                if j < 5:
+                    file_name = f'{path}/{host}-{side}-{i+1:02.0f}-{j}-{node_assign[i]}'
+                    strus[idx].to(filename=file_name, fmt='poscar')
+        poscars = os.listdir(path)
         return poscars
     
     def analysis(self, single, repeat, sides):
@@ -945,6 +976,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         #
         capacity = np.array(capacity, dtype=float)
         ocv = np.array(ocv, dtype=float)
+        '''
         #
         x = np.linspace(capacity[0], capacity[-1], 100)
         func = interpolate.interp1d(capacity, ocv, kind='slinear')
@@ -953,9 +985,10 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         zero = fsolve(func, x[index], maxfev=1000)
         #
         print(zero)
+        '''
         plt.plot(capacity, ocv, marker='o')
         plt.hlines(0, 0, capacity[-1], color='r')
-        plt.plot(zero, 0., marker='*', color='g', ms=15)
+        #plt.plot(zero, 0., marker='*', color='g', ms=15)
         plt.xlabel('Capacity (mAh/g)', fontsize=18)
         plt.ylabel('Open Circuit Voltage (V)', fontsize=18)
         plt.savefig(file, dpi=500)
@@ -1083,7 +1116,7 @@ class NEBSolver(MultiAdsorbSites):
         files = os.listdir(path)
         pattern = 'POSCAR-Site-[\w]*-[\w]*'
         near_sites = [i for i in files if re.match(pattern, i)]
-        self.run_optimization(near_sites, 2, path, 
+        self.run_optimization(near_sites, 3, path, 
                               local_sites_path, local_sites_path,
                               out=False)
         files = os.listdir(path)
@@ -1270,8 +1303,7 @@ if __name__ == '__main__':
     adsorb = AdsorbSites()
     #adsorb.get_slab()
     #adsorb.relax(atom, repeat)
-    #adsorb.sites_analysis(-1.31116, repeat)
-    #adsorb.sites_analysis(-2.07845725, repeat)
+    #adsorb.sites_analysis(-1.3113, repeat)
     #adsorb.cluster_sites()
     #adsorb.sites_plot(repeat)
     #adsorb.sites_plot(repeat, cluster=False)
@@ -1281,9 +1313,10 @@ if __name__ == '__main__':
     #sites = [[0.25, 0., 0.597], [0.5, 0., 0.597], [.75, 0., 0.597]]
     #neb.self_define_calculate(0, atom, 'POSCAR-04-131', sites, repeat)
     
-    #multi_adsorb = MultiAdsorbSites()
-    #multi_adsorb.relax(atom, repeat, sides)
-    #multi_adsorb.analysis(-1.31116, repeat, sides)
-    #multi_adsorb.analysis(-2.07845725, repeat, sides)
-    thermal = ThermalConductivity()
-    thermal.calculate()
+    multi_adsorb = MultiAdsorbSites()
+    multi_adsorb.relax(atom, repeat, sides)
+    #multi_adsorb.analysis(-1.3113, repeat, sides)
+    
+    
+    #thermal = ThermalConductivity()
+    #thermal.calculate()

@@ -2,7 +2,7 @@
 cutoff = 8
 num_min_atom = 5
 num_max_atom = 10
-grain = [.4, .4, 1.2]
+grain = [.5, .5, 1.2]
 plane_upper = [100, 100, 1]
 
 #Dimension
@@ -30,7 +30,7 @@ len_lower = 4
 len_upper = 6
 ang_mu = 90
 ang_sigma = 10
-system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
+system_weight = [0, 0, 1/3, 1/3, 0, 1/3, 0]
 
 #Training
 train_batchsize = 128

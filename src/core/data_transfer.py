@@ -695,6 +695,36 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.setdiff1d(all_idx, idx)
         return idx
     
+    def delete_same_strus(self, strus):
+        """
+        delete same structures and retain structure with lower energy
+        
+        Parameters
+        ----------
+        strus [obj, 1d]: structure objects in pymatgen
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of different structures
+        """
+        strus_num = len(strus)
+        idx = []
+        #compare structure by pymatgen
+        for i in range(strus_num):
+            stru_1 = strus[i]
+            for j in range(i+1, strus_num):
+                stru_2 = strus[j]
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    idx.append(j)
+                else:
+                    break
+        all_idx = np.arange(strus_num)
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
+    
     def filter_samples(self, idx, atom_pos, atom_type,
                        atom_symm, grid_name, space_group):
         """
@@ -735,7 +765,7 @@ if __name__ == "__main__":
     #
     mul = MultiGridTransfer()
     rw = ListRWTools()
-    file = '003-135-136'
+    file = '003-018-131'
     atom_pos = rw.import_list2d(f'test/file/pos-{file}.dat', int)
     atom_type = rw.import_list2d(f'test/file/type-{file}.dat', int)
     atom_symm = rw.import_list2d(f'test/file/symm-{file}.dat', int)

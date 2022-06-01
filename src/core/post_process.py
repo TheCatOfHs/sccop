@@ -1,6 +1,5 @@
 import os, sys
 import time
-import numpy as np
 
 from pymatgen.core.structure import Structure
 from pymatgen.symmetry.kpath import KPathSeek
@@ -29,6 +28,8 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
             os.mkdir('data/post')
             os.mkdir(KPOINTS_file)
             os.mkdir(bandconf_file)
+        if not os.path.exists(optim_vasp_path):
+            os.mkdir(optim_vasp_path)
         if not os.path.exists(dielectric_path):
             os.mkdir(dielectric_path)
             os.mkdir(elastic_path)
