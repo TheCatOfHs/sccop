@@ -8,6 +8,7 @@
 
 import numpy as np 
 from os import path
+from pymatgen.core import Lattice, Structure, Molecule
 
 def read_born(file_name):
     if path.exists(file_name) == False:
@@ -28,15 +29,39 @@ def read_POSCAR():
         exit(0)
     with open('POSCAR', 'r') as obj:
         poscar = obj.readlines()
+    
+    
     # lattice contants
-    lattice = ['\t'.join(line.split()) for line in poscar[2:5]]
+    new_z, new_z_positions = get_new_z_positions()
+    lattice = np.array([[float(item) for item in line.split() ]for line in poscar[2:5]])
+    lattice[2,2] = new_z
+    lattice = [''.join([f'{item:18.10f}' for item in line]) for line in lattice]
     # the name of all atoms
     atom_name = poscar[5].split()
     # the number of all atoms
     atom_num = np.array([int(item) for item in poscar[6].split()])
     # the position of each atom
-    position = ['\t'.join(line.split()[0:3]) for line in poscar[8:8+np.sum(atom_num)]]
+    position = np.array([[float(item) for item in line.split()[0:3]] for line in poscar[8:8+np.sum(atom_num)]])
+    position[:,2] = new_z_positions
+    position = [''.join([f' {item:18.10f}' for item in line]) for line in position]
     return (lattice, atom_name, atom_num, position)
+
+def get_new_z_positions():
+    # read POSCAR with pymatgen
+    structure = Structure.from_file('POSCAR')
+    # get the ionic radius
+    max_radius = 10*np.max([ele.average_ionic_radius.real for ele in structure.species])
+    coordss = np.array([atom.coords[2] for atom in structure])
+    thickness = np.max(coordss) - np.min(coordss)
+    # new z lattice is equal to the sum of vdw radius and thickness of structure
+    new_z = max_radius + thickness
+    lat = structure.lattice
+    pri_z = lat.c
+    delta_z = np.mean(coordss) - new_z*0.5
+    # new z positions
+    coordss_new = (coordss - delta_z)/new_z
+    return new_z, coordss_new
+    
 
 def read_diele(file_name):
     if path.exists(file_name) == False:
