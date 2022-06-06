@@ -119,7 +119,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            phonopy -d --dim="4 4 1"
+                            phonopy -d --dim="5 5 1"
                             n=`ls | grep POSCAR- | wc -l`
                             for i in `seq -f%03g 1 $n`
                             do
@@ -395,7 +395,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                     band = band if i == len(phonon_points)-1 else band + ','
                 band_conf = [[['ATOM_NAME'], ['DIM'], ['BAND'], ['BAND_LABEL'], ['FORCE_CONSTANTS'], ['EIGENVECTORS']], 
                                 [[' = '] for i in range(6)], 
-                                [['XXX'], ['4 4 1'], [band], [band_label], ['write'], ['.TRUE.']]] # output the file by columns
+                                [['XXX'], ['5 5 1'], [band], [band_label], ['write'], ['.TRUE.']]] # output the file by columns
                 self.write_list2d_columns(f'{bandconf_file}/band.conf-{poscar}', band_conf, ['{0}', '{0}', '{0}'])
             else:
                 system_echo(' Error: illegal parameter')
@@ -434,5 +434,6 @@ if __name__ == '__main__':
     #post.run_thermal_conductivity()
     #post.add_symmetry_to_structure('test/initial_strs_3')
     #post.rotate_axis('test/initial_strs_3')
-    post.get_k_points(['POSCAR'], 'phonon', dimension=2)
+    poscars = os.listdir('data/poscar/optim_strus')
+    post.get_k_points(poscars, 'phonon', dimension=2)
     

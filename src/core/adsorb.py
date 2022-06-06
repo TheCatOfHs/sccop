@@ -7,7 +7,6 @@ import matplotlib.pyplot as plt
 from functools import reduce
 from collections import Counter
 from sklearn.cluster import KMeans
-from scipy.optimize import fsolve
 
 from pymatgen.core.lattice import Lattice
 from pymatgen.core.periodic_table import Element
@@ -40,10 +39,7 @@ class AdsorbSites(Select):
         self.local_adsorb_strus_path = f'/local/ccop/{adsorb_strus_path}'
         self.local_adsorb_energy_path = f'/local/ccop/{adsorb_energy_path}'
         self.post = PostProcess()
-        if not os.path.exists(adsorb_path):
-            os.mkdir(adsorb_path)
-            os.mkdir(anode_strus_path)
-            os.mkdir(anode_energy_path)
+        if not os.path.exists(adsorb_strus_path):
             os.mkdir(adsorb_strus_path)
             os.mkdir(adsorb_energy_path)
             os.mkdir(adsorb_analysis_path)
@@ -52,23 +48,10 @@ class AdsorbSites(Select):
         """
         generate slab structure
         """
-        #rotate monolayer to xy plane
+        #reorient lattice to xy plane
         self.rotate_axis(optim_strus_path, 0, repeat=2)
         self.add_vacuum(optim_strus_path, 15)
-        #assign node
-        poscars = os.listdir(optim_strus_path)
-        poscar_num = len(poscars)
-        assign = self.assign_node(poscar_num)
-        for i, poscar in enumerate(poscars):
-            file_name = f'{optim_strus_path}/{poscar}-{assign[i]}'
-            os.rename(f'{optim_strus_path}/{poscar}', file_name)
-        #optimize slab
-        poscars = os.listdir(optim_strus_path)
-        self.run_optimization(poscars, 5, optim_strus_path, 
-                              self.local_optim_strus_path, 
-                              self.local_optim_strus_path,
-                              out=False, cover=True)
-        
+    
     def rotate_axis(self, path, vacuum_size, repeat=1):
         """
         rotate axis to make atoms in xy plane and add vaccum layer
@@ -93,7 +76,6 @@ class AdsorbSites(Select):
                 slab = SlabGenerator(stru, miller_index=miller_index, min_slab_size=.1,
                                      min_vacuum_size=vacuum_size, center_slab=True)
                 surface = slab.get_slab()
-                surface = Structure(latt, surface.species, surface.frac_coords)
                 surface.to(filename=f'{path}/{i}', fmt='poscar')
     
     def get_miller_index(self, lattice, cart_coor, frac_coor):
@@ -178,7 +160,7 @@ class AdsorbSites(Select):
             stru = Structure(latt, stru.species, stru.frac_coords)
             stru.to(filename=f'{path}/{poscar}', fmt='poscar')
     
-    def relax(self, atom, repeat):
+    def get_adsorption_sites(self, atom, repeat):
         """
         optimize adsorbate structures
         
@@ -187,24 +169,12 @@ class AdsorbSites(Select):
         atom [int, 1d]: adsorbate atom
         repeat [int, tuple]: size of supercell
         """
-        #energy of host structure
-        hosts = sorted(os.listdir(anode_strus_path))
-        self.run_SinglePointEnergy(hosts, anode_strus_path,
-                                   self.local_anode_strus_path, 
-                                   self.local_anode_energy_path)
         #find stable adsorption sites
+        hosts = sorted(os.listdir(anode_strus_path))
         for host in hosts:
             #generate adsorb poscars
-            adsorbs = self.generate_poscar(host, atom, repeat)
+            self.generate_poscar(host, atom, repeat)
             system_echo(f'adsorb poscar generate --- {host}')
-            #optimize adsorb poscars
-            monitor_path = f'{adsorb_strus_path}/{host}'
-            local_strs_path = f'{self.local_adsorb_strus_path}/{host}' 
-            local_energy_path = f'{self.local_adsorb_energy_path}/{host}'
-            os.mkdir(f'{adsorb_energy_path}/{host}')
-            self.run_optimization(adsorbs, 3, monitor_path, 
-                                  local_strs_path, local_energy_path)
-            system_echo(f'adsorb structure relaxed --- {host}')
     
     def generate_poscar(self, host, atom, repeat):
         """
@@ -229,18 +199,11 @@ class AdsorbSites(Select):
         asf = AdsorbateSiteFinder(slab)
         adsorbate = Molecule([atom], [[0, 0, 0]])
         ads_strus_site = asf.generate_adsorption_structures(adsorbate, repeat=repeat)
-        #get name of adsorb job
-        site_num = len(ads_strus_site)
-        node_assign = self.assign_node(site_num)
-        adsorb_names = []
         #adsorb from one side
         os.mkdir(f'{adsorb_strus_path}/{host}')
         for i, poscar in enumerate(ads_strus_site):
-            node = node_assign[i]
-            name = f'{host}-adsorb-{i:03.0f}-{node}'
+            name = f'{host}-adsorb-{i:03.0f}'
             poscar.to(filename=f'{adsorb_strus_path}/{host}/{name}', fmt='poscar')
-            adsorb_names.append(name)
-        return adsorb_names
     
     def run_optimization(self, poscars, times, monitor_path, 
                          local_strs_path, local_energy_path,
@@ -388,12 +351,17 @@ class AdsorbSites(Select):
         repeat [int, tuple]: size of supercell 
         """
         ratio = reduce(lambda x, y: x*y, repeat)
-        poscars = sorted(os.listdir(adsorb_energy_path))
-        for i in poscars:
+        hosts = os.listdir(adsorb_energy_path)
+        #get adsorption energy of each site
+        for i in hosts:
             compound = ratio*self.get_energy(f'{anode_energy_path}/out-{i}')
             sites = self.sites_coor(i)
             form = self.formation_energy(i, single, compound)
             result = np.concatenate((sites, form), axis=1)
+            #remove same sites
+            idx = self.remove_same_sites(i, repeat)
+            result = result[idx]
+            #export site file
             self.write_list2d(f'{adsorb_analysis_path}/{i}.dat', result)
             system_echo(f'adsorb sites analysis finished: {i}')
     
@@ -409,8 +377,7 @@ class AdsorbSites(Select):
         ----------
         sites [float, 2d, np]: position of adsorbates
         """
-        files = os.listdir(f'{adsorb_strus_path}/{poscar}')
-        poscars = sorted([i for i in files if i.endswith('Relax')])
+        poscars = os.listdir(f'{adsorb_strus_path}/{poscar}')
         #get stable adsorption sites
         names, sites = [], []
         for i in poscars:
@@ -456,6 +423,31 @@ class AdsorbSites(Select):
                 energy = float(line.split()[2])
         return energy
 
+    def remove_same_sites(self, host, repeat):
+        """
+        remove same adsorption sites
+        
+        Parameters
+        ----------
+        host [str, 0d]: name of host structure
+        repeat [int, tuple]: size of supercell 
+        
+        Returns
+        ----------
+        idx [int, 1d]: index of unique structrues
+        """
+        strus = []
+        poscars = sorted(os.listdir(f'{adsorb_strus_path}/{host}'))
+        for poscar in poscars:
+            host_stru = Structure.from_file(f'{anode_strus_path}/{host}')
+            host_stru.make_supercell(repeat)
+            stru = Structure.from_file(f'{adsorb_strus_path}/{host}/{poscar}')
+            coor = stru.frac_coords[-1]
+            host_stru.append(1, coor)
+            strus.append(host_stru)
+        idx = self.delete_same_strus(strus)
+        return idx
+    
     def cluster_sites(self, max_sites=8):
         """
         cluster adsorb sites by cartesian coordinates 
@@ -469,7 +461,7 @@ class AdsorbSites(Select):
         for poscar in poscars:
             #cluster adsorb sites
             file = f'{adsorb_analysis_path}/{poscar}.dat'
-            sites = self.import_list2d(file, str, numpy=True)
+            sites = self.import_list2d(file, str, numpy=True)         
             #cluster sites
             coors = np.array(sites[:,1:3], dtype=float)
             if len(coors) < max_sites:
@@ -524,7 +516,7 @@ class AdsorbSites(Select):
 
 class Arrangement(ListRWTools):
     #disperse atoms on surface as much as possible
-    def search(self, atom, host, repeat, max_sites=8, path_num=100):
+    def search(self, atom, host, repeat, max_sites=8, path_num=150):
         """
         optimize arrangement of adsorbates by SA
         
@@ -546,55 +538,54 @@ class Arrangement(ListRWTools):
         if sites_num > max_sites:
             sites_num = max_sites
         #get PeriodicSites and distance matrix
-        sites, site_energys = [], []
+        sites, energys = [], []
         for i in range(sites_num):
             equal_sites = self.find_equal_sites(atom, host, repeat, order=i)
-            sites += equal_sites[0]
-            site_energys += equal_sites[1]
-        pos_num = len(sites)
-        pos_seq = [i for i in range(pos_num)]
+            sites.append(equal_sites[0])
+            energys.append(equal_sites[1])
+        sites, energys = self.compare_periodic_sites(sites, energys)
         dis_mat = self.get_distance_matrix(sites)
+        #export grid
+        host_stru = Structure.from_file(f'{anode_strus_path}/{host}')
+        host_stru.make_supercell(repeat)
+        for i in sites:
+            host_stru.append(1, i.frac_coords)
+        host_stru.to(filename=f'{adsorb_strus_path}/{host}-grid', fmt='poscar')
         #get radiu of adsorbate atom
-        self.radiu = Element(sites[0].specie).atomic_radius.real
+        self.radiu = Element(sites[0].specie).average_ionic_radius.real
         #perform n SA paths
         sites_buffer = []
-        for i in range(1, pos_num):
-            pos_buffer, value_buffer, flag_buffer = [], [], []
+        for i in range(1, len(sites)):
+            pos_buffer, value_buffer = [], []
             for _ in range(path_num):
-                pos, value, flag = self.explore(i, dis_mat, site_energys, pos_seq)
-                pos_buffer.append(pos)
-                value_buffer.append(value)
-                flag_buffer.append(flag)
+                pos, value, flag = self.explore(i, dis_mat, energys)
+                if flag:
+                    pos_buffer.append(pos)
+                    value_buffer.append(value)
+            if len(pos_buffer) == 0:
+                break
             #delete duplicates
             pos_buffer, idx = np.unique(pos_buffer, axis=0, return_index=True)
             value_buffer = np.array(value_buffer)[idx]
-            flag_buffer = np.array(flag_buffer)[idx]
             #get optimal position
-            flags, store = [], []
+            store = []
             index = np.argsort(value_buffer)[:10]
             for idx in index:
-                flag = flag_buffer[idx]
-                if flag:
-                    opt_pos = pos_buffer[idx]
-                    opt_sites = np.array(sites)[opt_pos]
-                    store.append(opt_sites)
-                    flags.append(flag)
-            if len(flags) == 0:
-                break
-            else:
-                sites_buffer.append(store)
+                opt_pos = pos_buffer[idx]
+                opt_sites = sites[opt_pos]
+                store.append(opt_sites)
+            sites_buffer.append(store)
         return sites_buffer
     
-    def explore(self, number, dis_mat, site_energys, pos_seq):
+    def explore(self, num, dis_mat, energys):
         """
         simulated annealing
 
         Parameters
         ----------
-        number [int, 0d]: number of adsorbates
-        dis_mat [float, 2d]: periodic distance matrix
-        site_energys [float, 1d]: energy of each site
-        pos_seq [int, 1d]: position of sites
+        num [int, 0d]: number of adsorbates
+        dis_mat [float, 2d, np]: periodic distance matrix
+        energys [float, 1d, np]: energy of each site
         
         Returns
         ----------
@@ -603,50 +594,121 @@ class Arrangement(ListRWTools):
         flag [bool, 0d]: whether satisfy distance constrain
         """
         self.T = T
-        pos_1 = random.sample(pos_seq, number)
-        dis_1, flag_1 = self.total_distance(pos_1, dis_mat)
-        energy_1 = self.total_energy(pos_1, site_energys)
-        value_1 = -0.01*dis_1 + energy_1
-        pos_buffer, value_buffer = [], []
-        pos_buffer.append(pos_1)
-        value_buffer.append(value_1)
-        #SA optimize
-        for _ in range(steps):
-            pos_2 = self.step(pos_1, pos_seq)
-            dis_2, flag_2 = self.total_distance(pos_2, dis_mat)
-            energy_2 = self.total_energy(pos_2, site_energys)
-            value_2 = -0.01*dis_2 + energy_2
-            if self.metropolis(value_1, value_2, self.T):
-                pos_1 = pos_2
-                value_1 = value_2
-                flag_1 = flag_2
-                pos_buffer.append(pos_1)
-                value_buffer.append(value_1)
-            self.T *= decay
-        #get optimal position
-        index = np.argmin(value_buffer)
-        value = value_buffer[index]
-        opt_pos = pos_buffer[index]
-        return sorted(opt_pos), value, flag_1
+        pos_1, flag = self.initial_pos(num, dis_mat)
+        if flag:
+            dis_1 = self.total_distance(pos_1, dis_mat)
+            energy_1 = self.total_energy(pos_1, energys)
+            value_1 = -0.03*dis_1 + energy_1
+            pos_buffer, value_buffer = [], []
+            pos_buffer.append(pos_1)
+            value_buffer.append(value_1)
+            #SA optimize
+            for _ in range(steps):
+                pos_2 = self.step(pos_1, dis_mat)
+                dis_2 = self.total_distance(pos_2, dis_mat)
+                energy_2 = self.total_energy(pos_2, energys)
+                value_2 = -0.03*dis_2 + energy_2
+                if self.metropolis(value_1, value_2, self.T):
+                    pos_1 = pos_2
+                    value_1 = value_2
+                    pos_buffer.append(pos_1)
+                    value_buffer.append(value_1)
+                self.T *= decay
+            #get optimal position
+            idx = np.argmin(value_buffer)
+            value = value_buffer[idx]
+            opt_pos = pos_buffer[idx]
+        else:
+            opt_pos, value = [], []
+        return sorted(opt_pos), value, flag
     
-    def step(self, pos, pos_seq):
+    def initial_pos(self, num, dis_mat, trys=10):
+        """
+        initial positions with different adsorbates
+        
+        Parameters
+        ----------
+        num [int, 0d]: number of adsorbates
+        dis_mat [float, 2d, np]: periodic distance matrix 
+        
+        Returns
+        ----------
+        pos [int, 1d]: position of atoms
+        flag [bool, 0d]: whether get right initial position
+        """
+        flag = False
+        counter = 0
+        while counter < trys:
+            pos = []
+            for _ in range(num):
+                allow = self.action_filter(-1, pos, dis_mat)
+                if len(allow) == 0:
+                    break
+                else:
+                    pos.append(np.random.choice(allow))
+            if len(pos) == num:
+                flag = True
+                break
+            counter += 1
+        return pos, flag
+    
+    def action_filter(self, idx, pos, dis_mat):
+        """
+        distance between atoms should bigger than min_bond
+        
+        Parameters
+        ----------
+        idx [int, 0d]: index of move atom in position
+        pos [int, 1d]: position of atoms
+        dis_mat [float, 2d, np]: periodic distance matrix 
+        
+        Returns
+        ----------
+        allow [int, 1d, np]: allowed actions
+        """
+        #delete select atom
+        if idx >= 0:
+            pos = np.delete(pos, idx, axis=0)
+        #get allowable positions
+        if len(pos) > 0:
+            nbr_dis = dis_mat[pos]
+            allow, store = [], []
+            for item in nbr_dis:
+                for i, dis in enumerate(item):
+                    if dis > 2*self.radiu:
+                        store.append(i) 
+                allow.append(store)
+                store = []
+            allow = reduce(np.intersect1d, allow)
+        if len(pos) == 0:
+            all = np.arange(len(dis_mat))
+            allow = np.setdiff1d(all, pos)
+        return allow
+    
+    def step(self, pos, dis_mat):
         """
         move one atom to vacancy
         
         Parameters
         ----------
         pos [int, 1d]: inital position of atom
-        pos_seq [int, 1d]: sequence of positions
+        dis_mat [float, 2d, np]: periodic distance matrix 
         
         Returns
         ----------
         new_pos [int, 1d]: position of atom after 1 SA step
         """
-        vacancy = np.setdiff1d(pos_seq, pos)
         new_pos = pos.copy()
-        idx_1 = np.random.randint(len(new_pos))
-        idx_2 = np.random.randint(len(vacancy))
-        new_pos[idx_1] = vacancy[idx_2]
+        idx = np.random.randint(len(new_pos))
+        action_no = [-1]
+        action_ex = self.action_filter(idx, new_pos, dis_mat)
+        actions = np.concatenate((action_no, action_ex))
+        #move atom
+        point = np.random.choice(actions)
+        if point == -1:
+            new_pos = new_pos
+        else:
+            new_pos[idx] = point
         return new_pos
     
     def metropolis(self, value_1, value_2, T):
@@ -669,20 +731,20 @@ class Arrangement(ListRWTools):
         else:
             return False
     
-    def total_energy(self, pos, site_energys):
+    def total_energy(self, pos, energys):
         """
         sum up energy of sites
         
         Parameters
         ----------
         pos [int, 1d]: occupied sites
-        site_energys [float, 1d]: energy of each sites
+        energys [float, 1d, np]: energy of each sites
 
         Returns
         ----------
         energy [float, 0d]: total energy 
         """
-        energy = np.array(site_energys)[pos].sum()
+        energy = energys[pos].sum()
         return energy
     
     def total_distance(self, pos, dis_mat):
@@ -692,24 +754,18 @@ class Arrangement(ListRWTools):
         Parameters
         ----------
         pos [int, 1d]: position of adsorbates
-        dis_mat [float, 2d]: periodic distance matrix 
+        dis_mat [float, 2d, np]: periodic distance matrix 
 
         Returns
         ----------
         total_dis [float, 0d]: total inner distance
-        flag [bool, 0d]: inner distance should bigger than atom radiu
         """
-        flag = True
         total_dis = 0.
         point_num = len(pos)
         for i in range(point_num):
             for j in range(i+1, point_num):
-                dis = dis_mat[pos[i], pos[j]]
-                if dis < self.radiu:
-                     dis = -100
-                     flag = False
-                total_dis += dis
-        return total_dis, flag
+                total_dis += dis_mat[pos[i], pos[j]]
+        return total_dis
     
     def get_distance_matrix(self, sites):
         """
@@ -721,7 +777,7 @@ class Arrangement(ListRWTools):
 
         Returns
         ----------
-        dis_mat [float, 2d]: periodic distance matrix 
+        dis_mat [float, 2d, np]: periodic distance matrix 
         """
         #get distance matrix
         sites_num = len(sites)
@@ -749,7 +805,7 @@ class Arrangement(ListRWTools):
         Returns
         ----------
         sites [obj, 1d]: PeriodicSite object 
-        sites_energy [float, 1d]: adsorption energy of each site
+        energys [float, 1d]: adsorption energy of each site
         """
         #get equivalent sites
         dat = f'{adsorb_analysis_path}/{host}-Cluster.dat'
@@ -758,8 +814,8 @@ class Arrangement(ListRWTools):
         energy = cluster_sites[:,-1][order]
         sites = self.symmetry_sites(atom, host, poscar, repeat)
         #sites energy
-        sites_energy = [float(energy) for _ in range(len(sites))]
-        return sites, sites_energy
+        energys = [float(energy) for _ in range(len(sites))]
+        return sites, energys
     
     def symmetry_sites(self, atom, host, poscar, repeat):
         """
@@ -800,11 +856,11 @@ class Arrangement(ListRWTools):
         
         Parameters
         ----------
-        sites [obj, 2d]: periodic sites
+        sites [obj, 1d]: periodic sites
 
         Returns
         ----------
-        sites [obj, 2d]: unique periodic sites
+        sites [obj, 1d]: unique periodic sites
         """
         sites_num = len(sites)
         for i in range(sites_num):
@@ -821,6 +877,41 @@ class Arrangement(ListRWTools):
                 break
         return sites.tolist()
     
+    def compare_periodic_sites(self, sites, energys):
+        """
+        get unequivalent adsorption sites by comparsion
+        
+        Parameters
+        -----------
+        sites [obj, 2d]: periodic sites
+        energys [float, 2d]: adsorption energy of each site
+
+        Returns
+        ----------
+        new_sites [obj, 1d, np]: periodic sites
+        new_energys [float, 1d, np]: adsorption energy of each site
+        """
+        equal_num = len(sites)
+        idx = []
+        for i in range(equal_num):
+            site_1 = sites[i][0]
+            for j in range(i+1, equal_num):
+                site_num = len(sites[j])
+                for k in range(site_num):
+                    site_2 = sites[j][k]
+                    dis = site_1.distance(site_2)
+                    if dis < .5:
+                        idx.append(i)
+                        break
+        #get unique adsorption sites
+        all_idx = [i for i in range(equal_num)]
+        idx = np.setdiff1d(all_idx, idx)
+        new_sites, new_energys = [], []
+        for i in idx:
+            new_sites += sites[i]
+            new_energys += energys[i]
+        return np.array(new_sites), np.array(new_energys)
+
 
 class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
     #calculate coverage of host structure
@@ -851,14 +942,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 if not os.path.exists(energy_path):
                     os.mkdir(energy_path)
                 system_echo(f'adsorb poscar generate --- {host}')
-                poscars = self.generate_poscar(fill_path, atom, sites,
-                                               host, repeat, side)
-                #optimize adsorb poscars
-                local_strs_path = f'{self.local_adsorb_strus_path}/{side_name}' 
-                local_energy_path = f'{self.local_adsorb_energy_path}/{side_name}'
-                #self.run_optimization(poscars, 3, fill_path,
-                #                      local_strs_path, local_energy_path)
-            system_echo(f'adsorb structure relaxed --- {host}')
+                self.generate_poscar(fill_path, atom, sites,
+                                     host, repeat, side)
     
     def generate_poscar(self, path, atom, sites, host, repeat, side):
         """
@@ -877,8 +962,6 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         ----------
         poscars [str, 1d]: name of poscars
         """
-        poscar_num = len(sites)
-        node_assign = self.assign_node(poscar_num, order=False)
         for i, comp in enumerate(sites):
             #put adsorbates upon base structure
             strus = []
@@ -895,8 +978,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
             #export poscars
             index = self.delete_same_strus(strus)
             for j, idx in enumerate(index):
-                if j < 5:
-                    file_name = f'{path}/{host}-{side}-{i+1:02.0f}-{j}-{node_assign[i]}'
+                if j < 3:
+                    file_name = f'{path}/{host}-{side}-{i+1:02.0f}-{j}'
                     strus[idx].to(filename=file_name, fmt='poscar')
         poscars = os.listdir(path)
         return poscars
@@ -916,79 +999,129 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         for host in hosts:
             for side in sides:
                 compound = ratio*self.get_energy(f'{anode_energy_path}/out-{host}')
-                result = self.get_result(side, host, single, compound, repeat)
-                self.write_list2d(f'{adsorb_analysis_path}/{host}-{side}-Coverage.dat', result)
-                capacity, ocv = np.transpose(result[:,-2:])
+                prop = self.get_property(side, host, single, compound, repeat)
+                self.write_list2d(f'{adsorb_analysis_path}/{host}-{side}-Coverage.dat', prop)
+                capacity, ocv = np.transpose(prop[:,-2:])
                 self.plot_ocv(f'{adsorb_analysis_path}/{host}-{side}-OCV.png', capacity, ocv)
                 system_echo(f'adsorb sites analysis finished: {host}')
-    
-    def get_result(self, side, host, single, compound, repeat):
-        """
         
+    def get_property(self, side, host, single, compound, repeat):
+        """
+        calculate specific capacity and open circuit voltage
         
         Parameters
         ----------
         side [str, 0d]: adsorb side
         host [str, 0d]: name of host structure
         single [float, 0d]: energy of simple substance
-        compound [float, 0d]:
+        compound [float, 0d]: energy of compound
         repeat [int, tuple]: size of supercell
         
         Returns
         ----------
-        result []:
+        prop [np, 2d]: array of properties
         """
-        #
+        #get stablest adsorption structures
         side_name = f'{host}-Fill-{side}'
-        out_path = f'{adsorb_energy_path}/{side_name}'
-        outs = sorted(os.listdir(out_path))
-        #
-        strs_path = f'{adsorb_strus_path}/{side_name}'
-        poscars = os.listdir(strs_path)
-        poscars = sorted([i for i in poscars if i.endswith('Relax')])
-        coplane = self.check_coplane(strs_path, poscars)
-        #
-        atom_nums, energys = [], []
-        for i, out in enumerate(outs):
-            if coplane[i]:
-                atom_num = out.split('-')[-2]
-                atom_num = float(atom_num)
-                atom_nums.append(atom_num)
-                energy = self.get_energy(f'{out_path}/{out}')
-                energys.append(energy)
-        #
+        strus_path = f'{adsorb_strus_path}/{side_name}'
+        energy_path = f'{adsorb_energy_path}/{side_name}'
+        poscars, energys, atom_num = self.read_dat(energy_path)
+        coplane = self.check_coplane(strus_path, poscars)
+        poscars, energys, atom_num = self.filter(coplane, poscars, energys, atom_num)
+        idx = self.select_min_energy(energys, atom_num)
+        poscars, energys, atom_num = self.filter(idx, poscars, energys, atom_num)
+        #get open circuit voltage
         ocvs = []
         for i in range(len(energys)):
-            num = atom_nums[i]
+            num = atom_num[i]
             ocv = (-(energys[i] - compound) + (num*single))/num
             ocvs.append(ocv)
-        #
+        #get specific capacity
         stru = Structure.from_file(f'{anode_strus_path}/{host}')
         stru.make_supercell(repeat)
         mass = stru.composition.weight.real
-        #
-        capacity = (np.array(atom_nums)*26.81*1e3)/mass
-        result = np.concatenate(([atom_nums], [energys], [capacity], [ocvs]), axis=0)
-        result = np.transpose(result)
-        return result
+        #collect properties
+        capacity = (atom_num*26.81*1e3)/mass
+        prop = np.concatenate(([poscars], [atom_num], [energys], [capacity], [ocvs]), axis=0)
+        prop = np.transpose(prop)
+        return prop
+    
+    def read_dat(self, path):
+        """
+        read Energy.dat
+        
+        Parameters
+        ----------
+        path [str, 0d]: full path of Energy.dat
+
+        Returns
+        ----------
+        poscars [str, 1d, np]: name of poscars
+        energys [float, 1d, np]: energy of poscars
+        atom_num [int, 1d, np]: number of adsorbates
+        """
+        #get poscar and corresponding energy
+        with open(f'{path}/Energy.dat', 'r') as obj:
+            ct = obj.readlines()
+        ct = np.array([i.split() for i in ct])
+        poscars = ct[:, 0]
+        energys = np.array(ct[:, 1], dtype=float)
+        atom_num = [i.split('-')[-3] for i in poscars]
+        atom_num = np.array(atom_num, dtype=int)
+        return poscars, energys, atom_num
+    
+    def select_min_energy(self, energys, atom_num):
+        """
+        select stablest adsorption structure
+        
+        Parameters
+        ----------
+        energys [float, 1d, np]: energy of poscars
+        atom_num [int, 1d, np]: number of adsorbates
+        
+        Returns
+        ----------
+        index [int, 1d]: index of lowest energy structure
+        """
+        energy = energys[0]
+        last = atom_num[0]
+        idx, index = 0, []
+        for i, num in enumerate(atom_num):
+            if num == last:
+                if energys[i] < energy:
+                    idx = i
+                    energy = energys[i]
+            else:
+                index.append(idx)
+                last = num
+                idx = i
+                energy = energys[i]
+        index.append(idx)
+        return index
+    
+    def filter(self, idx, poscars, energys, atom_num):
+        """
+        filter samples by index
+        """
+        poscars = poscars[idx]
+        energys = energys[idx]
+        atom_num = atom_num[idx]
+        return poscars, energys, atom_num
     
     def plot_ocv(self, file, capacity, ocv):
-        #
+        """
+        plot ocv versus capacity
+        
+        Parameters
+        ----------
+        file [str, 0d]: name of figure
+        capacity [float, 1d]: specific capacity
+        ocv [float, 1d]: open circuit voltage
+        """
         capacity = np.array(capacity, dtype=float)
         ocv = np.array(ocv, dtype=float)
-        '''
-        #
-        x = np.linspace(capacity[0], capacity[-1], 100)
-        func = interpolate.interp1d(capacity, ocv, kind='slinear')
-        v = [func(i) for i in x]
-        index = np.argmin(np.abs(v))
-        zero = fsolve(func, x[index], maxfev=1000)
-        #
-        print(zero)
-        '''
         plt.plot(capacity, ocv, marker='o')
         plt.hlines(0, 0, capacity[-1], color='r')
-        #plt.plot(zero, 0., marker='*', color='g', ms=15)
         plt.xlabel('Capacity (mAh/g)', fontsize=18)
         plt.ylabel('Open Circuit Voltage (V)', fontsize=18)
         plt.savefig(file, dpi=500)
@@ -1058,7 +1191,6 @@ class NEBSolver(MultiAdsorbSites):
                                        out=False, OUTCAR=True)
             #plot diffusion barrier
             self.plot_barrier(host, path)
-            
             
     def generate_path(self, atom, path, host, repeat):
         """
@@ -1299,10 +1431,10 @@ class ThermalConductivity(PostProcess):
 if __name__ == '__main__':
     atom = 11
     repeat = (2, 2, 1)
-    sides = ['One']
+    sides = ['One', 'Two']
     adsorb = AdsorbSites()
     #adsorb.get_slab()
-    #adsorb.relax(atom, repeat)
+    #adsorb.get_adsorption_sites(atom, repeat)
     #adsorb.sites_analysis(-1.3113, repeat)
     #adsorb.cluster_sites()
     #adsorb.sites_plot(repeat)

@@ -15,7 +15,7 @@ from core.dir_path import *
 from core.utils import *
 from core.data_transfer import DeleteDuplicates
 from core.grid_divide import GridDivide, ParallelDivide
-from core.search import GeoCheck
+from core.search import ActionSpace, GeoCheck
 
 
 class UpdateNodes(SSHTools):
@@ -106,7 +106,7 @@ class UpdateNodes(SSHTools):
     
 
 class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
-                   GeoCheck, DeleteDuplicates):
+                   ActionSpace, GeoCheck, DeleteDuplicates):
     #generate initial structures of ccop
     def __init__(self):
         UpdateNodes.__init__(self)
@@ -250,11 +250,13 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
             assign_plan = self.assign_by_spacegroup(atom_num, symm_site)
             #put atoms into grid with symmetry constrain
             if len(assign_plan) > 0:
+                grid_idx, grid_dis = self.import_data('grid', grid, sg)
                 for assign in assign_plan:
                     type, symm = self.get_type_and_symm(assign)
                     for _ in range(num_per_sg):
-                        pos = self.get_pos(symm, symm_site)
-                        atom_pos.append(pos)
+                        pos, flag = self.get_pos(symm, symm_site, grid_idx, grid_dis)
+                        if flag:
+                            atom_pos.append(pos)
                     atom_type += [type for _ in range(num_per_sg)]
                     atom_symm += [symm for _ in range(num_per_sg)]
                     grid_name += [grid for _ in range(num_per_sg)]
@@ -292,28 +294,50 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
             type += [atom for _ in range(len(value))]
         return type, symm
 
-    def get_pos(self, symm, symm_site):
+    def get_pos(self, symm, symm_site, grid_idx, grid_dis, trys=10):
         """
         sampling position of atoms by symmetry
         
         Parameters
         ----------
-        symm [int, 1d]: symmetry of atoms
+        symm [int, 1d]: symmetry of atoms\\
         symm_site [dict, int:list]: site position grouped by symmetry
-        e.g.: symm_site {1:[0], 2:[1, 2], 3:[3, 4, 5]}
+        e.g. symm_site {1:[0], 2:[1, 2], 3:[3, 4, 5]}\\
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
         pos [int, 1d]: position of atoms
+        flag [bool, 0d]: whether get right initial position
         """
-        site_copy = copy.deepcopy(symm_site)
-        pos = []
-        for i in symm:
-            pool = site_copy[i]
-            sample = np.random.choice(pool)
-            pos.append(sample)
-            pool.remove(sample)
-        return pos
+        flag = False
+        counter = 0
+        while counter < trys:
+            pos = []
+            for i in range(len(symm)):
+                #get allowable sites
+                allow = self.action_filter(self, i, pos, symm, symm_site,
+                                           grid_idx, grid_dis, move=False)
+                allow_num = len(allow)
+                if allow_num == 0:
+                    break
+                #check distance of new generate symmetry atoms
+                else:
+                    for _ in range(allow_num):
+                        point = np.random.choice(allow)
+                        check_pos = pos.copy()
+                        check_pos.append(point)
+                        nbr_dis = self.get_nbr_dis(check_pos, grid_idx, grid_dis)
+                        if self.near(nbr_dis):
+                            pos.append(point)
+                            break
+            #check number of atoms
+            if len(pos) == len(symm):
+                flag = True
+                break
+            counter += 1
+        return pos, flag
     
     def build_grid(self, grid_name):
         """

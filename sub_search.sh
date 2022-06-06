@@ -1,4 +1,20 @@
 mkdir search
+for i in 'B1' 'C1' 'N1'
+do
+    mkdir search/$i
+    scp -r sfront:/public/BioPhys/lcn/ccop .
+    cd ccop/
+        sed -i s/'XXX'/$i/g src/core/global_var.py
+        python src/main.py > log
+        cp log ../search/$i/.
+        cp data/poscar/optim_strus/* ../search/$i/.
+        cp data/vasp_out/optim_strus/energy/* ../search/$i/.
+	cp -r data/poscar ../search/$i/.
+        cp -r data/vasp_out ../search/$i/.
+    cd ../
+    rm -r ccop/
+done
+
 for i in 'B1N1' 'B1N2' 'B1N3' 'B1N4' 'B1N5' 'B2N1' 'B2N3' 'B2N5' 'B3N1' 'B3N2' 'B3N4' 'B3N5' 'B4N1' 'B4N3' 'B4N5' 'B5N1' 'B5N2' 'B5N3' 'B5N4'
 do
     mkdir search/$i

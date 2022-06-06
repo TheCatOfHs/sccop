@@ -363,148 +363,9 @@ class ParallelWorkers(ListRWTools, SSHTools):
         os.system(shell_script)
     
 
-class GeoCheck:
-    #check geometry property of structure
-    def __init__(self):
-        pass
-    
-    def overlay(self, pos, num_atom):
-        """
-        advanced geometry constrain
-        
-        Parameters
-        ----------
-        pos [int, 1d]: position of atoms
-        num_atom [int, 0d]: number of atoms
-        
-        Returns
-        ----------
-        flag [bool, 0d]: whether atoms are overlay
-        """
-        pos_differ = np.unique(pos)
-        num_differ = len(pos_differ)
-        if num_differ == num_atom:
-            return True
-        else:
-            return False
-    
-    def near(self, nbr_dis):
-        """
-        advanced geometry constrain
-        
-        Parameters
-        ----------
-        nbr_dis [float, 2d, np]: distance of neighbors 
-        
-        Returns
-        ----------
-        flag [bool, 0d]: whether atoms are too closely
-        """
-        nearest = nbr_dis[:,0]
-        error_bond = \
-            len(nearest[nearest<min_bond])
-        if error_bond == 0:
-            return True
-        else:
-            return False
-    
-    
-class Search(GeoCheck, PlanarSpaceGroup, Transfer):
-    #Searching on PES by machine-learned potential
-    def __init__(self, round):
-        Transfer.__init__(self)
-        self.device = torch.device('cpu')
-        self.normalizer = Normalizer(torch.tensor([]))
-        self.round = f'{round:03.0f}'
-        self.model_save_path = f'{model_path}/{self.round}'
-        self.sh_save_path = f'{search_path}/{self.round}'
-    
-    def explore(self, pos, type, symm, grid, sg, path, node):
-        """
-        simulated annealing
-
-        Parameters
-        ----------
-        pos [int, 1d]: position of atoms
-        type [int, 1d]: type of atoms
-        symm [int, 1d]: symmetry of atoms
-        grid [int, 0d]: grid name
-        sg [int, 0d]: space group number
-        path [int, 0d]: path number
-        node [int, 0d]: node number
-        """
-        #load prediction model
-        self.load_model()
-        #import embeddings and neighbor in min grid
-        self.elem_embed = self.import_data('elem', grid, sg)
-        self.grid_idx, self.grid_dis = self.import_data('grid', grid, sg)
-        #group sites by symmetry
-        mapping = self.import_data('mapping', grid, sg)
-        self.symm_site = self.group_symm_sites(mapping)
-        #initialize buffer
-        pos_1 = pos
-        energy, atom_pos = [], []
-        e_1 = self.predict(pos_1, type)
-        energy.append(e_1)
-        atom_pos.append(pos_1)
-        #simulated annealing
-        self.T = T
-        for _ in range(steps):
-            pos_2 = self.step(pos_1, type, symm)
-            e_2 = self.predict(pos_2, type)
-            if self.metropolis(e_1, e_2, self.T):
-                e_1, pos_1 = e_2, pos_2
-                energy.append(e_1)
-                atom_pos.append(pos_1)
-            self.T *= decay
-        self.save(atom_pos, type, symm, grid, sg, energy, path, node)
-    
-    def step(self, pos, type, symm):
-        """
-        move atoms under the geometry constrain
-        
-        Parameters
-        ----------
-        pos [int, 1d]: inital position of atoms
-        type [int, 1d]: initial type of atoms
-        symm [int, 1d]: initial symm of atoms
-        
-        Returns
-        ----------
-        new_pos [int, 1d]: position of atom after 1 SA step
-        """
-        new_pos = pos.copy()
-        atom_num = len(new_pos)
-        for _ in range(num_jump):
-            #generate actions
-            idx = np.random.randint(0, atom_num)
-            action_no = [-1]
-            action_mv = self.action_filter(idx, new_pos, symm)
-            action_ex = self.exchange_action(idx, type, symm)
-            mask_ex = [-2 for _ in action_ex]
-            actions = np.concatenate((action_no, action_mv, mask_ex))
-            #keep or exchange atoms or move atom
-            actions = np.array(actions, dtype=int)
-            point = np.random.choice(actions)
-            if point == -1:
-                new_pos = new_pos
-            if point == -2:
-                action_num = len(action_ex)
-                idx = np.random.randint(0, action_num)
-                idx_1, idx_2 = action_ex[idx]
-                new_pos[idx_1], new_pos[idx_2] = \
-                    new_pos[idx_2], new_pos[idx_1]
-            if point >= 0:
-                check_pos = new_pos.copy()
-                check_pos[idx] = point
-                #check distance of new symmetry atoms
-                nbr_dis = self.get_nbr_dis(check_pos, self.grid_idx, self.grid_dis)
-                flag = self.near(nbr_dis)
-                if flag:
-                    new_pos = check_pos
-        return new_pos
-    
-    def action_filter(self, idx, pos, symm):
+class ActionSpace:
+    #action space of optimizing position of atoms
+    def action_filter(self, idx, pos, symm, symm_site, grid_idx, grid_dis, move=True):
         """
         distance between atoms should bigger than min_bond
         
@@ -513,31 +374,39 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         idx [int, 0d]: index of select atom
         pos [int, 1d]: position of atoms
         symm [int, 1d]: symmetry of atoms
+        symm_site [dict, int:list]: site position grouped by symmetry
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
+        move [bool, 0d]: move atom or add atom
         
         Returns
         ----------
-        allow [int, 1d, np]: allowed actions
+        allow [int, 1d, np]: allowable actions
         """
+        if move:
+            obstacle = np.delete(pos, idx, axis=0)
+        else:
+            obstacle = pos
         #get forbidden sites
-        forbid_idx = []
-        nbr_dis = self.grid_dis[pos]
-        nbr_idx = self.grid_idx[pos]
-        nbr_dis = np.delete(nbr_dis, idx, axis=0)
-        nbr_idx = np.delete(nbr_idx, idx, axis=0)
-        for item in nbr_dis:
-            for i, dis in enumerate(item):
-                if dis > min_bond:
-                    forbid_idx.append(i) 
-                    break
-        actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
-        forbid = reduce(np.union1d, actions)
-        #get vacancy by symmetry
         symm_slt = symm[idx]
-        sites = self.symm_site[symm_slt]
-        occupy = self.get_occupy(symm_slt, pos, symm)
-        vacancy = np.setdiff1d(sites, occupy)
-        #get allow sites
+        sites = symm_site[symm_slt]
+        if len(obstacle) > 0:
+            nbr_dis = grid_dis[obstacle]
+            nbr_idx = grid_idx[obstacle]
+            forbid_idx = []  
+            for item in nbr_dis:
+                for i, dis in enumerate(item):
+                    if dis > min_bond:
+                        forbid_idx.append(i) 
+                        break
+            actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
+            forbid = reduce(np.union1d, actions)
+            occupy = self.get_occupy(symm_slt, pos, symm)
+        else:
+            forbid, occupy = [], []
+        #get allowable sites
         forbid = np.intersect1d(sites, forbid)
+        vacancy = np.setdiff1d(sites, occupy)
         allow = np.setdiff1d(vacancy, forbid)
         return allow
     
@@ -556,9 +425,9 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         occupy [int, 1d]: position of occupied sites
         """
         occupy = []
-        for i, symm in enumerate(atom_symm):
-            if symm == symm_slt:
-                occupy.append(atom_pos[i])
+        for i, pos in enumerate(atom_pos):
+            if symm_slt == atom_symm[i]:
+                occupy.append(pos)
         return occupy
     
     def exchange_action(self, idx, type, symm):
@@ -614,6 +483,150 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
             idx = [symm_idx[i] for i, j in enumerate(type) if j==ele]
             ele_idx.append(idx)
         return ele_idx
+    
+
+class GeoCheck:
+    #check geometry property of structure
+    def overlay(self, pos, num_atom):
+        """
+        advanced geometry constrain
+        
+        Parameters
+        ----------
+        pos [int, 1d]: position of atoms
+        num_atom [int, 0d]: number of atoms
+        
+        Returns
+        ----------
+        flag [bool, 0d]: whether atoms are overlay
+        """
+        pos_differ = np.unique(pos)
+        num_differ = len(pos_differ)
+        if num_differ == num_atom:
+            return True
+        else:
+            return False
+    
+    def near(self, nbr_dis):
+        """
+        advanced geometry constrain
+        
+        Parameters
+        ----------
+        nbr_dis [float, 2d, np]: distance of neighbors 
+        
+        Returns
+        ----------
+        flag [bool, 0d]: whether atoms are too closely
+        """
+        nearest = nbr_dis[:,0]
+        error_bond = \
+            len(nearest[nearest<min_bond])
+        if error_bond == 0:
+            return True
+        else:
+            return False
+
+
+class Search(ActionSpace, GeoCheck, PlanarSpaceGroup, Transfer):
+    #Searching on PES by machine-learned potential
+    def __init__(self, round):
+        Transfer.__init__(self)
+        self.device = torch.device('cpu')
+        self.normalizer = Normalizer(torch.tensor([]))
+        self.round = f'{round:03.0f}'
+        self.model_save_path = f'{model_path}/{self.round}'
+        self.sh_save_path = f'{search_path}/{self.round}'
+    
+    def explore(self, pos, type, symm, grid, sg, path, node):
+        """
+        simulated annealing
+
+        Parameters
+        ----------
+        pos [int, 1d]: position of atoms
+        type [int, 1d]: type of atoms
+        symm [int, 1d]: symmetry of atoms
+        grid [int, 0d]: grid name
+        sg [int, 0d]: space group number
+        path [int, 0d]: path number
+        node [int, 0d]: node number
+        """
+        #load prediction model
+        self.load_model()
+        #import embeddings and neighbor in min grid
+        self.elem_embed = self.import_data('elem', grid, sg)
+        grid_idx, grid_dis = self.import_data('grid', grid, sg)
+        #group sites by symmetry
+        mapping = self.import_data('mapping', grid, sg)
+        symm_site = self.group_symm_sites(mapping)
+        #initialize buffer
+        pos_1 = pos
+        energy, atom_pos = [], []
+        e_1 = self.predict(pos_1, type, grid_idx, grid_dis)
+        energy.append(e_1)
+        atom_pos.append(pos_1)
+        #simulated annealing
+        self.T = T
+        for _ in range(steps):
+            pos_2 = self.step(pos_1, type, symm,
+                              symm_site, grid_idx, grid_dis)
+            e_2 = self.predict(pos_2, type, grid_idx, grid_dis)
+            if self.metropolis(e_1, e_2, self.T):
+                e_1, pos_1 = e_2, pos_2
+                energy.append(e_1)
+                atom_pos.append(pos_1)
+            self.T *= decay
+        self.save(atom_pos, type, symm, grid, sg, energy, path, node)
+    
+    def step(self, pos, type, symm, symm_site, grid_idx, grid_dis):
+        """
+        move atoms under the geometry constrain
+        
+        Parameters
+        ----------
+        pos [int, 1d]: inital position of atoms
+        type [int, 1d]: initial type of atoms
+        symm [int, 1d]: initial symm of atoms
+        symm_site [dict, int:list]: site position grouped by symmetry
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
+        
+        Returns
+        ----------
+        new_pos [int, 1d]: position of atom after 1 SA step
+        """
+        new_pos = pos.copy()
+        atom_num = len(new_pos)
+        for _ in range(num_jump):
+            #generate actions
+            idx = np.random.randint(0, atom_num)
+            action_no = [-1]
+            action_mv = self.action_filter(idx, new_pos, symm,
+                                           symm_site, grid_idx, grid_dis)
+            action_ex = self.exchange_action(idx, type, symm)
+            mask_ex = [-2 for _ in action_ex]
+            actions = np.concatenate((action_no, action_mv, mask_ex))
+            #keep or exchange atoms or move atom
+            actions = np.array(actions, dtype=int)
+            point = np.random.choice(actions)
+            if point == -1:
+                new_pos = new_pos
+            if point == -2:
+                action_num = len(action_ex)
+                idx = np.random.randint(0, action_num)
+                idx_1, idx_2 = action_ex[idx]
+                new_pos[idx_1], new_pos[idx_2] = \
+                    new_pos[idx_2], new_pos[idx_1]
+            if point >= 0:
+                check_pos = new_pos.copy()
+                check_pos[idx] = point
+                #check distance of new generate symmetry atoms
+                nbr_dis = self.get_nbr_dis(check_pos, grid_idx, grid_dis)
+                flag = self.near(nbr_dis)
+                if flag:
+                    new_pos = check_pos
+        return new_pos
         
     def metropolis(self, value_1, value_2, T):
         """
@@ -649,7 +662,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         self.model.load_state_dict(paras['state_dict'])
         self.normalizer.load_state_dict(paras['normalizer'])
     
-    def predict(self, pos, type):
+    def predict(self, pos, type, grid_idx, grid_dis):
         """
         predict energy of one structure
 
@@ -657,6 +670,8 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         ----------
         pos [int, 1d]: position of atoms
         type [int ,1d]: type of atoms
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
         
         Returns
         ----------
@@ -665,7 +680,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         #transfer into input of ppm
         atom_fea, nbr_fea, nbr_fea_idx = \
             self.get_ppm_input(pos, type, self.elem_embed,
-                               self.grid_idx, self.grid_dis)
+                               grid_idx, grid_dis)
         crystal_atom_idx = np.arange(len(atom_fea))
         input_var = (torch.Tensor(atom_fea),
                      torch.Tensor(nbr_fea),

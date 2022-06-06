@@ -505,7 +505,7 @@ class DeleteDuplicates(MultiGridTransfer):
             stru_1 = strus[i]
             for j in range(i+1, strus_num):
                 stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
@@ -542,7 +542,7 @@ class DeleteDuplicates(MultiGridTransfer):
             for k in range(1, len(strus_idx)):
                 j = strus_idx[k]
                 stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
@@ -626,7 +626,7 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = []
         for i, stru_1 in enumerate(strus_1):
             for stru_2 in strus_2:
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
@@ -651,7 +651,7 @@ class DeleteDuplicates(MultiGridTransfer):
             stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
             for j in range(i+1, poscars_num):
                 stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
@@ -682,7 +682,7 @@ class DeleteDuplicates(MultiGridTransfer):
             stru_1 = strus[i]
             for j in range(i+1, strus_num):
                 stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
@@ -714,7 +714,7 @@ class DeleteDuplicates(MultiGridTransfer):
             stru_1 = strus[i]
             for j in range(i+1, strus_num):
                 stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
