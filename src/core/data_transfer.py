@@ -452,7 +452,7 @@ class DeleteDuplicates(MultiGridTransfer):
     def __init__(self):
         MultiGridTransfer.__init__(self)
     
-    def delete_duplicates(self, atom_pos, atom_type, atom_symm,
+    def delete_duplicates(self, atom_pos, atom_type,
                           grid_name, space_group):
         """
         delete same structures by pos, type, symm, grid
@@ -461,7 +461,6 @@ class DeleteDuplicates(MultiGridTransfer):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        atom_symm [int, 2d]: symmetry of atoms 
         grid_name [int, 1d]: grid of atoms
         space_group [int, 1d]: space group number
         
@@ -472,47 +471,12 @@ class DeleteDuplicates(MultiGridTransfer):
         #convert to string list
         pos_str = self.list2d_to_str(atom_pos, '{0}')
         type_str = self.list2d_to_str(atom_type, '{0}')
-        symm_str = self.list2d_to_str(atom_symm, '{0}')
         grid_str = self.list1d_to_str(grid_name, '{0}')
         group_str = self.list1d_to_str(space_group, '{0}')
-        label = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                 zip(pos_str, type_str, symm_str, grid_str, group_str)]
+        label = [i+'-'+j+'-'+k+'-'+m for i, j, k, m in 
+                 zip(pos_str, type_str, grid_str, group_str)]
         #delete same structure
         _, idx = np.unique(label, return_index=True)
-        return idx
-    
-    def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
-                                   grid_name, space_group):
-        """
-        delete same structures
-        
-        Parameters
-        -----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different poscars
-        """
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
-        strus_num = len(strus)
-        idx = []
-        #compare structure by pymatgen
-        for i in range(strus_num):
-            stru_1 = strus[i]
-            for j in range(i+1, strus_num):
-                stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    idx.append(i)
-                    break
-        all_idx = np.arange(strus_num)
-        idx = np.setdiff1d(all_idx, idx)
         return idx
     
     def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
@@ -558,8 +522,8 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.setdiff1d(all_idx, idx)
         return idx
     
-    def delete_same_selected(self, pos_1, type_1, symm_1, grid_1, sg_1,
-                             pos_2, type_2, symm_2, grid_2, sg_2):
+    def delete_same_selected(self, pos_1, type_1, grid_1, sg_1,
+                             pos_2, type_2, grid_2, sg_2):
         """
         delete common structures of set1 and set2
         return unique index of set1
@@ -568,12 +532,10 @@ class DeleteDuplicates(MultiGridTransfer):
         ----------
         pos_1 [int, 2d]: position of atoms in set1
         type_1 [int, 2d]: type of atoms in set1
-        symm_1 [int, 2d]: symmetry of atoms in set1
         grid_1 [int, 2d]: name of grids in set1
         sg_1 [int, 2d]: space group number in set1
         pos_2 [int, 2d]: position of atoms in set2
         type_2 [int, 2d]: type of atoms in set2
-        symm_2 [int, 2d]: symmetry of atoms in set2
         grid_2 [int, 1d]: name of grids in set2
         sg_2 [int, 1d]: space group number in set2
         
@@ -584,19 +546,17 @@ class DeleteDuplicates(MultiGridTransfer):
         #convert to string list
         pos_str_1 = self.list2d_to_str(pos_1, '{0}')
         type_str_1 = self.list2d_to_str(type_1, '{0}')
-        symm_str_1 = self.list2d_to_str(symm_1, '{0}')
         grid_str_1 = self.list1d_to_str(grid_1, '{0}')
         sg_str_1 = self.list1d_to_str(sg_1, '{0}')
         pos_str_2 = self.list2d_to_str(pos_2, '{0}')
         type_str_2 = self.list2d_to_str(type_2, '{0}')
-        symm_str_2 = self.list2d_to_str(symm_2, '{0}')
         grid_str_2 = self.list1d_to_str(grid_2, '{0}')
         sg_str_2 = self.list1d_to_str(sg_2, '{0}')
         #find unique structures
-        array_1 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                   zip(pos_str_1, type_str_1, symm_str_1, grid_str_1, sg_str_1)]
-        array_2 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                   zip(pos_str_2, type_str_2, symm_str_2, grid_str_2, sg_str_2)]
+        array_1 = [i+'-'+j+'-'+k+'-'+m for i, j, k, m in 
+                   zip(pos_str_1, type_str_1, grid_str_1, sg_str_1)]
+        array_2 = [i+'-'+j+'-'+k+'-'+m for i, j, k, m in 
+                   zip(pos_str_2, type_str_2, grid_str_2, sg_str_2)]
         array = np.concatenate((array_1, array_2))
         _, idx, counts = np.unique(array, return_index=True, return_counts=True)
         #delete structures same as training set

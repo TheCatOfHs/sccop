@@ -32,10 +32,10 @@ class Select(SSHTools, DeleteDuplicates):
             os.mkdir(self.poscar_save_path)
     
     def samples(self, atom_pos, atom_type, atom_symm, grid_name, space_group,
-                train_pos, train_type, train_symm, train_grid, train_sg):
+                train_pos, train_type, train_grid, train_sg):
         """
         choose lowest energy structure in different clusters
-
+        
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms
@@ -45,14 +45,13 @@ class Select(SSHTools, DeleteDuplicates):
         space_group [int, 2d]: space group number
         train_pos [int, 2d]: position in training set
         train_type [int, 2d]: type in training set
-        train_symm [int, 2d]: symmetry in training set
         train_grid [int, 1d]: grid in training set
         train_sg [int, 1d]: space group in training set
         """
         #delete same structures of searching
         grid_name = np.ravel(grid_name)
         space_group = np.ravel(space_group)
-        idx = self.delete_duplicates(atom_pos, atom_type, atom_symm,
+        idx = self.delete_duplicates(atom_pos, atom_type,
                                      grid_name, space_group)
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
@@ -60,8 +59,8 @@ class Select(SSHTools, DeleteDuplicates):
         num_crys = len(atom_pos)
         system_echo(f'Delete duplicates in searching samples: {num_crys}')
         #delete same structures compared with training set
-        idx = self.delete_same_selected(atom_pos, atom_type, atom_symm, grid_name, space_group,
-                                        train_pos, train_type, train_symm, train_grid, train_sg)
+        idx = self.delete_same_selected(atom_pos, atom_type, grid_name, space_group,
+                                        train_pos, train_type, train_grid, train_sg)
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, space_group)
@@ -365,10 +364,10 @@ class Select(SSHTools, DeleteDuplicates):
             os.mkdir(self.poscar_save_path)
         #delete structures that are selected before
         if recyc > 0:
-            #delete same selected structures by pos, type, symm, grid, sg
-            recyc_pos, recyc_type, recyc_symm, recyc_grid, recyc_sg = self.collect_select(recyc)
-            idx = self.delete_same_selected(atom_pos, atom_type, atom_symm, grid_name, space_group,
-                                            recyc_pos, recyc_type, recyc_symm, recyc_grid, recyc_sg)
+            #delete same selected structures by pos, type, grid, sg
+            recyc_pos, recyc_type, recyc_grid, recyc_sg = self.collect_select(recyc)
+            idx = self.delete_same_selected(atom_pos, atom_type, grid_name, space_group,
+                                            recyc_pos, recyc_type, recyc_grid, recyc_sg)
             atom_pos, atom_type, atom_symm, grid_name, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                     grid_name, space_group)
@@ -409,21 +408,19 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grid
         space_group [int, 1d]: space group number
         """
-        atom_pos, atom_type, atom_symm, grid_name, space_group = [], [], [], [], []
+        atom_pos, atom_type, grid_name, space_group = [], [], [], []
         for i in range(recyc):
             head = f'{poscar_path}/CCOP-{i}'
             atom_pos += self.import_list2d(f'{head}/atom_pos_select.dat', int)
             atom_type += self.import_list2d(f'{head}/atom_type_select.dat', int)
-            atom_symm += self.import_list2d(f'{head}/atom_symm_select.dat', int)
             grid_name += self.import_list2d(f'{head}/grid_name_select.dat', int)
             space_group += self.import_list2d(f'{head}/space_group_select.dat', int)
         grid_name = np.array(grid_name).flatten().tolist()
         space_group = np.array(space_group).flatten().tolist()
-        return atom_pos, atom_type, atom_symm, grid_name, space_group
+        return atom_pos, atom_type, grid_name, space_group
     
     def collect_optim(self, recyc):
         """

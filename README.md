@@ -47,6 +47,7 @@ vi /etc/ssh/ssh_config
 
 ## 
 Z:.5hV=]Jgx@2~39B)cC
+node135 root: vdm4@M%+JQW@3ZPL
 
 ## 预训练模型
 pip install -U jarvis-tools

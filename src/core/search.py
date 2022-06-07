@@ -391,16 +391,7 @@ class ActionSpace:
         symm_slt = symm[idx]
         sites = symm_site[symm_slt]
         if len(obstacle) > 0:
-            nbr_dis = grid_dis[obstacle]
-            nbr_idx = grid_idx[obstacle]
-            forbid_idx = []  
-            for item in nbr_dis:
-                for i, dis in enumerate(item):
-                    if dis > min_bond:
-                        forbid_idx.append(i) 
-                        break
-            actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
-            forbid = reduce(np.union1d, actions)
+            forbid = self.get_forbid(obstacle, grid_idx, grid_dis)
             occupy = self.get_occupy(symm_slt, pos, symm)
         else:
             forbid, occupy = [], []
@@ -409,6 +400,32 @@ class ActionSpace:
         vacancy = np.setdiff1d(sites, occupy)
         allow = np.setdiff1d(vacancy, forbid)
         return allow
+    
+    def get_forbid(self, point, grid_idx, grid_dis):
+        """
+        get position of forbid area
+        
+        Parameters
+        ----------
+        point [int, 1d]: occupied points
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
+
+        Returns
+        ----------
+        forbid [int, 1d]: forbid area
+        """
+        nbr_idx = grid_idx[point]
+        nbr_dis = grid_dis[point]
+        forbid_idx = []  
+        for item in nbr_dis:
+            for i, dis in enumerate(item):
+                if dis > min_bond:
+                    forbid_idx.append(i) 
+                    break
+        actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
+        forbid = reduce(np.union1d, actions)
+        return forbid
     
     def get_occupy(self, symm_slt, atom_pos, atom_symm):
         """
@@ -485,50 +502,32 @@ class ActionSpace:
         return ele_idx
     
 
-class GeoCheck:
+class GeoCheck(ActionSpace):
     #check geometry property of structure
-    def overlay(self, pos, num_atom):
+    def check_near(self, pos, grid_idx, grid_dis):
         """
-        advanced geometry constrain
+        check near distance of atoms
         
         Parameters
         ----------
         pos [int, 1d]: position of atoms
-        num_atom [int, 0d]: number of atoms
-        
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
+
         Returns
         ----------
-        flag [bool, 0d]: whether atoms are overlay
+        flag [bool, 0d]: whether satisfy bond constrain
         """
-        pos_differ = np.unique(pos)
-        num_differ = len(pos_differ)
-        if num_differ == num_atom:
-            return True
-        else:
-            return False
+        flag = True
+        forbid = self.get_forbid(pos, grid_idx, grid_dis)
+        for i in pos:
+            if i in forbid:
+                flag = False
+                break
+        return flag
     
-    def near(self, nbr_dis):
-        """
-        advanced geometry constrain
-        
-        Parameters
-        ----------
-        nbr_dis [float, 2d, np]: distance of neighbors 
-        
-        Returns
-        ----------
-        flag [bool, 0d]: whether atoms are too closely
-        """
-        nearest = nbr_dis[:,0]
-        error_bond = \
-            len(nearest[nearest<min_bond])
-        if error_bond == 0:
-            return True
-        else:
-            return False
 
-
-class Search(ActionSpace, GeoCheck, PlanarSpaceGroup, Transfer):
+class Search(GeoCheck, PlanarSpaceGroup, Transfer):
     #Searching on PES by machine-learned potential
     def __init__(self, round):
         Transfer.__init__(self)
@@ -622,9 +621,7 @@ class Search(ActionSpace, GeoCheck, PlanarSpaceGroup, Transfer):
                 check_pos = new_pos.copy()
                 check_pos[idx] = point
                 #check distance of new generate symmetry atoms
-                nbr_dis = self.get_nbr_dis(check_pos, grid_idx, grid_dis)
-                flag = self.near(nbr_dis)
-                if flag:
+                if self.check_near(check_pos, grid_idx, grid_dis):
                     new_pos = check_pos
         return new_pos
         

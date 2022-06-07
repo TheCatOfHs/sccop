@@ -81,7 +81,7 @@ class CrystalOptimization(ListRWTools):
                 space_group = self.import_list2d(f'{file_head}/space_group.dat', int)
                 select = Select(round+1)
                 select.samples(atom_pos, atom_type, atom_symm, grid_name, space_group,
-                               train_pos, train_type, train_symm, train_grid, train_sg)
+                               train_pos, train_type, train_grid, train_sg)
                 #Energy calculation
                 self.vasp.sub_job(round+1, vdW=add_vdW)
             
