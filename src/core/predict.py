@@ -193,7 +193,7 @@ class ConvLayer(nn.Module):
         self.bn1 = nn.BatchNorm1d(2*self.atom_fea_len)
         self.bn2 = nn.BatchNorm1d(self.atom_fea_len)
         self.softplus2 = nn.Softplus()
-
+    
     def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
         """
         embedding crystal into vector

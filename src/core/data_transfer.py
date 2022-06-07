@@ -33,36 +33,6 @@ class Transfer(ListRWTools):
         atom_fea = elem_embed[atom_type]
         return atom_fea
     
-    def get_nbr_dis(self, atom_pos, grid_idx, grid_dis):
-        """
-        neighbor distances are cutoff by 12 atoms
-    
-        Parameters
-        ----------
-        atom_pos [int, 1d]: position of atoms
-        grid_idx [int, 2d, np]: neighbor index of grid
-        grid_dis [float, 2d, np]: neighbor distance of grid
-        
-        Returns
-        ----------
-        nbr_dis [float, 2d, np]: neighbor distance of atoms
-        """
-        #get index and distance of points
-        atom_pos = np.array(atom_pos)
-        point_idx = grid_idx[atom_pos]
-        point_dis = grid_dis[atom_pos]
-        #initialize neighbor distance
-        min_atom_num = len(atom_pos)
-        nbr_dis = np.zeros((min_atom_num, self.nbr))
-        for i, point in enumerate(point_idx):
-            #find nearest atoms
-            atom_idx = np.where(point==atom_pos[:, None])[-1]
-            order = np.argsort(atom_idx)[:self.nbr]
-            atom_idx = atom_idx[order]
-            #get neighbor distance
-            nbr_dis[i] = point_dis[i, atom_idx]
-        return nbr_dis
-    
     def get_nbr_fea(self, atom_pos, grid_idx, grid_dis):
         """
         neighbor bond features and index are cutoff by 12 atoms
@@ -176,35 +146,6 @@ class Transfer(ListRWTools):
         coords = grid_coords[atom_pos]
         stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
         return stru
-    
-    def get_nbr_dis_seq(self, atom_pos, grid, space_group):
-        """
-        get neighbor distance under same grid
-    
-        Parameters
-        ----------
-        atom_pos [int, 2d]: position of atoms
-        grid [int, 0d]: name of grid
-        space_group [int, 1d]: space group number
-
-        Returns
-        ----------
-        nbr_dis_bh [float, 3d]: neighbor distance
-        """
-        last_sg = space_group[0]
-        grid_idx, grid_dis = self.import_data('grid', grid, last_sg)
-        nbr_dis_seq = []
-        #get neighbor distance under different space groups
-        for i, sg in enumerate(space_group):
-            if sg == last_sg:
-                nbr_dis = self.get_nbr_dis(atom_pos[i], grid_idx, grid_dis)
-                nbr_dis_seq.append(nbr_dis)
-            else:
-                grid_idx, grid_dis = self.import_data('grid', grid, sg)
-                nbr_dis = self.get_nbr_dis(atom_pos[i], grid_idx, grid_dis)
-                nbr_dis_seq.append(nbr_dis)
-                last_sg = sg
-        return nbr_dis_seq
     
     def get_ppm_input_seq(self, atom_pos, atom_type, grid, space_group):
         """
@@ -345,36 +286,6 @@ class MultiGridTransfer(Transfer):
         order = sorted(grid_sg, key=lambda x:(x[1], x[2]))
         idx = np.array(order)[:,0]
         return idx
-        
-    def get_nbr_dis_bh(self, atom_pos, grid_name, space_group):
-        """
-        get neighbor distance in different grids
-        
-        Parameters
-        ----------
-        atom_pos [int, 2d]: position of atoms
-        grid_name [int, 1d]: name of grids  
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        nbr_dis_bh [float, 3d]: batch neighbor distance
-        """
-        #initialize
-        last_grid = grid_name[0]
-        i, nbr_dis_bh = 0, []
-        #get neighbor distance under different grids
-        for j, grid in enumerate(grid_name):
-            if not grid == last_grid:
-                nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:j],
-                                                   last_grid, space_group[i:j])
-                nbr_dis_bh += nbr_dis_seq
-                last_grid = grid
-                i = j
-        nbr_dis_seq = self.get_nbr_dis_seq(atom_pos[i:],
-                                           grid, space_group[i:])
-        nbr_dis_bh += nbr_dis_seq
-        return nbr_dis_bh
     
     def get_ppm_input_bh(self, atom_pos, atom_type,
                          grid_name, space_group):

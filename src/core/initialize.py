@@ -427,7 +427,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, space_group)
         #sampling random samples by space group
-        idx = self.balance_sampling(2*num_Rand, space_group)
+        idx = self.balance_sampling(3*num_Rand, space_group)
         atom_pos, atom_type, atom_symm, grid_name, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm,
                                 grid_name, space_group)
@@ -482,19 +482,21 @@ class InitSampling(UpdateNodes, GridDivide, ParallelDivide,
         clusters.append(store)
         #get sampling number of each space group
         cluster_num = len(clusters)
-        cluster_per_num = [len(i) for i in clusters]
-        assign = [0 for _ in range(cluster_num)]
+        per_num = [len(i) for i in clusters]
+        ratio = [i/sum(per_num) for i in per_num]
+        assign = [int(i*num) for i in ratio]
+        per_num = [i-j for i, j in zip(per_num, assign)]
         flag = True
         while flag:
             for i in range(cluster_num):
                 if sum(assign) == num:
                     flag = False
                     break
-                if sum(cluster_per_num) == 0:
+                if sum(per_num) == 0:
                     flag = False
                     break
-                if cluster_per_num[i] > 0:
-                    cluster_per_num[i] -= 1
+                if per_num[i] > 0:
+                    per_num[i] -= 1
                     assign[i] += 1
         #sampling on different space groups
         sample = []
