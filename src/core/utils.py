@@ -2,6 +2,7 @@ import os, sys
 import time
 import paramiko
 import pickle
+import json
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
@@ -156,7 +157,56 @@ class ListRWTools:
         list = [style.format(i) for i in list]
         return list
     
+    def write_dict(self, file, dict):
+        """
+        export dict as json
+        
+        Parameters
+        ----------
+        file [str, 0d]: name of file 
+        dict [dict]: dict or list-dict 
+        """
+        with open(file, 'w') as obj:
+            json.dump(dict, obj)
+    
+    def import_dict(self, file):
+        """
+        import dict from json
+        
+        Parameters
+        ----------
+        file [str, 0d]: name of file 
 
+        Returns
+        ----------
+        dict [list, dict, 1d]: list-dict with int keys
+        """
+        with open(file, 'r') as obj:
+            ct = json.load(obj)
+        dict = self.transfer_keys(ct)
+        return dict
+    
+    def transfer_keys(self, list_dict):
+        """
+        transfer keys from string to int
+
+        Parameters
+        ---------
+        list_dict [list, dict, 1d]: list-dict with str keys
+
+        Returns
+        ----------
+        new [list, dict, 1d]: list-dict with int keys
+        """
+        new = []
+        for dict in list_dict:
+            store = {}
+            for key in dict.keys():
+                store[int(key)] = dict[key]
+            new.append(store)
+        return new
+    
+    
 class SSHTools:
     #SSH to node
     def __init__(self):

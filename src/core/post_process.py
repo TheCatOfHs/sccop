@@ -28,6 +28,8 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
             os.mkdir('data/post')
             os.mkdir(KPOINTS_file)
             os.mkdir(bandconf_file)
+        if not os.path.exists(vasp_out_path):
+            os.mkdir(vasp_out_path)
         if not os.path.exists(optim_vasp_path):
             os.mkdir(optim_vasp_path)
         if not os.path.exists(dielectric_path):

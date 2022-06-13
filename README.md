@@ -49,6 +49,10 @@ vi /etc/ssh/ssh_config
 Z:.5hV=]Jgx@2~39B)cC
 node135 root: vdm4@M%+JQW@3ZPL
 
+##
+qihangyu
+B1213qhy!
+
 ## 预训练模型
 pip install -U jarvis-tools
 二维材料数据来自：dft_2d twod_matpd c2db

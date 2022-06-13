@@ -13,8 +13,8 @@ add_vdW = False
 
 #Recycling
 num_recycle = 2
-num_ml_list = [1, 1]
-num_seed = 20
+num_ml_list = [2, 2]
+num_seed = 40
 num_poscars = 12
 num_optims = 6
 
@@ -41,11 +41,12 @@ use_pretrain_model = True
 
 #Searching
 T = .1
-decay = .99
-steps = 300
+decay = .95
+latt_steps = 3
+sa_steps = 100
 num_jump = 2
-num_path_min = 120
-num_path_rand = 80
+num_path_min = 60
+num_path_rand = 40
 min_bond = 1.2
 
 #Sample Select

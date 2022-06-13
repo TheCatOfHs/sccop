@@ -28,19 +28,19 @@ class CrystalOptimization(ListRWTools):
         #Update cpu nodes
         self.cpu_nodes.update()
         #Initialize storage
-        train_pos, train_type, train_symm, train_grid, train_sg = [], [], [], [], []
+        train_pos, train_type, train_symm, train_grid, train_ratio, train_sg = [], [], [], [], [], []
         train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = [], [], [], []
         
         start = 0
         for recycle in range(num_recycle):
             system_echo(f'Begin Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #Generate structures
-            atom_pos, atom_type, atom_symm, grid_name, space_group = self.init.generate(recycle)
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = self.init.generate(recycle)
             system_echo('New initial samples generated')
             
             #Write POSCARs
             select = Select(start)
-            select.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, space_group)
+            select.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
             #Energy calculation
             self.vasp.sub_job(start, vdW=add_vdW)
             
@@ -48,29 +48,30 @@ class CrystalOptimization(ListRWTools):
             num_round = num_ml_list[recycle]
             for round in range(start, start+num_round):
                 #Data import
-                atom_pos, atom_type, atom_symm, grid_name, space_group, energy = \
+                atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energy = \
                     self.import_sampling_data(round)
                 #Check number of Training data
                 add_num, crys_num = self.check_num_train_data(energy, train_energy)
                 system_echo(f'Training set: {crys_num}  New add to training set: {add_num}')
                 #Train predict model
                 train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy = \
-                    self.train_predict_model(round, add_num, atom_pos, atom_type,
-                                             grid_name, space_group, energy, train_atom_fea, 
+                    self.train_predict_model(round, add_num, atom_pos, atom_type, atom_symm,
+                                             grid_name, grid_ratio, space_group, energy, train_atom_fea, 
                                              train_nbr_fea, train_nbr_fea_idx, train_energy)
                 #Update training set
                 train_pos += atom_pos
                 train_type += atom_type
                 train_symm += atom_symm
                 train_grid += grid_name
+                train_ratio += grid_ratio
                 train_sg += space_group
                 
                 #Initialize start points
-                init_pos, init_type, init_symm, init_grid, init_sg = \
+                init_pos, init_type, init_symm, init_grid, init_ratio, init_sg = \
                     self.generate_search_point(train_pos, train_type, train_symm,
-                                               train_grid, train_sg, train_energy)
+                                               train_grid, train_ratio, train_sg, train_energy)
                 #Search on grid
-                self.workers.search(round+1, init_pos, init_type, init_symm, init_grid, init_sg)
+                self.workers.search(round+1, init_pos, init_type, init_symm, init_grid, init_ratio, init_sg)
                 
                 #Select samples
                 file_head = f'{search_path}/{round+1:03.0f}'
@@ -78,18 +79,19 @@ class CrystalOptimization(ListRWTools):
                 atom_type = self.import_list2d(f'{file_head}/atom_type.dat', int)
                 atom_symm = self.import_list2d(f'{file_head}/atom_symm.dat', int)
                 grid_name = self.import_list2d(f'{file_head}/grid_name.dat', int)
+                grid_ratio = self.import_list2d(f'{file_head}/grid_ratio.dat', float)
                 space_group = self.import_list2d(f'{file_head}/space_group.dat', int)
                 select = Select(round+1)
-                select.samples(atom_pos, atom_type, atom_symm, grid_name, space_group,
-                               train_pos, train_type, train_grid, train_sg)
+                select.samples(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group,
+                               train_pos, train_type, train_grid, train_ratio, train_sg)
                 #Energy calculation
                 self.vasp.sub_job(round+1, vdW=add_vdW)
             
             #Update training set
-            atom_pos, atom_type, atom_symm, grid_name, space_group, energy = \
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energy = \
                 self.import_sampling_data(start+num_round)
             atom_fea, nbr_fea, nbr_fea_idx = \
-            self.transfer.get_ppm_input_bh(atom_pos, atom_type, grid_name, space_group)
+            self.transfer.get_ppm_input_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
             
             train_atom_fea += atom_fea
             train_nbr_fea += nbr_fea
@@ -99,11 +101,12 @@ class CrystalOptimization(ListRWTools):
             train_type += atom_type
             train_symm += atom_symm
             train_grid += grid_name
+            train_ratio += grid_ratio
             train_sg += space_group
             
             #Select searched POSCARs
             select = Select(start+num_round)
-            select.export_recycle(recycle, train_pos, train_type, train_symm, train_grid, train_sg, train_energy)
+            select.export_recycle(recycle, train_pos, train_type, train_symm, train_grid, train_ratio, train_sg, train_energy)
             system_echo(f'End Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
             #VASP optimize
             vasp = VASPoptimize(recycle)
@@ -128,6 +131,7 @@ class CrystalOptimization(ListRWTools):
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         energy [float, 1d]: energy of samples
         """
@@ -143,14 +147,16 @@ class CrystalOptimization(ListRWTools):
         atom_type = self.import_list2d(f'{head}/atom_type_select.dat', int)
         atom_symm = self.import_list2d(f'{head}/atom_symm_select.dat', int)
         grid_name = self.import_list2d(f'{head}/grid_name_select.dat', int)
+        grid_ratio = self.import_list2d(f'{head}/grid_ratio_select.dat', float)
         space_group = self.import_list2d(f'{head}/space_group_select.dat', int)
         grid_name = np.ravel(grid_name)
+        grid_ratio = np.ravel(grid_ratio)
         space_group = np.ravel(space_group)
         #filter samples
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.init.filter_samples(mask, atom_pos, atom_type, atom_symm,
-                                     grid_name, space_group)
-        return atom_pos, atom_type, atom_symm, grid_name, space_group, energy
+                                     grid_name, grid_ratio, space_group)
+        return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energy
 
     def check_num_train_data(self, energy, train_energy):
         """
@@ -174,8 +180,8 @@ class CrystalOptimization(ListRWTools):
             add_num -= last_batch_num
         return add_num, crys_num
 
-    def train_predict_model(self, round, add_num, atom_pos, atom_type,
-                            grid_name, space_group, energy, train_atom_fea, 
+    def train_predict_model(self, round, add_num, atom_pos, atom_type, atom_symm,
+                            grid_name, grid_ratio, space_group, energy, train_atom_fea, 
                             train_nbr_fea, train_nbr_fea_idx, train_energy):
         """
         train CGCNN as predict model
@@ -186,7 +192,9 @@ class CrystalOptimization(ListRWTools):
         add_num [int, 0d]: number added to training set
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         energy_select [float, 1d]: select energy last round
         train_atom_fea [float, 3d]: atom feature
@@ -201,10 +209,15 @@ class CrystalOptimization(ListRWTools):
         train_nbr_fea_idx [int, 3d]: neighbor index
         train_energy [float, 1d]: train energy
         """
+        #samples from different space groups
+        idx = self.init.balance_sampling(len(space_group), space_group)
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
+            self.init.filter_samples(idx, atom_pos, atom_type, atom_symm,
+                                     grid_name, grid_ratio, space_group)
         #training data
         atom_fea, nbr_fea, nbr_fea_idx = \
             self.transfer.get_ppm_input_bh(atom_pos, atom_type,
-                                           grid_name, space_group)
+                                           grid_name, grid_ratio, space_group)
         train_atom_fea += atom_fea[:add_num]
         train_nbr_fea += nbr_fea[:add_num]
         train_nbr_fea_idx += nbr_fea_idx[:add_num]
@@ -227,7 +240,7 @@ class CrystalOptimization(ListRWTools):
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
     
     def generate_search_point(self, train_pos, train_type, train_symm,
-                              train_grid, train_sg, train_energy):
+                              train_grid, train_ratio, train_sg, train_energy):
         """
         generate initial searching points
         
@@ -237,6 +250,7 @@ class CrystalOptimization(ListRWTools):
         train_type [int, 2d]: type of training set
         train_symm [int, 2d]: symmetry of training set
         train_grid [int, 1d]: grid of training set
+        train_ratio [float, 1d]: ratio of training set
         train_sg [int, 1d]: space group of training set
         train_energy [float, 1d]: energy of training set
         
@@ -246,42 +260,43 @@ class CrystalOptimization(ListRWTools):
         init_type [int, 2d]: type of initial points
         init_symm [int, 2d]: symmetry of initial points
         init_grid [int, 1d]: grid of initial points
+        init_ratio [float, 1d]: ratio of initial points
         init_sg [int, 1d]: space group of initial points
         """
-        #initialize
-        init_pos, init_type, init_symm, init_grid, init_sg = [], [], [], [], []
         #greedy path
         min_idx = np.argsort(train_energy)[:num_seed]
-        greed_pos, greed_type, greed_symm, greed_grid, greed_sg =\
+        greed_pos, greed_type, greed_symm, greed_grid, greed_ratio, greed_sg =\
             self.point_sampling(num_path_min, min_idx, train_pos, train_type,
-                               train_symm, train_grid, train_sg)
+                                train_symm, train_grid, train_ratio, train_sg)
         #random path
         all_idx = np.arange(len(train_energy))
-        rand_pos, rand_type, rand_symm, rand_grid, rand_sg =\
+        rand_pos, rand_type, rand_symm, rand_grid, rand_ratio, rand_sg =\
             self.point_sampling(num_path_rand, all_idx, train_pos, train_type,
-                               train_symm, train_grid, train_sg)
-        init_pos += greed_pos + rand_pos
-        init_type += greed_type + rand_type
-        init_symm += greed_symm + rand_symm
-        init_grid += greed_grid + rand_grid
-        init_sg += greed_sg + rand_sg
-        return init_pos, init_type, init_symm, init_grid, init_sg
+                                train_symm, train_grid, train_ratio, train_sg)
+        init_pos = greed_pos + rand_pos
+        init_type = greed_type + rand_type
+        init_symm = greed_symm + rand_symm
+        init_grid = greed_grid + rand_grid
+        init_ratio = greed_ratio + rand_ratio
+        init_sg = greed_sg + rand_sg
+        return init_pos, init_type, init_symm, init_grid, init_ratio, init_sg
 
     def point_sampling(self, num, idx, train_pos, train_type, train_symm,
-                      train_grid, train_sg):
+                       train_grid, train_ratio, train_sg):
         """
         sampling initial points
         """
-        init_pos, init_type, init_symm, init_grid, init_sg = [], [], [], [], []
+        init_pos, init_type, init_symm, init_grid, init_ratio, init_sg = [], [], [], [], [], []
         for _ in range(num):
             seed = np.random.choice(idx)
             init_pos.append(train_pos[seed])
             init_type.append(train_type[seed])
             init_symm.append(train_symm[seed])
             init_grid.append(train_grid[seed])
+            init_ratio.append(train_ratio[seed])
             init_sg.append(train_sg[seed])
-        return init_pos, init_type, init_symm, init_grid, init_sg
-    
+        return init_pos, init_type, init_symm, init_grid, init_ratio, init_sg
+
 
 if __name__ == '__main__':
     ccop = CrystalOptimization()

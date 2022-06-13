@@ -551,7 +551,7 @@ class ActionSpace:
         low, up = scale_bound
         hold = 1.001*min_bond/min_dis
         low = max(low, ratio*hold)
-        allow = [i for i in np.arange(low, up, .01)]
+        allow = [i for i in np.arange(low, up, .02)]
         return allow
     
     def get_scale_bound(self, latt_vec):
@@ -647,9 +647,9 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         energy.append(e_1)
         atom_pos.append(pos_1)
         grid_ratio.append(ratio_1)
-        #ML optimization
+        #
         for _ in range(latt_steps):
-            #optimize order of atoms
+            #simulated annealing
             self.T = T
             for _ in range(sa_steps):
                 pos_2 = self.atom_step(pos_1, type, symm, symm_site,
@@ -661,8 +661,8 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
                     atom_pos.append(pos_1)
                     grid_ratio.append(ratio_1)
                 self.T *= decay
-            #optimize lattice
-            ratio_2 = self.latt_step(pos_1, type, ratio_1, scale_bound, grid_idx, grid_dis)
+            #
+            ratio_2 = self.lattice_step(pos_1, type, ratio_1, scale_bound, grid_idx, grid_dis)
             ratio_1 = ratio_2
         self.save(atom_pos, type, symm, grid, grid_ratio, sg, energy, path, node)
     
@@ -715,14 +715,14 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
                 new_pos = new_pos
         return new_pos
     
-    def latt_step(self, pos, type, ratio, scale_bound, grid_idx, grid_dis):
+    def lattice_step(self, pos, type, ratio, scale_bound, grid_idx, grid_dis):
         """
-        choose best ratio to scale lattice
+        move atoms under the geometry constrain
         
         Parameters
         ----------
-        pos [int, 1d]: position of atoms
-        type [int, 1d]: type of atoms
+        pos [int, 1d]: inital position of atoms
+        type [int, 1d]: 
         ratio [float, 0d]: grid ratio
         scale_bound [float, 1d]: boundary of scaling lattice
         grid_idx [int, 2d, np]: neighbor index of grid
@@ -730,15 +730,16 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         
         Returns
         ----------
-        new_ratio [float, 0d]: grid ratio
+        new_pos [int, 1d]: position of atom after 1 SA step
         """
         ratios = self.scale_action(pos, ratio, scale_bound, grid_idx, grid_dis)
+        print(ratios)
         if len(ratios) > 0: 
             energys = []
             for i in ratios:
                 energy = self.predict(pos, type, i, grid_idx, grid_dis)
                 energys.append(energy)
-            #choose best grid ratio
+            #
             idx = np.argmin(energys)
             new_ratio = ratios[idx]
         else:
@@ -859,16 +860,16 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
 
 if __name__ == '__main__':
     #structure
-    pos = args.pos
-    type = args.type
-    symm = args.symm
-    grid = args.grid
-    ratio = args.ratio
-    sg = args.sg
+    pos = [11,2,23,14,45,39]
+    type = [5,5,6,6,6,6]
+    symm = [1,1,1,1,2,2]
+    grid = 33
+    ratio = 1.0
+    sg = 3
     #path label
-    round = args.round
-    path = args.path
-    node = args.node
+    round = 1
+    path = 0
+    node = 131
     #Searching
     worker = Search(round)
     worker.explore(pos, type, symm, grid, ratio, sg, path, node)

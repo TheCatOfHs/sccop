@@ -31,50 +31,53 @@ class Select(SSHTools, DeleteDuplicates):
         if not os.path.exists(self.poscar_save_path):
             os.mkdir(self.poscar_save_path)
     
-    def samples(self, atom_pos, atom_type, atom_symm, grid_name, space_group,
-                train_pos, train_type, train_grid, train_sg):
+    def samples(self, atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group,
+                train_pos, train_type, train_grid, train_ratio, train_sg):
         """
         choose lowest energy structure in different clusters
-        
+
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 2d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 2d]: space group number
         train_pos [int, 2d]: position in training set
         train_type [int, 2d]: type in training set
         train_grid [int, 1d]: grid in training set
+        train_ratio [float, 1d]: ratio in training set
         train_sg [int, 1d]: space group in training set
         """
         #delete same structures of searching
         grid_name = np.ravel(grid_name)
+        grid_ratio = np.ravel(grid_ratio)
         space_group = np.ravel(space_group)
         idx = self.delete_duplicates(atom_pos, atom_type,
-                                     grid_name, space_group)
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+                                     grid_name, grid_ratio, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                grid_name, space_group)
+                                grid_name, grid_ratio, space_group)
         num_crys = len(atom_pos)
         system_echo(f'Delete duplicates in searching samples: {num_crys}')
         #delete same structures compared with training set
-        idx = self.delete_same_selected(atom_pos, atom_type, grid_name, space_group,
-                                        train_pos, train_type, train_grid, train_sg)
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+        idx = self.delete_same_selected(atom_pos, atom_type, grid_name, grid_ratio, space_group,
+                                        train_pos, train_type, train_grid, train_ratio, train_sg)
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                grid_name, space_group)
-        tuple = atom_pos, atom_type, atom_symm, grid_name, space_group
+                                grid_name, grid_ratio, space_group)
+        tuple = atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
         batch_balance(num_crys, self.batch_size, tuple)
         num_crys = len(grid_name)
         system_echo(f'Delete duplicates same as trainset: {num_crys}')
         #sort structure in order of grid and space group
         idx = self.sort_by_grid_sg(grid_name, space_group)
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                grid_name, space_group)
+                                grid_name, grid_ratio, space_group)
         #predict energy and get crystal vector
-        loader = self.dataloader(atom_pos, atom_type, grid_name, space_group)
+        loader = self.dataloader(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         model_names = self.model_select()
         mean_pred, std_pred, crys_mean = self.mean(model_names, loader)
         idx = self.select_samples(mean_pred, std_pred)
@@ -84,12 +87,13 @@ class Select(SSHTools, DeleteDuplicates):
         crys_embedded = self.reduce(crys_mean)
         clusters = self.cluster(crys_embedded, num_clusters)
         idx = self.min_in_cluster(idx, mean_pred, clusters)
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                grid_name, space_group)
-        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, space_group)
-    
-    def dataloader(self, atom_pos, atom_type, grid_name, space_group):
+                                grid_name, grid_ratio, space_group)
+        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
+        self.remove_model()
+        
+    def dataloader(self, atom_pos, atom_type, grid_name, grid_ratio, space_group):
         """
         transfer data to the input of graph network and
         put them into DataLoader
@@ -99,6 +103,7 @@ class Select(SSHTools, DeleteDuplicates):
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
         grid_name [int, 1d]: name of grid
+        grid_ratio [float, 1d]: grid ratio
         space_group [int, 1d]: space group number
         
         Returns
@@ -106,7 +111,7 @@ class Select(SSHTools, DeleteDuplicates):
         loader [obj]: dataloader 
         """
         atom_fea, nbr_fea, nbr_fea_idx = \
-            self.get_ppm_input_bh(atom_pos, atom_type, grid_name, space_group)
+            self.get_ppm_input_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         targets = np.zeros(len(grid_name))
         dataset = PPMData(atom_fea, nbr_fea, 
                           nbr_fea_idx, targets)
@@ -178,7 +183,18 @@ class Select(SSHTools, DeleteDuplicates):
         self.model_vec.load_state_dict(paras['state_dict'])
         self.model_val.load_state_dict(paras['state_dict'])
         self.normalizer.load_state_dict(paras['normalizer'])
-        
+    
+    def remove_model(self):
+        """
+        remove predict models
+        """
+        shell_script = f'''
+                        #!/bin/bash
+                        cd {self.model_save_path}
+                        rm checkpoint*
+                        '''
+        os.system(shell_script)
+    
     def predict_batch(self, loader):
         """
         calculate crys_fea and energy by predict model
@@ -312,7 +328,7 @@ class Select(SSHTools, DeleteDuplicates):
         idx_slt.append(min_idx)
         return np.array(idx_slt)
     
-    def write_POSCARs(self, atom_pos, atom_type, atom_symm, grid_name, space_group):
+    def write_POSCARs(self, atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group):
         """
         position and type are sorted by grid name and space group
         
@@ -320,14 +336,15 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        atom_symm [int, 2d]: 
+        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         """
         #convert to structure object
         num_jobs = len(grid_name)
         node_assign = self.assign_node(num_jobs)
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         for i, stru in enumerate(strus):
             file_name = f'{self.poscar_save_path}/POSCAR-{i:03.0f}-{node_assign[i]}'
             stru.to(filename=file_name, fmt='poscar')
@@ -340,11 +357,13 @@ class Select(SSHTools, DeleteDuplicates):
                           atom_symm)
         self.write_list2d(f'{self.sh_save_path}/grid_name_select.dat', 
                           np.transpose([grid_name]))
+        self.write_list2d(f'{self.sh_save_path}/grid_ratio_select.dat', 
+                          np.transpose([grid_ratio]))
         self.write_list2d(f'{self.sh_save_path}/space_group_select.dat', 
                           np.transpose([space_group]))    
     
     def export_recycle(self, recyc, atom_pos, atom_type, atom_symm, 
-                       grid_name, space_group, energy):
+                       grid_name, grid_ratio, space_group, energy):
         """
         export configurations after ccop
 
@@ -354,7 +373,8 @@ class Select(SSHTools, DeleteDuplicates):
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
-        grid_name [int, 1d]: name of grid
+        grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number 
         energy [float, 1d]: energy of structure
         """
@@ -365,41 +385,41 @@ class Select(SSHTools, DeleteDuplicates):
         #delete structures that are selected before
         if recyc > 0:
             #delete same selected structures by pos, type, grid, sg
-            recyc_pos, recyc_type, recyc_grid, recyc_sg = self.collect_select(recyc)
-            idx = self.delete_same_selected(atom_pos, atom_type, grid_name, space_group,
-                                            recyc_pos, recyc_type, recyc_grid, recyc_sg)
-            atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            recyc_pos, recyc_type, recyc_grid, recyc_ratio, recyc_sg = self.collect_select(recyc)
+            idx = self.delete_same_selected(atom_pos, atom_type, grid_name, grid_ratio, space_group,
+                                            recyc_pos, recyc_type, recyc_grid, recyc_ratio, recyc_sg)
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                    grid_name, space_group)
+                                    grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
             #sort structure in order of grid and space group
             idx = self.sort_by_grid_sg(grid_name, space_group)
-            atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                    grid_name, space_group)
+                                    grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             #delete same selected structures by pymatgen
-            strus_1 = self.get_stru_bh(atom_pos, atom_type, grid_name, space_group)
+            strus_1 = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
             strus_2 = self.collect_optim(recyc)
             idx = self.delete_same_selected_pymatgen(strus_1, strus_2)
-            atom_pos, atom_type, atom_symm, grid_name, space_group = \
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                    grid_name, space_group)
+                                    grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
         #select Top k lowest energy structures
         idx = np.argsort(energy)[:num_poscars]
-        atom_pos, atom_type, atom_symm, grid_name, space_group = \
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                    grid_name, space_group)
-        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, space_group)
+                                    grid_name, grid_ratio, space_group)
+        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
         system_echo(f'CCOP optimize structures: {len(grid_name)}')
     
     def collect_select(self, recyc):
         """
         collect selected samples in each recycle
-
+        
         Parameters
         ----------
         recyc [int, 0d]: recycle times
@@ -408,19 +428,22 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: name of grid
+        grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         """
-        atom_pos, atom_type, grid_name, space_group = [], [], [], []
+        atom_pos, atom_type, grid_name, grid_ratio, space_group = [], [], [], [], []
         for i in range(recyc):
             head = f'{poscar_path}/CCOP-{i}'
             atom_pos += self.import_list2d(f'{head}/atom_pos_select.dat', int)
             atom_type += self.import_list2d(f'{head}/atom_type_select.dat', int)
             grid_name += self.import_list2d(f'{head}/grid_name_select.dat', int)
+            grid_ratio += self.import_list2d(f'{head}/grid_ratio_select.dat', float)
             space_group += self.import_list2d(f'{head}/space_group_select.dat', int)
         grid_name = np.array(grid_name).flatten().tolist()
+        grid_ratio = np.array(grid_ratio).flatten().tolist()
         space_group = np.array(space_group).flatten().tolist()
-        return atom_pos, atom_type, grid_name, space_group
+        return atom_pos, atom_type, grid_name, grid_ratio, space_group
     
     def collect_optim(self, recyc):
         """
@@ -474,8 +497,8 @@ class Select(SSHTools, DeleteDuplicates):
         
         Returns
         ----------
-        strus []:
-        energys []:
+        strus [obj, 1d]: structure object in pymatgen
+        energys [float, 1d]: energy of structures
         """
         poscars, energys = [], []
         #get poscars and corresponding energys

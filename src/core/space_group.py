@@ -96,6 +96,7 @@ class PlanarSpaceGroup:
         Returns
         ----------
         assign_plan [list, dict, 1d]: site assignment of atom_num
+        e.g. [{5:[1, 1, 2, 2], 6:[6, 12]}]
         """
         symm = list(symm_site.keys())
         site_num = [len(i) for i in symm_site.values()]

@@ -20,14 +20,25 @@ from core.grid_divide import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
-    stru = Structure.from_file('test/POSCAR')
-    latt = stru.lattice
-    stru = Structure(latt, stru.species, stru.frac_coords)
-    print(dir(stru))
-    print(stru.types_of_specie)
+    import json
     
+    a = []
+    with open('test.json', 'w') as obj:
+        json.dump(a, obj)
     
+    with open('test.json', 'r') as obj:
+        ct = json.load(obj)
     
+    def transfer_keys(list_dict):
+        new = []
+        for dict in list_dict:
+            store = {}
+            for key in dict.keys():
+                store[int(key)] = dict[key]
+            new.append(store)
+        return new
+    
+    print(transfer_keys(ct))
     '''
     crystal_system = 5
     

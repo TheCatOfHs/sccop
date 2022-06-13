@@ -193,7 +193,7 @@ class ConvLayer(nn.Module):
         self.bn1 = nn.BatchNorm1d(2*self.atom_fea_len)
         self.bn2 = nn.BatchNorm1d(self.atom_fea_len)
         self.softplus2 = nn.Softplus()
-    
+
     def forward(self, atom_in_fea, nbr_fea, nbr_fea_idx):
         """
         embedding crystal into vector
@@ -332,7 +332,7 @@ class PPModel(ListRWTools):
         if use_pretrain_model:
             out_layer_id = list(map(id, model.module.fc_out.parameters()))
             crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
-            params = [{'params': crysfea_layer, 'lr': self.lr/100},
+            params = [{'params': crysfea_layer, 'lr': self.lr*0},
                       {'params': model.module.fc_out.parameters()}]
         else:
             params = model.parameters()
@@ -518,16 +518,10 @@ class PPModel(ListRWTools):
 
 class Normalizer():
     #Normalize a Tensor and restore it later
-    def __init__(self, tensor, num_database=2000):
-        self.num_old = num_database
-        self.num_add = len(tensor)
-        if self.num_add == 0:
-            self.mean = torch.tensor(0)
-            self.std = torch.tensor(0)
-        else:
-            self.mean = torch.mean(tensor)
-            self.std = torch.std(tensor)
-        
+    def __init__(self, tensor):
+        self.mean = torch.mean(tensor)
+        self.std = torch.std(tensor)
+    
     def norm(self, tensor):
         """
         normalize target tensor
@@ -574,17 +568,8 @@ class Normalizer():
         ----------
         state_dict [dict]: mean and std in dictionary
         """
-        mean = state_dict['mean']
-        std = state_dict['std']
-        num_total = self.num_old + self.num_add
-        w1 = self.num_old/num_total
-        w2 = self.num_add/num_total
-        new_mean = w1*mean + w2*self.mean
-        
-        var1 = std**2 + (new_mean-mean)**2
-        var2 = self.std**2 + (new_mean-self.mean)**2
-        self.std = torch.sqrt(w1*var1 + w2*var2)
-        self.mean = new_mean
+        self.mean = state_dict['mean']
+        self.std = state_dict['std']
         
         
 class AverageMeter():
