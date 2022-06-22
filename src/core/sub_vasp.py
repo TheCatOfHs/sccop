@@ -387,7 +387,7 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
             energys.append([out, cur_E])
         self.write_list2d(f'{path}/Energy.dat', energys)
         system_echo(f'Energy file generated successfully!')
-    
+        
     
 if __name__ == "__main__":
     vasp = ParallelSubVASP()

@@ -13,8 +13,7 @@ add_vdW = False
 
 #Recycling
 num_recycle = 2
-num_ml_list = [2, 2]
-num_seed = 40
+num_ml_list = [1, 1]
 num_poscars = 12
 num_optims = 6
 
@@ -22,7 +21,7 @@ num_optims = 6
 component = 'XXX'
 num_latt = 72
 num_Rand = 120
-num_ave_sg = 1
+num_ave_sg = 10
 num_per_sg = 2
 len_mu = 7
 len_sigma = 1
@@ -45,16 +44,15 @@ decay = .95
 latt_steps = 3
 sa_steps = 100
 num_jump = 2
-num_path_min = 60
-num_path_rand = 40
+num_path = 100
 min_bond = 1.2
 
 #Sample Select
 num_models = 5
-num_components = 3
+num_components = 2
 num_clusters = 60
 ratio_min_energy = 0.5
-ratio_max_std = 0.5
+ratio_max_std = 0.
 
 #Server
 num_gpus = 2

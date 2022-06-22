@@ -634,5 +634,48 @@ class PlanarSpaceGroup:
         return min_grid
 
 
+def get_space_group(num, system):
+    """
+    get space group number according to crystal system
+        
+    Parameters
+    ----------
+    num [int, 0d]: number of space groups
+    system [int, 0d]: crystal system
+
+    Returns
+    ----------
+    space_group [int, 1d, np]: international number of space group
+    """
+    #space group of 2-dimensional structure
+    if num_dim == 2:
+        if system == 0:
+            groups = [1, 2]
+        if system == 2:
+            groups = [3, 4, 5, 25, 28, 32, 35]
+        if system == 3:
+            groups = [75, 99, 100]
+        if system == 5:
+            groups = [143, 156, 157, 168, 183]
+    #space group of 3-dimensional structure
+    if num_dim == 3:
+        if system == 0:
+            groups = np.arange(1, 3)
+        if system == 1:
+            groups = np.arange(3, 16)
+        if system == 2:
+            groups = np.arange(16, 75)
+        if system == 3:
+            groups = np.arange(75, 143)
+        if system == 4:
+            groups = np.arange(143, 168)
+        if system == 5:
+            groups = np.arange(168, 195)
+        if system == 6:
+            groups = np.arange(195, 231)
+    space_group = np.sort(np.random.choice(groups, num*len(groups)))
+    return space_group
+
+
 if __name__ == '__main__':
     pass

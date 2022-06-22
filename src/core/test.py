@@ -16,29 +16,85 @@ from pymatgen.io.cif import CifWriter
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
 from core.utils import *
-from core.grid_divide import PlanarSpaceGroup
+from core.grid_sampling import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
-    import json
+    from sklearn.gaussian_process import GaussianProcessRegressor
+    from scipy.stats.distributions import norm
     
-    a = []
-    with open('test.json', 'w') as obj:
-        json.dump(a, obj)
     
-    with open('test.json', 'r') as obj:
-        ct = json.load(obj)
+    gp = GaussianProcessRegressor()
     
-    def transfer_keys(list_dict):
-        new = []
-        for dict in list_dict:
-            store = {}
-            for key in dict.keys():
-                store[int(key)] = dict[key]
-            new.append(store)
-        return new
+    def ac_max(states, gp, e_min):
+        ac = PI(states, gp, e_min, 0)
+        state_max = states[ac.argmax()]
+        return state_max
     
-    print(transfer_keys(ct))
+    def PI(states, gp, e_min, xi):
+        mean, std = gp.predict(states, return_std=True)
+        z = (mean - e_min - xi)/std
+        ac = 1 - norm.cdf(z)
+        return ac
+    
+    def get_states():
+        buffer = np.linspace(0, 2, 1000)
+        states = np.random.choice(buffer, 50, replace=False)
+        states = [[i] for i in states]
+        return states
+    
+    def predict(state):
+        value = np.array(state) * np.cos(np.pi * np.array(state))
+        return value.flatten().tolist()
+    
+    def explore():
+        """
+        """
+        #ML optimization
+        states, values = [], []
+        state = [0]
+        value = predict(state)
+        states.append(state)
+        values += value
+        buffer = []
+        gp = GaussianProcessRegressor()
+        for _ in range(3):
+            #optimize order of atoms
+            for _ in range(10):
+                gp.fit(states, values)
+                v_min = min(values)
+                #
+                points = get_states()
+                point_values = predict(points)
+                states += points
+                values += point_values
+                #
+                state = ac_max(states, gp, v_min)
+                value = predict(state)
+                buffer.append(state)
+            print(buffer)
+            print(v_min)
+            break
+        return gp
+    gp = explore()
+    
+    '''
+    test = np.linspace(-5, 5, 20)[:, None]
+    print(test)
+    v = gp.predict(test, return_std=True)
+    print(v)
+    '''
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
+    
     '''
     crystal_system = 5
     

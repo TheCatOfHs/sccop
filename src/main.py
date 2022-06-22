@@ -4,8 +4,7 @@ import numpy as np
 from core.global_var import *
 from core.dir_path import *
 from core.initialize import InitSampling, UpdateNodes
-from core.grid_divide import ParallelDivide
-from core.sample_select import Select
+from core.sample_select import Select, BayesianOpt
 from core.sub_vasp import ParallelSubVASP, VASPoptimize
 from core.search import ParallelWorkers
 from core.predict import PPMData, PPModel
@@ -20,10 +19,10 @@ class CrystalOptimization(ListRWTools):
         self.init = InitSampling()
         self.cpu_nodes = UpdateNodes()
         self.transfer = MultiGridTransfer()
-        self.divide = ParallelDivide()
+        self.bayes = BayesianOpt()
         self.workers = ParallelWorkers()
         self.vasp = ParallelSubVASP()
-    
+        
     def main(self):
         #Update cpu nodes
         self.cpu_nodes.update()
@@ -68,8 +67,8 @@ class CrystalOptimization(ListRWTools):
                 
                 #Initialize start points
                 init_pos, init_type, init_symm, init_grid, init_ratio, init_sg = \
-                    self.generate_search_point(train_pos, train_type, train_symm,
-                                               train_grid, train_ratio, train_sg, train_energy)
+                    self.bayes.select(recycle, train_pos, train_type, train_symm,
+                                      train_grid, train_ratio, train_sg, train_energy)
                 #Search on grid
                 self.workers.search(round+1, init_pos, init_type, init_symm, init_grid, init_ratio, init_sg)
                 
@@ -140,7 +139,14 @@ class CrystalOptimization(ListRWTools):
         energy_file = self.import_list2d(file, str, numpy=True)
         mask = np.array(energy_file)[:, 1]
         mask = [True if i=='True' else False for i in mask]
-        energy = np.array(energy_file[:, 2], dtype=float)[mask].tolist()
+        energys = np.array(energy_file[:, 2], dtype=float)
+        #use std to filter high energy structures
+        std = np.std(energys[mask])
+        mean = np.mean(energys[mask])
+        for i, energy in enumerate(energys):
+            if energy - mean > std:
+                mask[i] = False
+        energys = energys[mask].tolist()
         #import sampling data
         head = f'{search_path}/{round:03.0f}'
         atom_pos = self.import_list2d(f'{head}/atom_pos_select.dat', int)
@@ -156,7 +162,7 @@ class CrystalOptimization(ListRWTools):
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.init.filter_samples(mask, atom_pos, atom_type, atom_symm,
                                      grid_name, grid_ratio, space_group)
-        return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energy
+        return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energys
 
     def check_num_train_data(self, energy, train_energy):
         """
@@ -238,64 +244,6 @@ class CrystalOptimization(ListRWTools):
         train_nbr_fea_idx += nbr_fea_idx[add_num:]
         train_energy += energy[add_num:]
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
-    
-    def generate_search_point(self, train_pos, train_type, train_symm,
-                              train_grid, train_ratio, train_sg, train_energy):
-        """
-        generate initial searching points
-        
-        Parameters
-        ----------
-        train_pos [int, 2d]: position of training set
-        train_type [int, 2d]: type of training set
-        train_symm [int, 2d]: symmetry of training set
-        train_grid [int, 1d]: grid of training set
-        train_ratio [float, 1d]: ratio of training set
-        train_sg [int, 1d]: space group of training set
-        train_energy [float, 1d]: energy of training set
-        
-        Returns
-        ----------
-        init_pos [int, 2d]: position of initial points
-        init_type [int, 2d]: type of initial points
-        init_symm [int, 2d]: symmetry of initial points
-        init_grid [int, 1d]: grid of initial points
-        init_ratio [float, 1d]: ratio of initial points
-        init_sg [int, 1d]: space group of initial points
-        """
-        #greedy path
-        min_idx = np.argsort(train_energy)[:num_seed]
-        greed_pos, greed_type, greed_symm, greed_grid, greed_ratio, greed_sg =\
-            self.point_sampling(num_path_min, min_idx, train_pos, train_type,
-                                train_symm, train_grid, train_ratio, train_sg)
-        #random path
-        all_idx = np.arange(len(train_energy))
-        rand_pos, rand_type, rand_symm, rand_grid, rand_ratio, rand_sg =\
-            self.point_sampling(num_path_rand, all_idx, train_pos, train_type,
-                                train_symm, train_grid, train_ratio, train_sg)
-        init_pos = greed_pos + rand_pos
-        init_type = greed_type + rand_type
-        init_symm = greed_symm + rand_symm
-        init_grid = greed_grid + rand_grid
-        init_ratio = greed_ratio + rand_ratio
-        init_sg = greed_sg + rand_sg
-        return init_pos, init_type, init_symm, init_grid, init_ratio, init_sg
-
-    def point_sampling(self, num, idx, train_pos, train_type, train_symm,
-                       train_grid, train_ratio, train_sg):
-        """
-        sampling initial points
-        """
-        init_pos, init_type, init_symm, init_grid, init_ratio, init_sg = [], [], [], [], [], []
-        for _ in range(num):
-            seed = np.random.choice(idx)
-            init_pos.append(train_pos[seed])
-            init_type.append(train_type[seed])
-            init_symm.append(train_symm[seed])
-            init_grid.append(train_grid[seed])
-            init_ratio.append(train_ratio[seed])
-            init_sg.append(train_sg[seed])
-        return init_pos, init_type, init_symm, init_grid, init_ratio, init_sg
 
 
 if __name__ == '__main__':

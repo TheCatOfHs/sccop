@@ -648,7 +648,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         atom_pos.append(pos_1)
         grid_ratio.append(ratio_1)
         #
-        for _ in range(latt_steps):
+        for _ in range(3):
             #simulated annealing
             self.T = T
             for _ in range(sa_steps):

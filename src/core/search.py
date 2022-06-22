@@ -14,19 +14,6 @@ from core.utils import ListRWTools, SSHTools, system_echo
 from core.predict import CrystalGraphConvNet, Normalizer
 
 
-parser = argparse.ArgumentParser()
-parser.add_argument('--pos', type=int, nargs='+')
-parser.add_argument('--type', type=int, nargs='+')
-parser.add_argument('--symm', type=int, nargs='+')
-parser.add_argument('--grid', type=int)
-parser.add_argument('--ratio', type=float)
-parser.add_argument('--sg', type=int)
-parser.add_argument('--round', type=int)
-parser.add_argument('--path', type=int)
-parser.add_argument('--node', type=int)
-args = parser.parse_args()
-
-
 class ParallelWorkers(ListRWTools, SSHTools):
     #Assign sampling jobs to each node
     def __init__(self, sleep_time=1):
@@ -549,7 +536,7 @@ class ActionSpace:
         min_dis = min(nbr_dis)
         #boundary of scaling
         low, up = scale_bound
-        hold = 1.001*min_bond/min_dis
+        hold = 1.1*min_bond/min_dis
         low = max(low, ratio*hold)
         allow = [i for i in np.arange(low, up, .01)]
         return allow
@@ -858,6 +845,18 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--pos', type=int, nargs='+')
+    parser.add_argument('--type', type=int, nargs='+')
+    parser.add_argument('--symm', type=int, nargs='+')
+    parser.add_argument('--grid', type=int)
+    parser.add_argument('--ratio', type=float)
+    parser.add_argument('--sg', type=int)
+    parser.add_argument('--round', type=int)
+    parser.add_argument('--path', type=int)
+    parser.add_argument('--node', type=int)
+    args = parser.parse_args()
+    
     #structure
     pos = args.pos
     type = args.type

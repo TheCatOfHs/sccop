@@ -401,7 +401,7 @@ class DeleteDuplicates(MultiGridTransfer):
         #delete same structure
         _, idx = np.unique(label, return_index=True)
         return idx
-
+    
     def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
                                    grid_name, grid_ratio, space_group):
         """
@@ -422,11 +422,12 @@ class DeleteDuplicates(MultiGridTransfer):
         strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         strus_num = len(strus)
         strus_idx = np.arange(strus_num)
-        idx, store, delet = [], [], []
+        idx = []
         #compare structure by pymatgen
         while True:
             i = strus_idx[0]
             stru_1 = strus[i]
+            store, delet = [i], [0]
             for k in range(1, len(strus_idx)):
                 j = strus_idx[k]
                 stru_2 = strus[j]
@@ -437,13 +438,11 @@ class DeleteDuplicates(MultiGridTransfer):
                     store.append(j)
                     delet.append(k)
             #update
-            idx += [0] + store[:-1]
-            strus_idx = np.delete(strus_idx, [0]+delet)
-            store, delet = [], []
+            idx.append(np.random.choice(store))
+            strus_idx = np.delete(strus_idx, delet)
+            #break condition
             if len(strus_idx) == 0:
                 break
-        all_idx = np.arange(strus_num)
-        idx = np.setdiff1d(all_idx, idx)
         return idx
     
     def delete_duplicates_sg_pymatgen(self, atom_pos, atom_type, 
@@ -480,61 +479,6 @@ class DeleteDuplicates(MultiGridTransfer):
                                                      space_group[i:])
         unique_idx = [i+k for k in unique_idx]
         idx += unique_idx
-        return idx
-    
-    def delete_duplicates_between_sg_pymatgen(self, atom_pos, atom_type, 
-                                              grid_name, grid_ratio, space_group):
-        """
-        delete same structures in different space groups
-        
-        Parameters
-        -----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        grid_ratio [float, 1d]: ratio of grids
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different structures
-        """
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
-        strus_num = len(strus)
-        strus_idx = np.arange(strus_num)
-        idx, store, delet = [], [], []
-        #compare structure by pymatgen
-        while True:
-            i = strus_idx[0]
-            stru_1 = strus[i]
-            #get start index
-            sg = space_group[i]
-            start, end = 0, len(strus_idx)
-            for k in range(1, end):
-                j = strus_idx[k]
-                if sg != space_group[j]:
-                    start = k
-                    break  
-            if start == 0:
-                start = end
-            #compare structures in different space groups
-            for k in range(start, end):
-                j = strus_idx[k]
-                stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.2, stol=0.3, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    store.append(j)
-                    delet.append(k)
-            #update
-            idx += [0] + store[:-1]
-            strus_idx = np.delete(strus_idx, [0]+delet)
-            store, delet = [], []
-            if len(strus_idx) == 0:
-                break
-        all_idx = np.arange(strus_num)
-        idx = np.setdiff1d(all_idx, idx)
         return idx
     
     def delete_same_selected(self, pos_1, type_1, grid_1, ratio_1, sg_1,

@@ -1,4 +1,5 @@
 import os, sys
+import shutil
 import time
 import re
 import numpy as np
@@ -418,9 +419,7 @@ class AdsorbSites(Select):
 
         Returns
         ----------
-        poscars [str, 1d, np]: name of poscars
         energys [float, 1d, np]: energy of poscars
-        atom_num [int, 1d, np]: number of adsorbates
         """
         #get poscar and corresponding energy
         with open(f'{path}', 'r') as obj:
@@ -567,7 +566,7 @@ class AdsorbSites(Select):
 
 class Arrangement(ListRWTools):
     #disperse atoms on surface as much as possible
-    def search(self, atom, host, repeat, max_sites=8, path_num=150):
+    def search(self, atom, host, repeat, max_sites=8, path_num=300):
         """
         optimize arrangement of adsorbates by SA
         
@@ -620,7 +619,7 @@ class Arrangement(ListRWTools):
             value_buffer = np.array(value_buffer)[idx]
             #get optimal position
             store = []
-            index = np.argsort(value_buffer)[:10]
+            index = np.argsort(value_buffer)[:20]
             for idx in index:
                 opt_pos = pos_buffer[idx]
                 opt_sites = sites[opt_pos]
@@ -692,7 +691,7 @@ class Arrangement(ListRWTools):
         while counter < trys:
             pos = []
             for _ in range(num):
-                allow = self.action_filter(-1, pos, dis_mat)
+                allow = self.get_allow(-1, pos, dis_mat)
                 if len(allow) == 0:
                     break
                 else:
@@ -703,7 +702,7 @@ class Arrangement(ListRWTools):
             counter += 1
         return pos, flag
     
-    def action_filter(self, idx, pos, dis_mat):
+    def get_allow(self, idx, pos, dis_mat):
         """
         distance between atoms should bigger than min_bond
         
@@ -752,8 +751,8 @@ class Arrangement(ListRWTools):
         new_pos = pos.copy()
         idx = np.random.randint(len(new_pos))
         action_no = [-1]
-        action_ex = self.action_filter(idx, new_pos, dis_mat)
-        actions = np.concatenate((action_no, action_ex))
+        action_mv = self.get_allow(idx, new_pos, dis_mat)
+        actions = np.concatenate((action_no, action_mv))
         #move atom
         point = np.random.choice(actions)
         if point == -1:
@@ -987,11 +986,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 #generate adsorb poscars
                 side_name = f'{host}-Fill-{side}'
                 fill_path = f'{adsorb_strus_path}/{side_name}'
-                energy_path = f'{adsorb_energy_path}/{side_name}'
                 if not os.path.exists(fill_path):
                     os.mkdir(fill_path)
-                if not os.path.exists(energy_path):
-                    os.mkdir(energy_path)
                 system_echo(f'adsorb poscar generate --- {host}')
                 self.generate_poscar(fill_path, atom, sites,
                                      host, repeat, side)
@@ -1029,7 +1025,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
             #export poscars
             index = self.delete_same_strus(strus)
             for j, idx in enumerate(index):
-                if j < 3:
+                if j < 10:
                     file_name = f'{path}/{host}-{side}-{i+1:02.0f}-{j}'
                     strus[idx].to(filename=file_name, fmt='poscar')
         poscars = os.listdir(path)
@@ -1052,8 +1048,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 compound = ratio*self.get_energy(f'{anode_energy_path}/out-{host}')
                 prop = self.get_property(side, host, single, compound, repeat)
                 self.write_list2d(f'{adsorb_analysis_path}/{host}-{side}-Coverage.dat', prop)
-                capacity, ocv = np.transpose(prop[:,-2:])
-                self.plot_ocv(f'{adsorb_analysis_path}/{host}-{side}-OCV.png', capacity, ocv)
+                #capacity, ocv = np.transpose(prop[:, -2:])
+                #self.plot_ocv(f'{adsorb_analysis_path}/{host}-{side}-OCV.png', capacity, ocv)
                 system_echo(f'adsorb sites analysis finished: {host}')
         
     def get_property(self, side, host, single, compound, repeat):
@@ -1075,12 +1071,11 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         #get stablest adsorption structures
         side_name = f'{host}-Fill-{side}'
         strus_path = f'{adsorb_strus_path}/{side_name}'
-        energy_path = f'{adsorb_energy_path}/{side_name}'
-        poscars, energys, atom_num = self.read_dat(energy_path)
+        poscars, energys, atom_num = self.read_dat(adsorb_energy_path, side_name)
         coplane = self.check_coplane(strus_path, poscars)
         poscars, energys, atom_num = self.filter(coplane, poscars, energys, atom_num)
-        idx = self.select_min_energy(energys, atom_num)
-        poscars, energys, atom_num = self.filter(idx, poscars, energys, atom_num)
+        #idx = self.select_min_energy(energys, atom_num)
+        #poscars, energys, atom_num = self.filter(idx, poscars, energys, atom_num)
         #get open circuit voltage
         ocvs = []
         for i in range(len(energys)):
@@ -1095,16 +1090,25 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         capacity = (atom_num*26.81*1e3)/mass
         prop = np.concatenate(([poscars], [atom_num], [energys], [capacity], [ocvs]), axis=0)
         prop = np.transpose(prop)
+        #
+        for poscar in poscars:
+            stable_strus_path = f'{adsorb_strus_path}/{side_name}-stable'
+            if not os.path.exists(stable_strus_path):
+                os.mkdir(stable_strus_path)
+            file_1 = f'{strus_path}/{poscar}'
+            file_2 = f'{stable_strus_path}/{poscar}'
+            shutil.copy(file_1, file_2)
         return prop
     
-    def read_dat(self, path):
+    def read_dat(self, path, file):
         """
         read Energy.dat
         
         Parameters
         ----------
         path [str, 0d]: full path of Energy.dat
-
+        file [str, 0d]: 
+        
         Returns
         ----------
         poscars [str, 1d, np]: name of poscars
@@ -1112,12 +1116,12 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         atom_num [int, 1d, np]: number of adsorbates
         """
         #get poscar and corresponding energy
-        with open(f'{path}/Energy.dat', 'r') as obj:
+        with open(f'{path}/Energy-{file}.dat', 'r') as obj:
             ct = obj.readlines()
         ct = np.array([i.split() for i in ct])
         poscars = ct[:, 0]
         energys = np.array(ct[:, 1], dtype=float)
-        atom_num = [i.split('-')[-3] for i in poscars]
+        atom_num = [i.split('-')[-2] for i in poscars]
         atom_num = np.array(atom_num, dtype=int)
         return poscars, energys, atom_num
     
@@ -1196,13 +1200,14 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
             stru = Structure.from_file(f'{path}/{poscar}')
             sites = stru.sites
             atom = sites[-1].species_string
-            coors = []
+            coords = []
             for site in sites:
                 if site.species_string == atom:
-                    coors.append(site.coords)
-            coors = np.array(coors)
-            volume = self.get_volume(coors)
-            if volume < 15:
+                    if site.frac_coords[-1] > .5:
+                        coords.append(site.coords)
+            coords = np.array(coords)
+            volume = self.get_volume(coords)
+            if volume < 20:
                 coplane.append(True)
             else:
                 coplane.append(False)
@@ -1494,19 +1499,19 @@ if __name__ == '__main__':
     adsorb.run_optimization(poscars_new, 3, 'data/poscars', '/local/ccop/data/poscars', '/local/ccop/data/outs')
     '''
     #adsorb.get_adsorption_sites(atom, repeat)
-    adsorb.sites_analysis(-1.3113, repeat)
-    adsorb.cluster_sites()
-    adsorb.sites_plot(repeat)
-    adsorb.sites_plot(repeat, cluster=False)
+    #adsorb.sites_analysis(-1.3113, repeat)
+    #adsorb.cluster_sites()
+    #adsorb.sites_plot(repeat)
+    #adsorb.sites_plot(repeat, cluster=False)
     
     #neb = NEBSolver()
     #neb.calculate(atom, repeat)
     #sites = [[0.25, 0., 0.597], [0.5, 0., 0.597], [.75, 0., 0.597]]
     #neb.self_define_calculate(0, atom, 'POSCAR-04-131', sites, repeat)
     
-    #multi_adsorb = MultiAdsorbSites()
+    multi_adsorb = MultiAdsorbSites()
     #multi_adsorb.relax(atom, repeat, sides)
-    #multi_adsorb.analysis(-1.3113, repeat, sides)
+    multi_adsorb.analysis(-1.3113, repeat, sides)
     
     
     #thermal = ThermalConductivity()

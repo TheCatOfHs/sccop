@@ -1,5 +1,4 @@
 # Crystal-Combinatiorial-Optimization-Program
-
 晶体组合优化程序(Crystal-Combinatiorial-Optimization-Program, CCOP)是基于Python3与PyTorch编写的机器学习加速结构搜索程序。目前正在开发中，如有需要可联系邮箱lcn1996@mail.ustc.edu.cn进行交流。
 
 ## 环境
@@ -44,7 +43,6 @@ pip install pymatgen-analysis-diffusion
 vi /etc/ssh/ssh_config
 修改 StrictHostKeyChecking 为 no
 
-
 ## 
 Z:.5hV=]Jgx@2~39B)cC
 node135 root: vdm4@M%+JQW@3ZPL
@@ -52,6 +50,11 @@ node135 root: vdm4@M%+JQW@3ZPL
 ##
 qihangyu
 B1213qhy!
+
+## 超算指令
+查看任务排队情况    squeue | grep qihangyu
+查看任务完成情况    more */calculations/date.out
+删除任务           scancel JOBID
 
 ## 预训练模型
 pip install -U jarvis-tools
