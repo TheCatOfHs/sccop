@@ -24,14 +24,30 @@ class ParallelSampling(ListRWTools, SSHTools):
         self.local_grid_path = f'/local/ccop/{grid_path}'
     
     def sampling_on_grid(self, recyc, start):
-        #
+        """
+        sampling radnomly on different grid
+
+        Parameters
+        ----------
+        recyc [int, 0d]: recycle of ccop
+        start [int, 0d]: start label of grid
+
+        Returns
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        atom_symm [int, 2d]: symmetry of atoms
+        grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
+        space_group [int, 1d]: space group number
+        """
         init_path = f'{init_strus_path}_{recyc}'
         poscars = os.listdir(init_path)
         poscars_num = len(poscars)
         index = [i for i in range(poscars_num)]
         grids = [i for i in range(start, start+poscars_num)]
         node_assign = self.assign_node(poscars_num)
-        #
+        #submit sampling job to each node
         work_node_num = self.sub_jobs(recyc, index, grids, node_assign)
         while not self.is_done(grid_path, work_node_num):
             time.sleep(self.wait_time)
@@ -99,8 +115,8 @@ class ParallelSampling(ListRWTools, SSHTools):
         grids [int, 1d]: name of grids
         node [int, 0d]: name of node
         """
+        #generate sampling jobs
         ip = f'node{node}'
-        #
         sampling_jobs = []
         for i in range(len(index)):
             option = f'--recyc {recyc} --index {index[i]} --grid {grids[i]} '
@@ -435,26 +451,27 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
     
 
 class AssignPlan(GridDivide):
-    #
+    #find assignment of atoms
     def get_assign(self, recyc, idx, grid):
         """
-
+        #get assignment of atoms in grid with different space group
+        
         Parameters
         ----------
-        recyc []:
-        idx []:
-        grid []:
+        recyc [int, 0d]: recycle of ccop
+        idx [int, 0d]: index of poscar
+        grid [int, 0d]: grid name
 
         Returns
         ----------
-        sgs []:
-        assigns[]:
+        sgs [int, 1d]: space groups
+        assigns [dict, 2d, list]: assignments of atoms
         """
-        #
+        #get poscar
         init_path = f'{init_strus_path}_{recyc}'
         poscars = sorted(os.listdir(init_path))
         poscar = f'{init_path}/{poscars[idx]}'
-        #
+        #get lattice information
         stru = Structure.from_file(poscar, sort=True)
         latt = stru.lattice
         atom_num_dict = self.get_atom_number(stru)
@@ -532,7 +549,7 @@ class AssignPlan(GridDivide):
 
 
 class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
-    #
+    #sampling structure with distance constrain randomly
     def __init__(self):
         pass
     
@@ -542,7 +559,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         
         Parameters
         ----------
-        recyc [int, 0d]:
+        recyc [int, 0d]: recycle of ccop
         grid [int, 0d]: number of grid
         sgs [int, 1d]: space groups
         assigns [dict, 2d, list]: assignments of atoms
@@ -656,7 +673,6 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         """
-        #
         path = f'{buffer_path}/{recyc}'
         if not os.path.exists(path):
             os.mkdir(path)
