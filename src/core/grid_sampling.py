@@ -364,8 +364,8 @@ class GridDivide(ListRWTools, PlanarSpaceGroup):
             num_near = near
         nbr_idx, nbr_dis = [], []
         for nbr in all_nbrs:
-            nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
             nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
+            nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
         nbr_idx, nbr_dis = self.reduce_to_min(nbr_idx, nbr_dis, mapping)
         return nbr_idx, nbr_dis
     

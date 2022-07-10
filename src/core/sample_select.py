@@ -33,7 +33,7 @@ class Select(SSHTools, DeleteDuplicates):
                 train_pos, train_type, train_grid, train_ratio, train_sg):
         """
         choose lowest energy structure in different clusters
-
+        
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms

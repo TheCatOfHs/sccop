@@ -61,7 +61,7 @@ class Pretrain(Transfer, ListRWTools):
         nbr_idx [int, 2d, np]: index of near neighbor 
         """
         crystal = Structure.from_file(cif)
-        atom_type = np.array(crystal.atomic_numbers) - 1
+        atom_type = np.array(crystal.atomic_numbers)
         all_nbrs = crystal.get_all_neighbors(self.cutoff)
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
         num_near = min(map(lambda x: len(x), all_nbrs))
@@ -73,7 +73,7 @@ class Pretrain(Transfer, ListRWTools):
             nbr_dis.append(dis)
         nbr_idx, nbr_dis = np.array(nbr_idx), np.array(nbr_dis)
         elem_embed = self.import_list2d(atom_init_file, int, numpy=True)
-        atom_fea = self.atom_initializer(atom_type, elem_embed)
+        atom_fea = self.get_atom_fea(atom_type, elem_embed)
         nbr_fea = self.expand(nbr_dis)
         return atom_fea, nbr_fea, nbr_idx
     

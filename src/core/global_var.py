@@ -1,7 +1,7 @@
 #Grid
 cutoff = 8
-num_min_atom = 10
-num_max_atom = 20
+num_min_atom = 5
+num_max_atom = 10
 grain = [.5, .5, 1.2]
 plane_upper = [100, 100, 1]
 
@@ -12,8 +12,8 @@ vacuum_space = 15
 add_vdW = False
 
 #Recycling
-num_recycle = 2
-num_ml_list = [1, 1]
+num_recycle = 1
+num_ml_list = [1]
 num_poscars = 12
 num_optims = 6
 
@@ -22,17 +22,17 @@ component = 'XXX'
 num_latt = 72
 num_Rand = 120
 num_ave_sg = 10
-num_per_sg = 2
-len_mu = 7
+num_per_sg = 5
+len_mu = 5
 len_sigma = 1
-len_lower = 6
-len_upper = 8
+len_lower = 4
+len_upper = 6
 ang_mu = 90
 ang_sigma = 10
 system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
 
 #Training
-train_batchsize = 128
+train_batchsize = 64
 train_epochs = 120
 orig_atom_fea_len = 92
 nbr_bond_fea_len = 41

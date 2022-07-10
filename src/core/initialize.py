@@ -377,6 +377,4 @@ class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
     
     
 if __name__ == '__main__':
-    pa = ParallelSampling()
-    atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = pa.collect(0, np.arange(70))
-    print(grid_name)
+    pass

@@ -20,6 +20,9 @@ from core.grid_sampling import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
+    
+    
+    '''
     from sklearn.gaussian_process import GaussianProcessRegressor
     from scipy.stats.distributions import norm
     
@@ -77,7 +80,7 @@ if __name__ == '__main__':
             break
         return gp
     gp = explore()
-    
+    '''
     '''
     test = np.linspace(-5, 5, 20)[:, None]
     print(test)

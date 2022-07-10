@@ -1,4 +1,4 @@
-import os
+import os, time
 import numpy as np
 
 from core.global_var import *
@@ -244,8 +244,11 @@ class CrystalOptimization(ListRWTools):
         train_nbr_fea_idx += nbr_fea_idx[add_num:]
         train_energy += energy[add_num:]
         return train_atom_fea, train_nbr_fea, train_nbr_fea_idx, train_energy
-
+        
 
 if __name__ == '__main__':
+    start_time = time.time()
     ccop = CrystalOptimization()
     ccop.main()
+    end_time = time.time()
+    system_echo(f'Time: {end_time - start_time}')

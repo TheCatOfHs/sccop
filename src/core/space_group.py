@@ -76,13 +76,34 @@ class PlanarSpaceGroup:
         mapping = []
         all_grid = min_grid.copy()
         for i, point in enumerate(min_grid):
-            stru = Structure.from_spacegroup(group, latt, [1], [point])
-            equal_coords = stru.frac_coords.tolist()[1:]
+            stru = Structure.from_spacegroup(group, latt, [1], [point], tol=1e-8)
+            equal_coords = self.get_equal_coords(point, stru.frac_coords.tolist())
             start = len(all_grid)
             end = start + len(equal_coords)
             mapping.append([i] + [j for j in range(start, end)])
             all_grid += equal_coords
         return np.array(all_grid), mapping
+    
+    def get_equal_coords(self, point, coords):
+        """
+        get equivalent coordinates
+        
+        Parameters
+        ----------
+        point [float, 1d]: point in minimum area
+        coords [float, 2d]: all symmetry coordinates
+
+        Returns
+        ----------
+        equal_coords [float, 2d]: equivalent coordinates
+        """
+        equal_coords = coords.copy()
+        for i, coord in enumerate(equal_coords):
+            delta = np.array(point) - np.array(coord)
+            if np.linalg.norm(delta) < 1e-6:
+                del equal_coords[i]
+                break
+        return equal_coords
     
     def assign_by_spacegroup(self, atom_num, symm_site):
         """
@@ -282,7 +303,7 @@ class PlanarSpaceGroup:
     
     def triclinic_2(self, frac_grain):
         """
-        space group P2
+        space group P211
         """
         equal_2 = []
         #point
@@ -426,10 +447,10 @@ class PlanarSpaceGroup:
         equal_8 = []
         #point
         equal_2 = [[0, 0, 0], [0, .5, 0]]
-        equal_4 = [[.25, .25, 0], [.25, .5, 0]]
+        equal_4 = [[.25, .25, 0], [.25, 0., 0]]
         #boundary
-        for i in np.arange(0, .5, frac_grain[0]):
-            if 0 < i < .25:
+        for i in np.arange(0, .25, frac_grain[0]):
+            if 0 < i:
                 equal_4.append([i, 0, 0])
                 equal_4.append([i, .5, 0])
         for j in np.arange(0, .5, frac_grain[1]):
@@ -678,4 +699,15 @@ def get_space_group(num, system):
 
 
 if __name__ == '__main__':
-    pass
+    psg = PlanarSpaceGroup()
+    stru = Structure.from_file('data/poscar/initial_strus_0/POSCAR-RCSD-045', sort=True)
+    latt = stru.lattice
+    all_grid, _ = psg.get_grid_points(3, grain, latt)
+    print(all_grid)
+    print(len(all_grid))
+    
+    from core.utils import ListRWTools
+    rw = ListRWTools()
+    coords = rw.import_list2d(f'data/grid/045_frac_coords_3.bin', float, binary=True)
+    #print(coords)
+    #print(len(coords))

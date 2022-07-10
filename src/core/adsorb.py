@@ -251,7 +251,8 @@ class AdsorbSites(Select):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                /opt/openmpi-1.6.3/bin/mpirun -np 48 vasp_relax_ab >> vasp-$i.vasp
+                                #/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i
@@ -1048,8 +1049,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                 compound = ratio*self.get_energy(f'{anode_energy_path}/out-{host}')
                 prop = self.get_property(side, host, single, compound, repeat)
                 self.write_list2d(f'{adsorb_analysis_path}/{host}-{side}-Coverage.dat', prop)
-                #capacity, ocv = np.transpose(prop[:, -2:])
-                #self.plot_ocv(f'{adsorb_analysis_path}/{host}-{side}-OCV.png', capacity, ocv)
+                capacity, ocv = np.transpose(prop[:, -2:])
+                self.plot_ocv(f'{adsorb_analysis_path}/{host}-{side}-OCV.png', capacity, ocv)
                 system_echo(f'adsorb sites analysis finished: {host}')
         
     def get_property(self, side, host, single, compound, repeat):
@@ -1074,8 +1075,8 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
         poscars, energys, atom_num = self.read_dat(adsorb_energy_path, side_name)
         coplane = self.check_coplane(strus_path, poscars)
         poscars, energys, atom_num = self.filter(coplane, poscars, energys, atom_num)
-        #idx = self.select_min_energy(energys, atom_num)
-        #poscars, energys, atom_num = self.filter(idx, poscars, energys, atom_num)
+        idx = self.select_min_energy(energys, atom_num)
+        poscars, energys, atom_num = self.filter(idx, poscars, energys, atom_num)
         #get open circuit voltage
         ocvs = []
         for i in range(len(energys)):
@@ -1207,7 +1208,7 @@ class MultiAdsorbSites(AdsorbSites, GeoCheck, Arrangement):
                         coords.append(site.coords)
             coords = np.array(coords)
             volume = self.get_volume(coords)
-            if volume < 20:
+            if volume < 50:
                 coplane.append(True)
             else:
                 coplane.append(False)
@@ -1486,8 +1487,8 @@ class ThermalConductivity(PostProcess):
     
 if __name__ == '__main__':
     atom = 11
-    repeat = (2, 2, 1)
-    sides = ['One', 'Two']
+    repeat = (4, 4, 1)
+    sides = ['One']
     adsorb = AdsorbSites()
     #adsorb.get_slab()
     '''
@@ -1498,7 +1499,7 @@ if __name__ == '__main__':
         os.rename(f'data/poscars/{poscars[i]}', f'data/poscars/{poscars_new[i]}')    
     adsorb.run_optimization(poscars_new, 3, 'data/poscars', '/local/ccop/data/poscars', '/local/ccop/data/outs')
     '''
-    #adsorb.get_adsorption_sites(atom, repeat)
+    adsorb.get_adsorption_sites(atom, repeat)
     #adsorb.sites_analysis(-1.3113, repeat)
     #adsorb.cluster_sites()
     #adsorb.sites_plot(repeat)
@@ -1509,9 +1510,9 @@ if __name__ == '__main__':
     #sites = [[0.25, 0., 0.597], [0.5, 0., 0.597], [.75, 0., 0.597]]
     #neb.self_define_calculate(0, atom, 'POSCAR-04-131', sites, repeat)
     
-    multi_adsorb = MultiAdsorbSites()
+    #multi_adsorb = MultiAdsorbSites()
     #multi_adsorb.relax(atom, repeat, sides)
-    multi_adsorb.analysis(-1.3113, repeat, sides)
+    #multi_adsorb.analysis(-1.3113, repeat, sides)
     
     
     #thermal = ThermalConductivity()

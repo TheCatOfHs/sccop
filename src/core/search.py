@@ -425,7 +425,7 @@ class ActionSpace:
         for item in nbr_dis:
             for i, dis in enumerate(item):
                 if dis > min_bond:
-                    forbid_idx.append(i) 
+                    forbid_idx.append(i)
                     break
         actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
         forbid = reduce(np.union1d, actions)
@@ -604,7 +604,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
     def explore(self, pos, type, symm, grid, ratio, sg, path, node):
         """
         simulated annealing
-
+        
         Parameters
         ----------
         pos [int, 1d]: position of atoms

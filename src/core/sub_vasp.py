@@ -227,7 +227,8 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                /opt/openmpi-1.6.3/bin/mpirun -np 48 vasp_relax_ab >> vasp-$i.vasp
+                                #/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i
@@ -297,12 +298,13 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 DPT --vdW DFT-D3
                             fi
                             
-                            for i in 4 5
+                            for i in 4
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
+                                /opt/openmpi-1.6.3/bin/mpirun -np 48 vasp_relax_ab >> vasp-$i.vasp
+                                #/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp-$i.vasp
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i
@@ -311,7 +313,7 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             done
                             if [ `cat CONTCAR|wc -l` -ge 8 ]; then
                                 scp CONTCAR {gpu_node}:{self.optim_strus_path}/$p
-                                scp vasp-5.vasp {gpu_node}:{self.energy_path}/out-$p
+                                scp vasp-4.vasp {gpu_node}:{self.energy_path}/out-$p
                             fi
                             cd ../
                             
