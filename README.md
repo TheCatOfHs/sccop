@@ -43,7 +43,7 @@ pip install pymatgen-analysis-diffusion
 vi /etc/ssh/ssh_config
 修改 StrictHostKeyChecking 为 no
 
-## 
+##
 Z:.5hV=]Jgx@2~39B)cC
 node135 root: vdm4@M%+JQW@3ZPL
 

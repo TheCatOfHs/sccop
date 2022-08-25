@@ -248,8 +248,13 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
+        counter = 0
         while not self.is_done(self.optim_strus_path, num_poscar):
             time.sleep(self.wait_time)
+            if counter > vasp_time_limit:
+                self.kill_vasp_jobs()
+                break
+            counter += 1
         self.remove_flag(self.optim_strus_path)
         self.delete_same_poscars(self.optim_strus_path)
         self.delete_energy_files(self.optim_strus_path, self.energy_path)
@@ -322,14 +327,31 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             rm -rf $p FINISH-$p
                             '''
             self.ssh_node(shell_script, ip)
+        counter = 0
         while not self.is_done(optim_strus_path, poscar_num):
             time.sleep(self.wait_time)
+            if counter > vasp_time_limit:
+                self.kill_vasp_jobs()
+                break
+            counter += 1
         self.add_symmetry_to_structure(optim_strus_path)
         self.remove_flag(optim_strus_path)
         self.delete_same_poscars(optim_strus_path)
         self.change_node_assign(optim_strus_path)
         self.get_energy(energy_path)
         system_echo(f'All jobs are completed --- Optimization')
+    
+    def kill_vasp_jobs(self):
+        """
+        kill vasp jobs that reach time limit
+        """
+        for node in nodes:
+            ip = f'node{node}'
+            shell_script = f'''
+                            #!/bin/bash
+                            ps -ef | grep vasp | cut -c 9-15 | xargs kill -9
+                            '''
+            self.ssh_node(shell_script, ip)
     
     def add_symmetry_to_structure(self, path):
         """

@@ -20,8 +20,9 @@ from core.grid_sampling import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
-    
-    
+    for i, j in ((1, 2), (3, 4)):
+        print(i)
+        
     '''
     from sklearn.gaussian_process import GaussianProcessRegressor
     from scipy.stats.distributions import norm

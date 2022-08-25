@@ -338,7 +338,8 @@ class Select(SSHTools, DeleteDuplicates):
         idx_slt.append(min_idx)
         return np.array(idx_slt)
     
-    def write_POSCARs(self, atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group):
+    def write_POSCARs(self, atom_pos, atom_type, atom_symm,
+                      grid_name, grid_ratio, space_group, add_thickness=False):
         """
         position and type are sorted by grid name and space group
         
@@ -350,6 +351,7 @@ class Select(SSHTools, DeleteDuplicates):
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
+        add_thickness [bool, 0d]: whether get puckered structure
         """
         #make save directory
         if not os.path.exists(self.poscar_save_path):
@@ -359,7 +361,7 @@ class Select(SSHTools, DeleteDuplicates):
         #convert to structure object
         num_jobs = len(grid_name)
         node_assign = self.assign_node(num_jobs)
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group, add_thickness)
         for i, stru in enumerate(strus):
             file_name = f'{self.poscar_save_path}/POSCAR-{i:03.0f}-{node_assign[i]}'
             stru.to(filename=file_name, fmt='poscar')
@@ -442,7 +444,9 @@ class Select(SSHTools, DeleteDuplicates):
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                     grid_name, grid_ratio, space_group)
-        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
+        if puckered:
+            add_thickness = True
+        self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, add_thickness)
         system_echo(f'CCOP optimize structures: {len(grid_name)}')
     
     def collect_select(self, recyc):
@@ -578,7 +582,7 @@ class Select(SSHTools, DeleteDuplicates):
         #balance samples to GPU
         num_crys = len(atom_pos)
         tuple = atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
-        batch_balance(num_crys, self.batch_size, tuple)
+        batch_balance(num_crys, 5*self.batch_size, tuple)
         #sort structure in order of grid and space group
         idx = self.sort_by_grid_sg(grid_name, space_group)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \

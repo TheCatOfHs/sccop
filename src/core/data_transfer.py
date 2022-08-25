@@ -129,7 +129,7 @@ class Transfer(ListRWTools):
             self.get_nbr_fea(atom_pos, ratio, grid_idx, grid_dis)
         return atom_fea, nbr_fea, nbr_fea_idx
         
-    def get_stru(self, atom_pos, atom_type, latt_vec, ratio, grid_coords, sg):
+    def get_stru(self, atom_pos, atom_type, latt_vec, ratio, grid_coords, sg, add_thickness=False):
         """
         get structure object in pymatgen
         
@@ -141,7 +141,8 @@ class Transfer(ListRWTools):
         ratio [float, 0d]: grid ratio
         grid_coords [float, 2d, np]: fraction coordinates of grid
         sg [int, 0d]: space group number
-
+        add_thickness [bool, 0d]: whether get puckered structure
+        
         Returns
         ----------
         stru [obj, 0d]: structure object in pymatgen
@@ -151,7 +152,24 @@ class Transfer(ListRWTools):
         else:
             latt = latt_vec*ratio
         coords = grid_coords[atom_pos]
-        stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
+        #whether get puckered structure
+        if add_thickness:
+            atom_num = len(atom_pos)
+            frac_thick = thickness/vacuum_space
+            delta_thick = np.random.normal(0, frac_thick, atom_num)
+            delta_thick = [i if i < frac_thick else frac_thick for i in delta_thick]
+            delta_thick = [i if -frac_thick < i else -frac_thick for i in delta_thick]
+            disturb = [[0, 0, i] for i in delta_thick]
+            #disturb atoms in z direction
+            disturb_types, disturb_coords = [], []
+            for i in range(atom_num):
+                stru = Structure.from_spacegroup(sg, latt, [atom_type[i]], [coords[i]])
+                equal_coords = stru.frac_coords + disturb[i]
+                disturb_coords += equal_coords.tolist()
+                disturb_types += [atom_type[i] for _ in range(len(equal_coords))]
+            stru = Structure(latt, disturb_types, disturb_coords)
+        else:
+            stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
         return stru
     
     def get_ppm_input_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group):
@@ -197,7 +215,7 @@ class Transfer(ListRWTools):
                 last_sg = sg
         return atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq
     
-    def get_stru_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group):
+    def get_stru_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group, add_thickness=False):
         """
         get strucutre object in same lattice
         
@@ -208,6 +226,7 @@ class Transfer(ListRWTools):
         grid [int, 0d]: grid number 
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
+        add_thickness [bool, 0d]: whether get puckered structure
         
         Returns
         ----------
@@ -221,12 +240,12 @@ class Transfer(ListRWTools):
         for i, sg in enumerate(space_group):
             if sg == last_sg:
                 stru = self.get_stru(atom_pos[i], atom_type[i],
-                                     latt_vec, grid_ratio[i], grid_coords, sg)
+                                     latt_vec, grid_ratio[i], grid_coords, sg, add_thickness)
                 stru_seq.append(stru)
             else:
                 grid_coords = self.import_data('frac', grid, sg)
                 stru = self.get_stru(atom_pos[i], atom_type[i],
-                                     latt_vec, grid_ratio[i], grid_coords, sg)
+                                     latt_vec, grid_ratio[i], grid_coords, sg, add_thickness)
                 stru_seq.append(stru)
                 last_sg = sg
         return stru_seq
@@ -336,7 +355,7 @@ class MultiGridTransfer(Transfer):
         nbr_fea_idx_bh += nbr_fea_idx_seq
         return atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh
     
-    def get_stru_bh(self, atom_pos, atom_type, grid_name, grid_ratio, space_group):
+    def get_stru_bh(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, add_thickness=False):
         """
         get strucutre object in different grids
         
@@ -347,6 +366,7 @@ class MultiGridTransfer(Transfer):
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
+        add_thickness [bool, 0d]: whether get puckered structure
         
         Returns
         ----------
@@ -358,12 +378,12 @@ class MultiGridTransfer(Transfer):
         for j, grid in enumerate(grid_name):
             if not last_grid == grid:
                 stru_seq = self.get_stru_seq(atom_pos[i:j], atom_type[i:j], 
-                                             last_grid, grid_ratio[i:j], space_group[i:j])
+                                             last_grid, grid_ratio[i:j], space_group[i:j], add_thickness)
                 stru_bh += stru_seq
                 last_grid = grid
                 i = j
         stru_seq = self.get_stru_seq(atom_pos[i:], atom_type[i:],
-                                     grid, grid_ratio[i:], space_group[i:])
+                                     grid, grid_ratio[i:], space_group[i:], add_thickness)
         stru_bh += stru_seq
         return stru_bh
 

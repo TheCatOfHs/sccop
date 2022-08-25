@@ -485,7 +485,7 @@ class PPModel(ListRWTools):
                                 random.sample(range(len(dataset)), 500)]
         _, sample_target = collate_pool(sample_data_list)
         return sample_target
-
+    
     def mae(self, prediction, target):
         """
         computes the mean absolute error between prediction and target

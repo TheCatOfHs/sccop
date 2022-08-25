@@ -1,7 +1,7 @@
 #Grid
 cutoff = 8
-num_min_atom = 5
-num_max_atom = 10
+num_min_atom = 10
+num_max_atom = 20
 grain = [.5, .5, 1.2]
 plane_upper = [100, 100, 1]
 
@@ -9,26 +9,30 @@ plane_upper = [100, 100, 1]
 num_dim = 2
 add_vacuum = True
 vacuum_space = 15
+puckered = True
+thickness = 0.1
 add_vdW = False
 
 #Recycling
-num_recycle = 1
-num_ml_list = [1]
+num_recycle = 2
+num_ml_list = [1, 1]
 num_poscars = 12
 num_optims = 6
+vasp_time_limit = 600
 
 #Initial Samples
 component = 'XXX'
 num_latt = 72
 num_Rand = 120
 num_ave_sg = 10
+num_cores = 4
 num_per_sg = 5
-len_mu = 5
+len_mu = 7
 len_sigma = 1
-len_lower = 4
-len_upper = 6
+len_lower = 6
+len_upper = 8
 ang_mu = 90
-ang_sigma = 10
+ang_sigma = 20
 system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
 
 #Training
@@ -44,7 +48,7 @@ decay = .95
 latt_steps = 3
 sa_steps = 100
 num_jump = 2
-num_path = 100
+num_path = 144
 min_bond = 1.2
 
 #Sample Select

@@ -3,6 +3,7 @@ import time
 import random
 import argparse
 import numpy as np
+import multiprocessing as mp
 
 from collections import Counter
 from pymatgen.core.lattice import Lattice
@@ -564,6 +565,8 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         sgs [int, 1d]: space groups
         assigns [dict, 2d, list]: assignments of atoms
         """
+        #multi core
+        pool = mp.Pool(processes=num_cores)
         #sampling space group randomly
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             [], [], [], [], [], []
@@ -576,10 +579,17 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
                 counter = 0
                 type, symm = self.get_type_and_symm(assign)
                 for _ in range(num_per_sg):
-                    pos, flag = self.get_pos(symm, symm_site, 1, grid_idx, grid_dis)
-                    if flag:
-                        atom_pos.append(pos)
-                        counter += 1
+                    #run on multi cores
+                    args_list = []
+                    for _ in range(num_cores):
+                        args = (symm, symm_site, 1, grid_idx, grid_dis)
+                        args_list.append(args)
+                    pos_job = [pool.apply_async(self.get_pos, args) for args in args_list]
+                    pos_pool = [p.get() for p in pos_job]
+                    for pos, flag in pos_pool:
+                        if flag:
+                            atom_pos.append(pos)
+                            counter += 1
                 atom_type += [type for _ in range(counter)]
                 atom_symm += [symm for _ in range(counter)]
                 grid_name += [grid for _ in range(counter)]
@@ -594,6 +604,8 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         #export random samples
         self.export_samples(recyc, grid, atom_pos, atom_type, atom_symm,
                             grid_name, grid_ratio, space_group)
+        #close pool
+        pool.close()
         
     def get_type_and_symm(self, assign):
         """
@@ -616,7 +628,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
             type += [atom for _ in range(len(plan))]
         return type, symm
 
-    def get_pos(self, symm, symm_site, ratio, grid_idx, grid_dis, trys=3):
+    def get_pos(self, symm, symm_site, ratio, grid_idx, grid_dis):
         """
         sampling position of atoms by symmetry
         
@@ -636,7 +648,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         """
         flag = False
         counter = 0
-        while counter < trys:
+        while counter < 3:
             pos = []
             for i in range(len(symm)):
                 #get allowable sites
@@ -649,6 +661,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
                 else:
                     for _ in range(10):
                         check_pos = pos.copy()
+                        np.random.seed()
                         point = np.random.choice(allow)
                         check_pos.append(point)
                         if self.check_near(check_pos, ratio, grid_idx, grid_dis):
