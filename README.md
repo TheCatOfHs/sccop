@@ -1,86 +1,57 @@
-# 
+# Symmetry Crystal Combinatorial Optimization Program
 
-This software package implements the Crystal Graph Convolutional Neural Networks (CGCNN) that takes an arbitary crystal structure to predict material properties. 
+This software package implements the Symmetry Crystal Combinatorial Optimization Program (SCCOP) that predicts crystal structure of specific composition. 
 
-The package provides two major functions:
+The following paper describes the details of the SCCOP framework:
 
-- Train a CGCNN model with a customized dataset.
-- Predict material properties of new crystals with a pre-trained CGCNN model.
-
-The following paper describes the details of the CGCNN framework:
-
-[Crystal Graph Convolutional Neural Networks for an Accurate and Interpretable Prediction of Material Properties](https://link.aps.org/doi/10.1103/PhysRevLett.120.145301)
+[Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
 
 ## Table of Contents
 
 - [How to cite](#how-to-cite)
 - [Prerequisites](#prerequisites)
 - [Usage](#usage)
-  - [Define a customized dataset](#define-a-customized-dataset)
-  - [Train a CGCNN model](#train-a-cgcnn-model)
-  - [Predict material properties with a pre-trained CGCNN model](#predict-material-properties-with-a-pre-trained-cgcnn-model)
+  - [Customize initial file](#define-a-customized-search-file)
+  - [Submit search job on cluster](#begin-sccop)
+  - [Successful example](#predict-material-properties-with-a-pre-trained-cgcnn-model)
 - [Data](#data)
 - [Authors](#authors)
 - [License](#license)
 
 ## How to cite
 
-Please cite the following work if you want to use CGCNN.
+Please cite the following work if you want to use SCCOP.
 
 ```
-@article{PhysRevLett.120.145301,
-  title = {Crystal Graph Convolutional Neural Networks for an Accurate and Interpretable Prediction of Material Properties},
-  author = {Xie, Tian and Grossman, Jeffrey C.},
-  journal = {Phys. Rev. Lett.},
-  volume = {120},
-  issue = {14},
-  pages = {145301},
-  numpages = {6},
-  year = {2018},
-  month = {Apr},
-  publisher = {American Physical Society},
-  doi = {10.1103/PhysRevLett.120.145301},
-  url = {https://link.aps.org/doi/10.1103/PhysRevLett.120.145301}
+@article{XXX,
+  title = {Crystal structure prediction and property related feature extraction by graph deep learning},
+  author = {Li, Chuannan and Liang, Hanpu and Zhang, Xie and Lin, Zijing and Wei, Su-Huai},
+  journal = {XXX},
+  volume = {XXX},
+  issue = {XXX},
+  pages = {XXX},
+  numpages = {XXX},
+  year = {XXX},
+  month = {XXX},
+  publisher = {XXX},
+  doi = {XXX},
+  url = {XXX}
 }
 ```
 
 ##  Prerequisites
 
-This package requires:
+Package requirement:
 
 - [PyTorch](http://pytorch.org)
 - [scikit-learn](http://scikit-learn.org/stable/)
 - [pymatgen](http://pymatgen.org)
+- [VASP](https://www.vaspweb.org/)
 
-If you are new to Python, the easiest way of installing the prerequisites is via [conda](https://conda.io/docs/index.html). After installing [conda](http://conda.pydata.org/), run the following command to create a new [environment](https://conda.io/docs/user-guide/tasks/manage-environments.html) named `cgcnn` and install all prerequisites:
+Hardware requirement:
 
-```bash
-conda upgrade conda
-conda create -n cgcnn python=3 scikit-learn pytorch torchvision pymatgen -c pytorch -c conda-forge
-```
-
-*Note: this code is tested for PyTorch v1.0.0+ and is not compatible with versions below v0.4.0 due to some breaking changes.
-
-This creates a conda environment for running CGCNN. Before using CGCNN, activate the environment by:
-
-```bash
-source activate cgcnn
-```
-
-Then, in directory `cgcnn`, you can test if all the prerequisites are installed properly by running:
-
-```bash
-python main.py -h
-python predict.py -h
-```
-
-This should display the help messages for `main.py` and `predict.py`. If you find no error messages, it means that the prerequisites are installed properly.
-
-After you finished using CGCNN, exit the environment by:
-
-```bash
-source deactivate
-```
+- CPU node
+- GPU node: at least 2 gpus
 
 ## Usage
 
