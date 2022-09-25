@@ -20,7 +20,7 @@ num_optims = 6
 vasp_time_limit = 480
 
 #Initial Samples
-component = 'B1C3'
+component = 'XXX'
 num_latt = 72
 num_Rand = 120
 num_ave_sg = 10
