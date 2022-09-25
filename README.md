@@ -12,8 +12,8 @@ The following paper describes the details of the SCCOP framework:
 - [Prerequisites](#prerequisites)
 - [Usage](#usage)
   - [Customize initial file](#define-a-customized-search-file)
-  - [Submit search job on cluster](#begin-sccop)
-  - [Successful example](#predict-material-properties-with-a-pre-trained-cgcnn-model)
+  - [Submit search job on cluster](#submit-sccop-job)
+  - [Successful example](#successful-example)
 - [Data](#data)
 - [Authors](#authors)
 - [License](#license)
@@ -50,9 +50,9 @@ Package requirement:
 
 Hardware requirement:
 
-- GPU node: train prediction model and deal with data
-- CPU node: optimize structure by ML-SA and VASP
- 
+- [GPU node](https://en.wikipedia.org/wiki/GPU_cluster)
+- [CPU node](https://en.wikipedia.org/wiki/Server_(computing))
+
 
 ## Usage
 
@@ -90,7 +90,7 @@ There are two examples of customized datasets in the repository: `data/sample-re
 
 The above method of creating a customized dataset uses the `CIFData` class in `cgcnn.data`. If you want a more flexible way to input crystal structures, PyTorch has a great [Tutorial](http://pytorch.org/tutorials/beginner/data_loading_tutorial.html#sphx-glr-beginner-data-loading-tutorial-py) for writing your own dataset class.
 
-### Train a CGCNN model
+### Submit SCCOP Job
 
 Before training a new CGCNN model, you will need to:
 
@@ -124,7 +124,7 @@ After training, you will get three files in `cgcnn` directory.
 - `checkpoint.pth.tar`: stores the CGCNN model at the last epoch.
 - `test_results.csv`: stores the `ID`, target value, and predicted value for each crystal in test set.
 
-### Predict material properties with a pre-trained CGCNN model
+### Successful Example
 
 Before predicting the material properties, you will need to:
 
