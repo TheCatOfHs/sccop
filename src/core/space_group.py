@@ -8,7 +8,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 
 
 class PlanarSpaceGroup:
@@ -312,13 +312,13 @@ class PlanarSpaceGroup:
         for i in np.arange(0, .5, frac_grain[0]):
             if 0 < i:
                 equal_2.append([i, 0, 0])
-                equal_2.append([i, .5, 0])
         for j in np.arange(0, .5, frac_grain[1]):
             if 0 < j:
                 equal_2.append([0, j, 0])
+                equal_2.append([.5, j, 0])
         #inner
-        for i in np.arange(0, 1, frac_grain[0]):
-            for j in np.arange(0, .5, frac_grain[1]):
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
                 if 0 < i and 0 < j:
                     equal_2.append([i, j, 0])
         min_grid = equal_1 + equal_2
@@ -346,10 +346,15 @@ class PlanarSpaceGroup:
         space group P1g1
         """
         equal_2 = []
+        #boundary
+        for j in np.arange(0, .5, frac_grain[1]):
+                equal_2.append([0, j, 0])
+                equal_2.append([.5, j, 0])
         #inner
-        for i in np.arange(0, 1, frac_grain[0]):
-            for j in np.arange(0, .5, frac_grain[1]):
-                equal_2.append([i, j, 0])
+        for i in np.arange(0, .5, frac_grain[0]):
+            for j in np.arange(0, 1, frac_grain[1]):
+                if 0 < i:
+                    equal_2.append([i, j, 0])
         min_grid = equal_2
         return min_grid
     

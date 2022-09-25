@@ -8,7 +8,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.utils import *
 from core.data_transfer import DeleteDuplicates
 from core.grid_sampling import GridDivide, ParallelSampling
@@ -39,18 +39,18 @@ class UpdateNodes(SSHTools):
         ip = f'node{node}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local
-                        rm -rf ccop/
-                        mkdir ccop/
-                        cd ccop/
+                        cd {CPU_local_path}
+                        rm -rf sccop/
+                        mkdir sccop/
+                        cd sccop/
                         
                         mkdir vasp
-                        scp -r {gpu_node}:/local/ccop/data .
-                        scp -r {gpu_node}:/local/ccop/src .
-                        scp -r {gpu_node}:/local/ccop/libs .
+                        scp -r {gpu_node}:{SCCOP_path}/data .
+                        scp -r {gpu_node}:{SCCOP_path}/src .
+                        scp -r {gpu_node}:{SCCOP_path}/libs .
                         
                         touch FINISH-{ip}
-                        scp FINISH-{ip} {gpu_node}:/local/ccop/
+                        scp FINISH-{ip} {gpu_node}:{SCCOP_path}/
                         rm FINISH-{ip}
                         '''
         self.ssh_node(shell_script, ip)
@@ -61,11 +61,11 @@ class UpdateNodes(SSHTools):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         node [int, 0d]: cpu node
         """
         ip = f'node{node}'
-        local_poscar_path = f'/local/ccop/{init_strus_path}_{recyc}'
+        local_poscar_path = f'{SCCOP_path}/{init_strus_path}_{recyc}'
         shell_script = f'''
                         #!/bin/bash
                         mkdir {local_poscar_path}
@@ -74,7 +74,7 @@ class UpdateNodes(SSHTools):
                         tar -zxf poscars.tar.gz
                             
                         touch FINISH-{ip}
-                        scp FINISH-{ip} {gpu_node}:/local/ccop/
+                        scp FINISH-{ip} {gpu_node}:{SCCOP_path}/
                         rm FINISH-{ip} poscars.tar.gz
                         '''
         self.ssh_node(shell_script, ip)
@@ -85,7 +85,7 @@ class UpdateNodes(SSHTools):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         """
         shell_script = f'''
                         #!/bin/bash
@@ -108,7 +108,7 @@ class UpdateNodes(SSHTools):
 
 class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
                    DeleteDuplicates):
-    #generate initial structures of ccop
+    #generate initial structures of sccop
     def __init__(self):
         UpdateNodes.__init__(self)
         ParallelSampling.__init__(self)

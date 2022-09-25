@@ -1,13 +1,14 @@
 import os, sys, time
 import itertools
 import numpy as np
+
 import torch
 import argparse
 from functools import reduce
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.data_transfer import Transfer
 from core.space_group import PlanarSpaceGroup
 from core.utils import ListRWTools, SSHTools, system_echo
@@ -19,14 +20,14 @@ class ParallelWorkers(ListRWTools, SSHTools):
     def __init__(self, sleep_time=1):
         self.sleep_time = sleep_time
     
-    def search(self, round, init_pos, init_type, init_symm,
+    def search(self, iteration, init_pos, init_type, init_symm,
                init_grid, init_ratio, init_sg):
         """
         optimize structure by ML on grid
         
         Parameters
         ----------
-        round [int, 0d]: searching round
+        iteration [int, 0d]: searching iteration
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
         init_symm [int, 2d]: initial symmetry
@@ -34,10 +35,10 @@ class ParallelWorkers(ListRWTools, SSHTools):
         init_ratio [float, 1d]: initial grid ratio
         init_sg [int, 1d]: initial space group
         """
-        self.round = f'{round:03.0f}'
-        self.sh_save_path = f'{search_path}/{self.round}'
-        self.model_save_path = f'{model_path}/{self.round}'
-        self.generate_job(round, init_pos, init_type, init_symm,
+        self.iteration = f'{iteration:03.0f}'
+        self.sh_save_path = f'{search_path}/{self.iteration}'
+        self.model_save_path = f'{model_path}/{self.iteration}'
+        self.generate_job(iteration, init_pos, init_type, init_symm,
                           init_grid, init_ratio, init_sg)
         pos, type, symm, job = self.read_job()
         system_echo('Get the job node!')
@@ -56,7 +57,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         #collect searching path
         self.collect(job)
     
-    def generate_job(self, round, init_pos, init_type, init_symm,
+    def generate_job(self, iteration, init_pos, init_type, init_symm,
                      init_grid, init_ratio, init_sg):
         """
         assign jobs by the following files
@@ -64,12 +65,12 @@ class ParallelWorkers(ListRWTools, SSHTools):
         initial_type_XXX.dat: initial type
         initial_symm_XXX.dat: initial symmetry
         worker_job_XXX.dat: node job
-        e.g. round path node grid ratio sg
+        e.g. iteration path node grid ratio sg
              1 1 131 1 1 183
         
         Parameters
         ----------
-        round [int, 0d]: searching round
+        iteration [int, 0d]: searching iteration
         init_pos [int, 2d]: initial position
         init_type [int, 2d]: initial atom type
         init_symm [int, 2d]: initial symmetry
@@ -83,13 +84,13 @@ class ParallelWorkers(ListRWTools, SSHTools):
         path_num = len(init_grid)
         node_assign = self.assign_node(path_num)
         for i, node in enumerate(node_assign):
-            job = [round, i, node, init_grid[i], init_ratio[i], init_sg[i]]
+            job = [iteration, i, node, init_grid[i], init_ratio[i], init_sg[i]]
             worker_job.append(job)
         #export searching files
-        pos_file = f'{self.sh_save_path}/initial_pos_{self.round}.dat'
-        type_file = f'{self.sh_save_path}/initial_type_{self.round}.dat'
-        symm_file = f'{self.sh_save_path}/initial_symm_{self.round}.dat'
-        worker_file = f'{self.sh_save_path}/worker_job_{self.round}.dat'
+        pos_file = f'{self.sh_save_path}/initial_pos_{self.iteration}.dat'
+        type_file = f'{self.sh_save_path}/initial_type_{self.iteration}.dat'
+        symm_file = f'{self.sh_save_path}/initial_symm_{self.iteration}.dat'
+        worker_file = f'{self.sh_save_path}/worker_job_{self.iteration}.dat'
         self.write_list2d(pos_file, init_pos)
         self.write_list2d(type_file, init_type)
         self.write_list2d(symm_file, init_symm)
@@ -97,20 +98,20 @@ class ParallelWorkers(ListRWTools, SSHTools):
         
     def update_with_ssh(self, node):
         """
-        SSH to target node and update ccop file
+        SSH to target node and update sccop file
         """
         ip = f'node{node}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/
+                        cd {SCCOP_path}/
                         mkdir {self.sh_save_path}
                         mkdir {self.model_save_path}
                         cd {self.model_save_path}
                         
-                        scp {gpu_node}:/local/ccop/{self.model_save_path}/model_best.pth.tar .
+                        scp {gpu_node}:{SCCOP_path}/{self.model_save_path}/model_best.pth.tar .
                         
                         touch FINISH-{ip}
-                        scp FINISH-{ip} {gpu_node}:/local/ccop/{self.sh_save_path}/
+                        scp FINISH-{ip} {gpu_node}:{SCCOP_path}/{self.sh_save_path}/
                         rm FINISH-{ip}
                         '''
         self.ssh_node(shell_script, ip)
@@ -150,7 +151,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         return work_node_num
     
     def sampling_with_ssh(self, atom_pos, atom_type, atom_symm,
-                          round, path, node, grid_name, grid_ratio, space_group):
+                          iteration, path, node, grid_name, grid_ratio, space_group):
         """
         SSH to target node and call workers for sampling
 
@@ -159,7 +160,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         atom_pos [str, 1d]: initial atom position
         atom_type [str, 1d]: initial atom type
         atom_symm [str, 1d]: initial atom symmetry 
-        round [str, 1d]: searching round
+        iteration [str, 1d]: searching iteration
         path [str, 1d]: searching path
         node [str, 1d]: searching node
         grid_name [str, 1d]: name of grid
@@ -170,26 +171,36 @@ class ParallelWorkers(ListRWTools, SSHTools):
         search_jobs = []
         for i in range(len(atom_pos)):
             option = f'--pos {atom_pos[i]} --type {atom_type[i]} --symm {atom_symm[i]} ' \
-                     f'--round {round[i]} --path {path[i]} --node {node[i]} ' \
+                     f'--iteration {iteration[i]} --path {path[i]} --node {node[i]} ' \
                      f'--grid {grid_name[i]} --ratio {grid_ratio[i]} --sg {space_group[i]}'
-            search_jobs.append(f'nohup python src/core/search.py {option} >& log&')
+            search_jobs.append(f'\"src/core/search.py {option}\"')
         search_jobs = ' '.join(search_jobs)
+        job_num = '`ps -ef | grep src/core/search.py | grep -v grep | wc -l`'
         #ssh to target node then search from different start
-        local_sh_save_path = f'/local/ccop/{self.sh_save_path}'
+        local_sh_save_path = f'{SCCOP_path}/{self.sh_save_path}'
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/
-                        {search_jobs}
+                        cd {SCCOP_path}/
                         
-                        while true;
+                        for i in {search_jobs}
                         do
-                            num=`ps -ef | grep search.py | grep -v grep | wc -l`
-                            if [ $num -eq 0 ]; then
-                                rm log
-                                break
-                            fi
+                            nohup python $i >& log&
+                            
+                            counter={job_num}
+                            while [ $counter -ge 20 ]
+                            do
+                                counter={job_num}
+                                sleep 1s
+                            done
+                        done
+                        
+                        counter={job_num}
+                        while [ $counter -ge 1 ]
+                        do
+                            counter={job_num}
                             sleep 1s
                         done
+                        rm log
                         
                         cd {self.sh_save_path}
                         tar -zcf search-{ip}.tar.gz *
@@ -226,12 +237,12 @@ class ParallelWorkers(ListRWTools, SSHTools):
         job [str, 2d, np]: jobs assgined to nodes
         """
         job = np.transpose(job)
-        round, path, node, _, _, _ = job
+        iteration, path, node, _, _, _ = job
         atom_pos, atom_type, atom_symm = [], [], []
         grid_name, grid_ratio, space_group, lack =  [], [], [], []
         for i in range(len(path)):
             #get name of path record files
-            assign = (round[i], path[i], node[i])
+            assign = (iteration[i], path[i], node[i])
             pos_file = self.get_file_name('pos', *assign)
             type_file = self.get_file_name('type', *assign)
             symm_file = self.get_file_name('symm', *assign)
@@ -291,14 +302,14 @@ class ParallelWorkers(ListRWTools, SSHTools):
                           space_group, style='{0:3.0f}')
         self.remove_all()
         
-    def get_file_name(self, name, round, path, node):
+    def get_file_name(self, name, iteration, path, node):
         """
         read result of each worker
         
         Parameters
         ----------
         name [str, 0d]: file name
-        round [str, 0d]: round of searching
+        iteration [str, 0d]: iteration of searching
         path [str, 0d]: path of searching
         node [str, 0d]: node used to search
         
@@ -307,7 +318,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         file [int, 2d]: name of search file 
         """
         file = f'{self.sh_save_path}/' \
-            f'{name}-{round.zfill(3)}-{path.zfill(3)}-{node}.dat'
+            f'{name}-{iteration.zfill(3)}-{path.zfill(3)}-{node}.dat'
         return file
     
     def read_job(self):
@@ -321,10 +332,10 @@ class ParallelWorkers(ListRWTools, SSHTools):
         symm [str, 1d, np]: initial symmetry string list
         job [str, 2d, np]: job assign string list
         """
-        pos = self.read_dat(f'initial_pos_{self.round}.dat')
-        type = self.read_dat(f'initial_type_{self.round}.dat')
-        symm = self.read_dat(f'initial_symm_{self.round}.dat')
-        job = self.read_dat(f'worker_job_{self.round}.dat', split=True)
+        pos = self.read_dat(f'initial_pos_{self.iteration}.dat')
+        type = self.read_dat(f'initial_type_{self.iteration}.dat')
+        symm = self.read_dat(f'initial_symm_{self.iteration}.dat')
+        job = self.read_dat(f'worker_job_{self.iteration}.dat', split=True)
         return pos, type, symm, job
     
     def read_dat(self, dat, split=False):
@@ -593,13 +604,13 @@ class GeoCheck(ActionSpace):
 
 class Search(GeoCheck, PlanarSpaceGroup, Transfer):
     #Searching on PES by machine-learning potential
-    def __init__(self, round):
+    def __init__(self, iteration):
         Transfer.__init__(self)
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([]))
-        self.round = f'{round:03.0f}'
-        self.model_save_path = f'{model_path}/{self.round}'
-        self.sh_save_path = f'{search_path}/{self.round}'
+        self.iteration = f'{iteration:03.0f}'
+        self.model_save_path = f'{model_path}/{self.iteration}'
+        self.sh_save_path = f'{search_path}/{self.iteration}'
     
     def explore(self, pos, type, symm, grid, ratio, sg, path, node):
         """
@@ -630,7 +641,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         #initialize buffer
         pos_1, ratio_1 = pos, ratio
         energy, atom_pos, grid_ratio = [], [], []
-        e_1 = self.predict(pos_1, type, ratio_1, grid_idx, grid_dis)
+        e_1 = self.predict(pos_1, type, symm, ratio_1, grid_idx, grid_dis)
         energy.append(e_1)
         atom_pos.append(pos_1)
         grid_ratio.append(ratio_1)
@@ -641,7 +652,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
             for _ in range(sa_steps):
                 pos_2 = self.atom_step(pos_1, type, symm, symm_site,
                                        ratio_1, grid_idx, grid_dis)
-                e_2 = self.predict(pos_2, type, ratio_1, grid_idx, grid_dis)
+                e_2 = self.predict(pos_2, type, symm, ratio_1, grid_idx, grid_dis)
                 if self.metropolis(e_1, e_2, self.T):
                     e_1, pos_1 = e_2, pos_2
                     energy.append(e_1)
@@ -649,7 +660,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
                     grid_ratio.append(ratio_1)
                 self.T *= decay
             #optimize lattice
-            ratio_2 = self.latt_step(pos_1, type, ratio_1, scale_bound, grid_idx, grid_dis)
+            ratio_2 = self.latt_step(pos_1, type, symm, ratio_1, scale_bound, grid_idx, grid_dis)
             ratio_1 = ratio_2
         self.save(atom_pos, type, symm, grid, grid_ratio, sg, energy, path, node)
     
@@ -702,7 +713,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
                 new_pos = new_pos
         return new_pos
     
-    def latt_step(self, pos, type, ratio, scale_bound, grid_idx, grid_dis):
+    def latt_step(self, pos, type, symm, ratio, scale_bound, grid_idx, grid_dis):
         """
         choose best ratio to scale lattice
         
@@ -710,6 +721,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         ----------
         pos [int, 1d]: position of atoms
         type [int, 1d]: type of atoms
+        symm [int, 1d]: symmetry of atoms
         ratio [float, 0d]: grid ratio
         scale_bound [float, 1d]: boundary of scaling lattice
         grid_idx [int, 2d, np]: neighbor index of grid
@@ -720,13 +732,19 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         new_ratio [float, 0d]: grid ratio
         """
         ratios = self.scale_action(pos, ratio, scale_bound, grid_idx, grid_dis)
-        if len(ratios) > 0: 
+        ratios_num = len(ratios)
+        if ratios_num > 0: 
             energys = []
             for i in ratios:
-                energy = self.predict(pos, type, i, grid_idx, grid_dis)
+                energy = self.predict(pos, type, symm, i, grid_idx, grid_dis)
                 energys.append(energy)
-            #choose best grid ratio
-            idx = np.argmin(energys)
+            #choose grid ratio randomly
+            ratios_num = int(.2*ratios_num)
+            idx_sort = np.argsort(energys)
+            if ratios_num >= 1:
+                idx = np.random.choice(idx_sort[:ratios_num])
+            else:
+                idx = idx_sort[0]
             new_ratio = ratios[idx]
         else:
             new_ratio = ratio
@@ -759,14 +777,13 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         """
         load predict model
         """
-        self.model = CrystalGraphConvNet(orig_atom_fea_len, 
-                                         nbr_bond_fea_len)
+        self.model = CrystalGraphConvNet()
         paras = torch.load(f'{self.model_save_path}/model_best.pth.tar', 
                            map_location=self.device)
         self.model.load_state_dict(paras['state_dict'])
         self.normalizer.load_state_dict(paras['normalizer'])
     
-    def predict(self, pos, type, ratio, grid_idx, grid_dis):
+    def predict(self, pos, type, symm, ratio, grid_idx, grid_dis):
         """
         predict energy of one structure
 
@@ -774,6 +791,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         ----------
         pos [int, 1d]: position of atoms
         type [int ,1d]: type of atoms
+        symm [int, 1d]: symmetry of atoms
         ratio [float, 0d]: grid ratio
         grid_idx [int, 2d, np]: neighbor index of grid
         grid_dis [float, 2d, np]: neighbor distance of grid
@@ -788,6 +806,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
                                ratio, grid_idx, grid_dis)
         crystal_atom_idx = np.arange(len(atom_fea))
         input_var = (torch.Tensor(atom_fea),
+                     torch.Tensor(symm),
                      torch.Tensor(nbr_fea),
                      torch.LongTensor(nbr_fea_idx),
                      [torch.LongTensor(crystal_atom_idx)])
@@ -822,29 +841,30 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         space_group = [sg for _ in range(num)] 
         #export results
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'pos-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'pos-{self.iteration}-{path:03.0f}-{node}.dat', 
                           atom_pos, style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'type-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'type-{self.iteration}-{path:03.0f}-{node}.dat', 
                           atom_type, style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'symm-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'symm-{self.iteration}-{path:03.0f}-{node}.dat', 
                           atom_symm, style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'grid-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'grid-{self.iteration}-{path:03.0f}-{node}.dat', 
                           np.transpose([grid_name]), style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'ratio-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'ratio-{self.iteration}-{path:03.0f}-{node}.dat', 
                           np.transpose([grid_ratio]), style='{0:8.4f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'sg-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'sg-{self.iteration}-{path:03.0f}-{node}.dat', 
                           np.transpose([space_group]), style='{0:4.0f}')
         self.write_list2d(f'{self.sh_save_path}/'
-                          f'energy-{self.round}-{path:03.0f}-{node}.dat', 
+                          f'energy-{self.iteration}-{path:03.0f}-{node}.dat', 
                           np.transpose([energy]), style='{0:8.4f}')
         
 
 if __name__ == '__main__':
+    torch.set_num_threads(sa_cores)
     parser = argparse.ArgumentParser()
     parser.add_argument('--pos', type=int, nargs='+')
     parser.add_argument('--type', type=int, nargs='+')
@@ -852,7 +872,7 @@ if __name__ == '__main__':
     parser.add_argument('--grid', type=int)
     parser.add_argument('--ratio', type=float)
     parser.add_argument('--sg', type=int)
-    parser.add_argument('--round', type=int)
+    parser.add_argument('--iteration', type=int)
     parser.add_argument('--path', type=int)
     parser.add_argument('--node', type=int)
     args = parser.parse_args()
@@ -865,9 +885,9 @@ if __name__ == '__main__':
     ratio = args.ratio
     sg = args.sg
     #path label
-    round = args.round
+    iteration = args.iteration
     path = args.path
     node = args.node
     #Searching
-    worker = Search(round)
+    worker = Search(iteration)
     worker.explore(pos, type, symm, grid, ratio, sg, path, node)

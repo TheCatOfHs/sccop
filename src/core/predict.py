@@ -1,7 +1,7 @@
 import random
 import functools
-import numpy as np
 import os, sys, time, shutil
+import numpy as np
 
 import torch
 import torch.nn as nn
@@ -12,7 +12,7 @@ from torch.nn import DataParallel as DataParallel_raw
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.sub_vasp import system_echo
 from core.utils import ListRWTools
 
@@ -25,14 +25,17 @@ class DataParallel(DataParallel_raw):
     def forward(self, **kwargs):
         new_inputs = [{} for _ in self.device_ids]
         for key in kwargs:
+            #
             if key == 'crys_fea':
                 for i, device in enumerate(self.device_ids):
                     new_inputs[i][key] = kwargs[key][i].to(device, non_blocking=True)
                 break
+            #
             if key == 'crystal_atom_idx':
                 for i, device in enumerate(self.device_ids):
                     new_inputs[i][key] = [cry_idx.to(device, non_blocking=True) 
                                             for cry_idx in kwargs[key][i]]
+            #
             else:
                 for i, device in enumerate(self.device_ids):
                     new_inputs[i][key] = kwargs[key][i].to(device, non_blocking=True)
@@ -44,8 +47,9 @@ class DataParallel(DataParallel_raw):
 
 class PPMData(Dataset):
     #Self-define training set of PPM
-    def __init__(self, atom_feas, nbr_feas, nbr_fea_idxes, targets):
+    def __init__(self, atom_feas, atom_symm, nbr_feas, nbr_fea_idxes, targets):
         self.atom_feas = atom_feas
+        self.atom_symm = atom_symm
         self.nbr_feas = nbr_feas
         self.nbr_fea_idxes = nbr_fea_idxes
         self.targets = targets
@@ -64,19 +68,22 @@ class PPMData(Dataset):
         Returns
         ----------
         atom_fea [float, 2d, tensor]: feature of atoms
+        atom_symm [int, 2d]: symmetry of atoms
         nbr_fea [float, 3d, tensor]: bond feature
         nbr_fea_idx [int, 2d, tensor]: index of neighbors
         target [int, 1d, tensor]: target value
         """
         atom_fea = self.atom_feas[idx]
+        atom_symm = self.atom_symm[idx]
         nbr_fea = self.nbr_feas[idx]
         nbr_fea_idx = self.nbr_fea_idxes[idx]
         target = self.targets[idx]
+        #convert to float tensor
         atom_fea = torch.Tensor(atom_fea)
         nbr_fea = torch.Tensor(nbr_fea)
         nbr_fea_idx = torch.LongTensor(nbr_fea_idx)
         target = torch.Tensor([target])
-        return (atom_fea, nbr_fea, nbr_fea_idx), target
+        return atom_fea, atom_symm, nbr_fea, nbr_fea_idx, target
 
 
 def collate_pool(dataset_list):
@@ -85,41 +92,46 @@ def collate_pool(dataset_list):
     
     Parameters
     ----------
-    dataset_list [tuple]: output of PPMData
+    dataset_list [tuple]: PPMData
     
     Returns
     ----------
     store_1 [float, 3d]: atom features assigned to gpus
-    store_2 [float, 4d]: bond features assigned to gpus
-    store_3 [int, 3d]: index of neighbors assigned to gpus
-    store_4 [int, 3d]: index of crystals assigned to gpus
+    store_2 [float, 2d]: symmetry weight assigned to gpus
+    store_3 [float, 4d]: bond features assigned to gpus
+    store_4 [int, 3d]: index of neighbors assigned to gpus
+    store_5 [int, 3d]: index of crystals assigned to gpus
     target [float, 2d, tensor]: target values
     """
     assign_plan = batch_divide(dataset_list)
-    batch_atom_fea, batch_nbr_fea, batch_nbr_fea_idx = [], [], []
-    crystal_atom_idx, batch_target = [], []
+    batch_atom_fea, batch_symm, batch_nbr_fea  = [], [], []
+    batch_nbr_fea_idx, crystal_atom_idx, batch_target = [], [], []
     num, base_idx, counter = 0, 0, 0
-    store_1, store_2, store_3, store_4 = [], [], [], []
-    for ((atom_fea, nbr_fea, nbr_fea_idx), target) in dataset_list:
-        n_i = atom_fea.shape[0]
+    store_1, store_2, store_3, store_4, store_5 = [], [], [], [], []
+    #divide data by number of gpus
+    for atom_fea, atom_symm, nbr_fea, nbr_fea_idx, target in dataset_list:
+        #collate batch data
+        n_i = len(atom_fea)
         batch_atom_fea.append(atom_fea)
+        batch_symm += atom_symm
         batch_nbr_fea.append(nbr_fea)
-        batch_nbr_fea_idx.append(nbr_fea_idx+base_idx)
-        new_idx = torch.LongTensor(np.arange(n_i)+base_idx)
-        crystal_atom_idx.append(new_idx)
+        batch_nbr_fea_idx.append(base_idx+nbr_fea_idx)
+        crystal_atom_idx.append(torch.LongTensor(base_idx+np.arange(n_i)))
         batch_target.append(target)
         base_idx += n_i
         counter += 1
+        #save data
         if counter == assign_plan[num]:
-            store_1.append(torch.cat(batch_atom_fea, dim=0))
-            store_2.append(torch.cat(batch_nbr_fea, dim=0))
-            store_3.append(torch.cat(batch_nbr_fea_idx, dim=0))
-            store_4.append(crystal_atom_idx)
+            store_1.append(torch.cat(batch_atom_fea))
+            store_2.append(torch.Tensor(batch_symm))
+            store_3.append(torch.cat(batch_nbr_fea))
+            store_4.append(torch.cat(batch_nbr_fea_idx))
+            store_5.append(crystal_atom_idx)
             batch_atom_fea, batch_nbr_fea, batch_nbr_fea_idx = [], [], []
-            crystal_atom_idx = []
+            batch_symm, crystal_atom_idx = [], []
             base_idx = 0
             num += 1
-    return (store_1, store_2, store_3, store_4), \
+    return (store_1, store_2, store_3, store_4, store_5), \
             torch.stack(batch_target, dim=0)
 
 def batch_divide(dataset_list):
@@ -226,72 +238,68 @@ class ConvLayer(nn.Module):
         
 
 class CrystalGraphConvNet(nn.Module):
-    #Crystal Graph Convolutional Neural Network
-    def __init__(self, orig_atom_fea_len, nbr_fea_len,
-                 atom_fea_len=64, n_conv=3, h_fea_len=128, n_h=1):
+    #CGCNN applied in asymmetric unit
+    def __init__(self, n_conv=3, orig_atom_fea_len=92, 
+                 atom_fea_len=64, nbr_fea_len=41, h_fea_len=128):
         super(CrystalGraphConvNet, self).__init__()
         self.embedding = nn.Linear(orig_atom_fea_len, atom_fea_len)
         self.convs = nn.ModuleList([ConvLayer(atom_fea_len=atom_fea_len,
-                                    nbr_fea_len=nbr_fea_len)
+                                              nbr_fea_len=nbr_fea_len)
                                     for _ in range(n_conv)])
         self.conv_to_fc = nn.Linear(atom_fea_len, h_fea_len)
         self.conv_to_fc_softplus = nn.Softplus()
-        if n_h > 1:
-            self.fcs = nn.ModuleList([nn.Linear(h_fea_len, h_fea_len)
-                                      for _ in range(n_h-1)])
-            self.softpluses = nn.ModuleList([nn.Softplus()
-                                             for _ in range(n_h-1)])
         self.fc_out = nn.Linear(h_fea_len, 1)
-
-    def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx):
+    
+    def forward(self, atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx):
         """
-        predict value
+        predict energy
         
         Parameters
         ----------
         atom_fea [float, 2d, tensor]: atom feature 
+        atom_symm [float, 1d, tensor]: symmetry of atoms
         nbr_fea [float, 3d, tensor]: bond feature
         nbr_fea_idx [int, 2d, tensor]: neighbor index
-        crystal_atom_idx [int, 3d, tensor]: atom index in batch
+        crystal_atom_idx [int, 2d, tensor]: atom index in batch
 
         Returns
         ----------
-        out [float, 2d, tensor]: predict value
+        out [float, 2d, tensor]: predict energy
         """
         atom_fea = self.embedding(atom_fea)
         for conv_func in self.convs:
             atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
-        crys_fea = self.pooling(atom_fea, crystal_atom_idx)
+        crys_fea = self.pooling(atom_fea, atom_symm, crystal_atom_idx)
         crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
         crys_fea = self.conv_to_fc_softplus(crys_fea)
-        if hasattr(self, 'fcs') and hasattr(self, 'softpluses'):
-            for fc, softplus in zip(self.fcs, self.softpluses):
-                crys_fea = softplus(fc(crys_fea))
         out = self.fc_out(crys_fea)
         return out
     
-    def pooling(self, atom_fea, crystal_atom_idx):
+    def pooling(self, atom_fea, atom_symm, crystal_atom_idx):
         """
+        symmetry weighted average
         mix atom vector into crystal vector
         
         Parameters
         ----------
         atom_fea [float, 2d, tensor]: atom vector
+        atom_symm [float, 1d, tensor]: symmetry of atoms
         crystal_atom_idx [int, 2d, tensor]: atom index in batch
 
         Returns
         ----------
         crys_fea [float, 2d, tensor]: crystal vector
         """
-        summed_fea = [torch.mean(atom_fea[idx_map], dim=0, keepdim=True)
+        summed_fea = [torch.mean(atom_symm[idx_map].view(-1,1)*atom_fea[idx_map],
+                                 dim=0, keepdim=True)
                       for idx_map in crystal_atom_idx]
         return torch.cat(summed_fea, dim=0)
-    
+
 
 class PPModel(ListRWTools):
     #Train property predict model
-    def __init__(self, round, train_data, valid_data, test_data, 
-                 lr=1e-2, num_workers=0, num_gpus=2, print_feq=10):
+    def __init__(self, iteration, train_data, valid_data, test_data, 
+                 lr=1e-2, num_workers=0, num_gpus=num_gpus, print_feq=10):
         self.device = torch.device('cuda')
         self.train_data = train_data
         self.valid_data = valid_data
@@ -302,7 +310,7 @@ class PPModel(ListRWTools):
         self.num_workers = num_workers
         self.num_gpus = num_gpus
         self.print_feq = print_feq
-        self.model_save_path = f'{model_path}/{round:03.0f}'
+        self.model_save_path = f'{model_path}/{iteration:03.0f}'
         if not os.path.exists(self.model_save_path):
             os.mkdir(self.model_save_path)
     
@@ -322,10 +330,10 @@ class PPModel(ListRWTools):
         #build prediction model
         if use_pretrain_model:
             checkpoint = torch.load(pretrain_model)
-            normalizer.load_state_dict(checkpoint['normalizer'])
             model = self.model_initial(checkpoint)
+            normalizer.load_state_dict(checkpoint['normalizer'])
         else:
-            model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
+            model = CrystalGraphConvNet()
         model = DataParallel(model)
         model.to(self.device)
         #set learning rate
@@ -384,8 +392,8 @@ class PPModel(ListRWTools):
             data_time.update(time.time() - start)
             target_normed = normalizer.norm(target)
             target_var = target_normed.to(self.device, non_blocking=True)
-            pred = model(atom_fea=input[0], nbr_fea=input[1],
-                         nbr_fea_idx=input[2], crystal_atom_idx=input[3])
+            pred = model(atom_fea=input[0], atom_symm=input[1], nbr_fea=input[2],
+                         nbr_fea_idx=input[3], crystal_atom_idx=input[4])
             loss = criterion(pred, target_var)
             mae_error = self.mae(normalizer.denorm(pred.data.cpu()), target)
             losses.update(loss.data.cpu(), target.size(0))
@@ -421,13 +429,14 @@ class PPModel(ListRWTools):
         model.eval()
         pred_all, vasp_all = torch.tensor([]), torch.tensor([])
         start = time.time()
-        for _, (input, target) in enumerate(loader):
+        for input, target in loader:
+            #tensor with no grad
             with torch.no_grad():
-                atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
-            target_normed = normalizer.norm(target)
-            with torch.no_grad():
+                atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
+                target_normed = normalizer.norm(target)
                 target_var = target_normed.to(self.device, non_blocking=True)
-            pred = model(atom_fea=atom_fea, nbr_fea=nbr_fea,
+            #calculate loss
+            pred = model(atom_fea=atom_fea, atom_symm=atom_symm, nbr_fea=nbr_fea,
                          nbr_fea_idx=nbr_fea_idx, crystal_atom_idx=crystal_atom_idx)
             loss = criterion(pred, target_var)
             pred = normalizer.denorm(pred.data.cpu())
@@ -465,7 +474,7 @@ class PPModel(ListRWTools):
         ----------
         model [obj]: initialized model
         """
-        model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
+        model = CrystalGraphConvNet()
         model.load_state_dict(checkpoint['state_dict'])
         return model
     
@@ -599,7 +608,7 @@ class AverageMeter():
 
 if __name__ == '__main__':
     checkpoint = torch.load('test/model_best.pth.tar')
-    model = CrystalGraphConvNet(orig_atom_fea_len, nbr_bond_fea_len)
+    model = CrystalGraphConvNet()
     model.load_state_dict(checkpoint['state_dict'])
     model = DataParallel(model)
     

@@ -6,7 +6,7 @@ from pymatgen.symmetry.kpath import KPathSeek
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.search import GeoCheck
 from core.utils import ListRWTools, SSHTools, system_echo
 
@@ -15,15 +15,15 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
     #process the crystals by VASP to relax the structures and calculate properties
     def __init__(self, wait_time=1):
         self.wait_time = wait_time
-        self.optim_strus_path = f'/local/ccop/{optim_strus_path}'
-        self.dielectric_path = f'/local/ccop/{dielectric_path}'
-        self.elastic_path = f'/local/ccop/{elastic_path}'
-        self.pbe_band_path = f'/local/ccop/{pbe_band_path}'
-        self.phonon_path = f'/local/ccop/{phonon_path}'
-        self.thermalconductivity_path = f'/local/ccop/{thermalconductivity_path}'
-        self.KPOINTS = f'/local/ccop/{KPOINTS_file}'
-        self.bandconf = f'/local/ccop/{bandconf_file}'
-        self.calculation_path = '/local/ccop/vasp'
+        self.optim_strus_path = f'{SCCOP_path}/{optim_strus_path}'
+        self.dielectric_path = f'{SCCOP_path}/{dielectric_path}'
+        self.elastic_path = f'{SCCOP_path}/{elastic_path}'
+        self.pbe_band_path = f'{SCCOP_path}/{pbe_band_path}'
+        self.phonon_path = f'{SCCOP_path}/{phonon_path}'
+        self.thermalconductivity_path = f'{SCCOP_path}/{thermalconductivity_path}'
+        self.KPOINTS = f'{SCCOP_path}/{KPOINTS_file}'
+        self.bandconf = f'{SCCOP_path}/{bandconf_file}'
+        self.calculation_path = f'{SCCOP_path}/vasp'
         if not os.path.exists('data/post'):
             os.mkdir('data/post')
             os.mkdir(KPOINTS_file)
@@ -62,12 +62,11 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                             scp {gpu_node}:{self.KPOINTS}/KPOINTS-$p KPOINTS_2
 
                             DPT -v potcar
-                            #DPT --vdW DFT-D3
                             for i in 1 2
                             do
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
-                                /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                {VASP_3d_exe} >> vasp.out 2>>err.vasp
                                 cp OUTCAR OUTCAR_$i
                                 cp IBZKPT IBZKPT_$i
                                 cp EIGENVAL EIGENVAL_$i
@@ -88,18 +87,14 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
         system_echo(f'All jobs are completed --- Electronic structure')
         self.remove_flag(optim_strus_path)
     
-    def run_phonon(self, vdW=False, dimension=3):
+    def run_phonon(self, dimension=3):
         '''
         calculate phonon spectrum of optimized configurations
         
         Parameters
         ----------
-        vdW [bool, 0d]: whether add vdW modify
         dimension [int, 0d]: 2d or 3d kpath
         '''
-        flag_vdW = 0
-        if vdW:
-            flag_vdW = 1
         poscars = sorted(os.listdir(optim_strus_path))
         num_poscar = len(poscars)
         self.get_k_points(poscars, task='phonon', dimension=dimension)
@@ -117,9 +112,6 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                             cp ../../{vasp_files_path}/Phonon/* .
                             scp {gpu_node}:{self.optim_strus_path}/$p POSCAR
                             scp {gpu_node}:{self.bandconf}/band.conf-$p band.conf
-                            if [ {flag_vdW} -eq 1 ]; then
-                                DPT --vdW DFT-D3
-                            fi
                             
                             phonopy -d --dim="5 5 1"
                             n=`ls | grep POSCAR- | wc -l`
@@ -131,7 +123,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                                 
                                 cd disp-$i/
                                     DPT -v potcar
-                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                    {VASP_3d_exe} >> vasp.out 2>>err.vasp
                                     rm CHG* WAVECAR
                                     cp vasprun.xml ../vasprun.xml-$i
                                 cd ..
@@ -188,7 +180,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                                 
                                 cd disp-$i/
                                     DPT -v potcar
-                                    /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out 2>>err.vasp
+                                    {VASP_3d_exe} >> vasp.out 2>>err.vasp
                                     rm CHG* WAVECAR
                                 cd ../
                             done
@@ -229,7 +221,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                             DPT -v potcar
                             cp INCAR_$i INCAR
                             cp KPOINTS_$i KPOINTS
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                            {VASP_3d_exe} >> vasp.out
 
                             DPT --elastic
                             python ../../libs/scripts/plot-poisson-ratio.py
@@ -270,7 +262,7 @@ class PostProcess(ListRWTools, SSHTools, GeoCheck):
                             DPT -v potcar
                             cp INCAR_$i INCAR
                             cp KPOINTS_$i KPOINTS
-                            /opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp >> vasp.out
+                            {VASP_3d_exe} >> vasp.out
                                 
                             DPT --diele
                             scp dielectric.dat {gpu_node}:{self.dielectric_path}/dielectric-$p.dat
@@ -438,4 +430,3 @@ if __name__ == '__main__':
     #post.rotate_axis('test/initial_strs_3')
     poscars = os.listdir('data/poscar/optim_strus')
     post.get_k_points(poscars, 'phonon', dimension=3)
-    

@@ -7,7 +7,7 @@ import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 
 
 def system_echo(ct):

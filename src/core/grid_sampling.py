@@ -11,7 +11,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.space_group import *
 from core.data_transfer import DeleteDuplicates
 from core.search import GeoCheck
@@ -22,7 +22,7 @@ class ParallelSampling(ListRWTools, SSHTools):
     #divide grid by each node
     def __init__(self, wait_time=0.1):
         self.wait_time = wait_time
-        self.local_grid_path = f'/local/ccop/{grid_path}'
+        self.local_grid_path = f'{SCCOP_path}/{grid_path}'
     
     def sampling_on_grid(self, recyc, start):
         """
@@ -30,7 +30,7 @@ class ParallelSampling(ListRWTools, SSHTools):
 
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         start [int, 0d]: start label of grid
 
         Returns
@@ -79,7 +79,7 @@ class ParallelSampling(ListRWTools, SSHTools):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         index [int, 1d]: index of poscars
         grids [int, 1d]: name of grid
         node_assign [int, 1d]: node assign
@@ -111,7 +111,7 @@ class ParallelSampling(ListRWTools, SSHTools):
 
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         index [int, 1d]: index of poscars
         grids [int, 1d]: name of grids
         node [int, 0d]: name of node
@@ -126,7 +126,7 @@ class ParallelSampling(ListRWTools, SSHTools):
         #shell script of grid divide
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/
+                        cd {SCCOP_path}/
                         rm -r data/grid/buffer
                         rm -r data/grid/json
                         mkdir data/grid/buffer
@@ -222,7 +222,7 @@ class ParallelSampling(ListRWTools, SSHTools):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         grids [int, 1d]: name of grids
 
         Returns
@@ -459,7 +459,7 @@ class AssignPlan(GridDivide):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         idx [int, 0d]: index of poscar
         grid [int, 0d]: grid name
 
@@ -560,7 +560,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         grid [int, 0d]: number of grid
         sgs [int, 1d]: space groups
         assigns [dict, 2d, list]: assignments of atoms
@@ -627,7 +627,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
             symm += sorted(plan)
             type += [atom for _ in range(len(plan))]
         return type, symm
-
+    
     def get_pos(self, symm, symm_site, ratio, grid_idx, grid_dis):
         """
         sampling position of atoms by symmetry
@@ -704,7 +704,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         #record name of files
         shell_script = f'''
                         #!/bin/bash
-                        cd /local/ccop/{grid_path}
+                        cd {SCCOP_path}/{grid_path}
                         ls | grep {grid:03.0f} >> record.dat
                         '''
         os.system(shell_script)

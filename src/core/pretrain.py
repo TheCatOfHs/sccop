@@ -6,7 +6,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.utils import *
 from core.predict import PPMData, PPModel
 from core.data_transfer import Transfer

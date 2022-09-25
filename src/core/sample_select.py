@@ -10,7 +10,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.utils import *
 from core.predict import *
 from core.data_transfer import DeleteDuplicates
@@ -18,14 +18,14 @@ from core.data_transfer import DeleteDuplicates
 
 class Select(SSHTools, DeleteDuplicates):
     #Select training samples by active learning
-    def __init__(self, round, batch_size=1024, num_workers=0):
+    def __init__(self, iteration, batch_size=1024, num_workers=0):
         DeleteDuplicates.__init__(self)
         self.batch_size = batch_size
         self.num_workers = num_workers
-        self.round = f'{round:03.0f}'
-        self.model_save_path = f'{model_path}/{self.round}'
-        self.poscar_save_path = f'{poscar_path}/{self.round}'
-        self.sh_save_path = f'{search_path}/{self.round}'
+        self.iteration = f'{iteration:03.0f}'
+        self.model_save_path = f'{model_path}/{self.iteration}'
+        self.poscar_save_path = f'{poscar_path}/{self.iteration}'
+        self.sh_save_path = f'{search_path}/{self.iteration}'
         self.device = torch.device('cuda')
         self.normalizer = Normalizer(torch.tensor([]))
     
@@ -75,11 +75,11 @@ class Select(SSHTools, DeleteDuplicates):
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, grid_ratio, space_group)
         #predict energy and get crystal vector
-        loader = self.dataloader(atom_pos, atom_type, grid_name, grid_ratio, space_group)
-        models= self.model_select()
+        loader = self.dataloader(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
+        models= self.model_select(self.model_save_path)
         model_names = [f'{self.model_save_path}/{i}' for i in models]
-        mean_pred, std_pred, crys_mean = self.mean(model_names, loader)
-        idx = self.select_samples(mean_pred, std_pred)
+        mean_pred, crys_mean = self.mean(model_names, loader)
+        idx = self.select_samples(mean_pred)
         mean_pred = mean_pred[idx].cpu().numpy()
         crys_mean = crys_mean[idx].cpu().numpy()
         #reduce dimension and clustering
@@ -91,8 +91,8 @@ class Select(SSHTools, DeleteDuplicates):
                                 grid_name, grid_ratio, space_group)
         self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
         self.preserve_models(models)
-
-    def dataloader(self, atom_pos, atom_type, grid_name, grid_ratio, space_group):
+    
+    def dataloader(self, atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group):
         """
         transfer data to the input of graph network and
         put them into DataLoader
@@ -101,6 +101,7 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         atom_pos [int, 2d]: position of atom
         atom_type [int, 2d]: type of atom
+        atom_symm [int, 2d]: 
         grid_name [int, 1d]: name of grid
         grid_ratio [float, 1d]: grid ratio
         space_group [int, 1d]: space group number
@@ -112,23 +113,27 @@ class Select(SSHTools, DeleteDuplicates):
         atom_fea, nbr_fea, nbr_fea_idx = \
             self.get_ppm_input_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         targets = np.zeros(len(grid_name))
-        dataset = PPMData(atom_fea, nbr_fea, 
+        dataset = PPMData(atom_fea, atom_symm, nbr_fea, 
                           nbr_fea_idx, targets)
         loader = get_loader(dataset, self.batch_size, self.num_workers)
         return loader
     
-    def model_select(self):
+    def model_select(self, model_path):
         """
         select models with lowest validation mae
+        
+        Parameters
+        ----------
+        model_path [str, 0d]: path of prediction model
         
         Returns
         ----------
         best_models [str, 1d, np]: name of best models
         """
-        files = os.listdir(self.model_save_path)
+        files = os.listdir(model_path)
         models = [i for i in files if i.startswith('check')]
         models = sorted(models)
-        valid_file = f'{self.model_save_path}/validation.dat'
+        valid_file = f'{model_path}/validation.dat'
         mae = self.import_list2d(valid_file, float)
         order = np.argsort(np.ravel(mae))
         sort_models = np.array(models)[order]
@@ -137,7 +142,7 @@ class Select(SSHTools, DeleteDuplicates):
     
     def mean(self, model_names, loader):
         """
-        calculate mean_pred, std_pred, crys_mean
+        calculate mean_pred, crys_mean
 
         Parameters
         ----------
@@ -147,7 +152,6 @@ class Select(SSHTools, DeleteDuplicates):
         Returns
         ----------
         mean_pred [float, 1d, tensor]: mean of predict
-        std_pred [float, 1d, tensor]: std of predict
         crys_mean [float, 2d, tensor]: mean of crystal feature
         """
         model_pred, crys_fea = [], []
@@ -158,12 +162,11 @@ class Select(SSHTools, DeleteDuplicates):
             crys_fea.append(vec)
         model_pred = torch.cat(model_pred, axis=1)
         mean_pred = torch.mean(model_pred, axis=1)
-        std_pred = torch.std(model_pred, axis=1)
         crys_mean = torch.zeros(crys_fea[0].shape).to(self.device)
         for tensor in crys_fea:
             crys_mean += tensor
         crys_mean = crys_mean/len(model_names)
-        return mean_pred, std_pred, crys_mean
+        return mean_pred, crys_mean
     
     def load_model(self, model_name):
         """
@@ -173,10 +176,8 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         model_name [str, 0d]: full name of model
         """
-        self.model_vec = FeatureExtractNet(orig_atom_fea_len, 
-                                           nbr_bond_fea_len)
-        self.model_val = ReadoutNet(orig_atom_fea_len,
-                                    nbr_bond_fea_len)
+        self.model_vec = FeatureExtractNet()
+        self.model_val = ReadoutNet()
         paras = torch.load(model_name, map_location=self.device)
         #load parameters of prediction model
         self.model_vec.load_state_dict(paras['state_dict'])
@@ -223,9 +224,10 @@ class Select(SSHTools, DeleteDuplicates):
         self.model_val.eval()
         pred, crys_fea = [], []
         with torch.no_grad():
-            for _, (input, _) in enumerate(loader):
-                atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
+            for input, _ in loader:
+                atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
                 vec = self.model_vec(atom_fea=atom_fea, 
+                                     atom_symm=atom_symm,
                                      nbr_fea=nbr_fea,
                                      nbr_fea_idx=nbr_fea_idx, 
                                      crystal_atom_idx=crystal_atom_idx)
@@ -233,34 +235,26 @@ class Select(SSHTools, DeleteDuplicates):
             crys_fea = torch.cat(crys_fea, dim=0)
             crys_fea_assign = torch.chunk(crys_fea, num_gpus)
             pred = self.model_val(crys_fea=crys_fea_assign)
-        pred = self.normalizer.denorm(pred)
+            pred = self.normalizer.denorm(pred)
         return pred, crys_fea
     
-    def select_samples(self, mean_pred, std_pred):
+    def select_samples(self, mean_pred):
         """
-        select most uncertainty samples and
-        lowest energy samples
+        select lowest energy samples
         
         Parameters
         ----------
         mean_pred [1d, tensor]: mean of prediction
-        std_pred [1d, tensor]: std of prediction
         
         Returns
         ----------
         idx [int, 1d, np]: index of samples
         """
-        sample_num = len(std_pred)
-        num_min = ratio_min_energy*sample_num
-        num_max = ratio_max_std*sample_num
-        min_top = int(num_min)
-        max_top = sample_num - int(num_max)
+        sample_num = len(mean_pred)
+        num_min = int(ratio_min_energy*sample_num)
         #get index of samples
         _, mean_idx = torch.sort(mean_pred)
-        _, std_idx = torch.sort(std_pred)
-        min_idx = mean_idx[:min_top].cpu().numpy()
-        max_idx = std_idx[max_top:].cpu().numpy()
-        idx = np.union1d(min_idx, max_idx)
+        idx = mean_idx[:num_min].cpu().numpy()
         system_echo(f'After Filter---sample number: {len(idx)}')
         return idx
     
@@ -382,7 +376,7 @@ class Select(SSHTools, DeleteDuplicates):
     def export_recycle(self, recyc, atom_pos, atom_type, atom_symm, 
                        grid_name, grid_ratio, space_group, energy):
         """
-        export configurations after ccop
+        export configurations after sccop
 
         Parameters
         ----------
@@ -395,10 +389,16 @@ class Select(SSHTools, DeleteDuplicates):
         space_group [int, 1d]: space group number 
         energy [float, 1d]: energy of structure
         """
-        self.poscar_save_path = f'{poscar_path}/CCOP-{recyc}'
+        self.poscar_save_path = f'{poscar_path}/SCCOP-{recyc}'
         self.sh_save_path = self.poscar_save_path
         if not os.path.exists(self.poscar_save_path):
             os.mkdir(self.poscar_save_path)
+        #sort structure in order of grid and space group
+        idx = self.sort_by_grid_sg(grid_name, space_group)
+        atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
+            self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
+                                grid_name, grid_ratio, space_group)
+        energy = np.array(energy)[idx]
         #delete structures that are selected before
         if recyc > 0:
             #delete same selected structures by pos, type, grid, sg
@@ -410,12 +410,6 @@ class Select(SSHTools, DeleteDuplicates):
                                     grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
-            #sort structure in order of grid and space group
-            idx = self.sort_by_grid_sg(grid_name, space_group)
-            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
-                self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
-                                    grid_name, grid_ratio, space_group)
-            energy = np.array(energy)[idx]
             #delete same selected structures by pymatgen
             strus_1 = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
             strus_2 = self.collect_optim(recyc)
@@ -425,13 +419,13 @@ class Select(SSHTools, DeleteDuplicates):
                                     grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
-        #delete same structures
+        #filter structure by energy
         idx = np.argsort(energy)[:5*num_poscars]
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                     grid_name, grid_ratio, space_group)
         energy = np.array(energy)[idx]
-        #delete same samples under same space group
+        #delete same structures by pymatgen
         idx = self.delete_duplicates_pymatgen(atom_pos, atom_type,
                                               grid_name, grid_ratio, space_group)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
@@ -447,7 +441,7 @@ class Select(SSHTools, DeleteDuplicates):
         if puckered:
             add_thickness = True
         self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, add_thickness)
-        system_echo(f'CCOP optimize structures: {len(grid_name)}')
+        system_echo(f'SCCOP optimize structures: {len(grid_name)}')
     
     def collect_select(self, recyc):
         """
@@ -467,7 +461,7 @@ class Select(SSHTools, DeleteDuplicates):
         """
         atom_pos, atom_type, grid_name, grid_ratio, space_group = [], [], [], [], []
         for i in range(recyc):
-            head = f'{poscar_path}/CCOP-{i}'
+            head = f'{poscar_path}/SCCOP-{i}'
             atom_pos += self.import_list2d(f'{head}/atom_pos_select.dat', int)
             atom_type += self.import_list2d(f'{head}/atom_type_select.dat', int)
             grid_name += self.import_list2d(f'{head}/grid_name_select.dat', int)
@@ -507,8 +501,8 @@ class Select(SSHTools, DeleteDuplicates):
         """
         select top k minimal energy structures
         """
-        if not os.path.exists(ccop_out_path):
-            os.mkdir(ccop_out_path)
+        if not os.path.exists(sccop_out_path):
+            os.mkdir(sccop_out_path)
         #delete same structures
         strus, energy = self.collect_recycle()
         idx = self.delete_same_strus_energy(strus, energy)
@@ -520,7 +514,7 @@ class Select(SSHTools, DeleteDuplicates):
         assign = self.assign_node(stru_num)
         for i, idx in enumerate(slt_idx):
             stru = strus[idx]
-            file_name = f'{ccop_out_path}/POSCAR-{i:03.0f}-{assign[i]}'
+            file_name = f'{sccop_out_path}/POSCAR-{i:03.0f}-{assign[i]}'
             stru.to(filename=file_name, fmt='poscar')
         system_echo(f'Optimize configurations: {stru_num}')
     
@@ -555,7 +549,7 @@ class Select(SSHTools, DeleteDuplicates):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
@@ -563,7 +557,7 @@ class Select(SSHTools, DeleteDuplicates):
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         """
-        mean_pred, crys_mean = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
+        crys_mean, mean_pred = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
                                                         grid_name, grid_ratio, space_group)
         self.export_buffer(recyc, crys_mean, atom_pos, atom_type, atom_symm, 
                            grid_name, grid_ratio, space_group)
@@ -582,19 +576,19 @@ class Select(SSHTools, DeleteDuplicates):
         #balance samples to GPU
         num_crys = len(atom_pos)
         tuple = atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
-        batch_balance(num_crys, 5*self.batch_size, tuple)
+        batch_balance(num_crys, 10*self.batch_size, tuple)
         #sort structure in order of grid and space group
         idx = self.sort_by_grid_sg(grid_name, space_group)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, grid_ratio, space_group)
         #predict energy and get crystal vector
-        loader = self.dataloader(atom_pos, atom_type, grid_name, grid_ratio, space_group)
+        loader = self.dataloader(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
         model_names = self.get_init_models()
-        mean_pred, _, crys_mean = self.mean(model_names, loader)
+        mean_pred, crys_mean = self.mean(model_names, loader)
         mean_pred = mean_pred.cpu().numpy()
         crys_mean = crys_mean.cpu().numpy()
-        return mean_pred, crys_mean
+        return crys_mean, mean_pred
     
     def get_init_models(self):
         """
@@ -648,24 +642,24 @@ class Select(SSHTools, DeleteDuplicates):
         
     
 class FeatureExtractNet(CrystalGraphConvNet):
-    #Calculate crys_fea
-    def __init__(self, orig_atom_fea_len, nbr_fea_len):
-        super(FeatureExtractNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
+    #get crystal vector
+    def __init__(self):
+        super(FeatureExtractNet, self).__init__()
         
-    def forward(self, atom_fea, nbr_fea, nbr_fea_idx, crystal_atom_idx):
+    def forward(self, atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx):
         atom_fea = self.embedding(atom_fea)
         for conv_func in self.convs:
             atom_fea = conv_func(atom_fea, nbr_fea, nbr_fea_idx)
-        crys_fea = self.pooling(atom_fea, crystal_atom_idx)
+        crys_fea = self.pooling(atom_fea, atom_symm, crystal_atom_idx)
         crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
         crys_fea = self.conv_to_fc_softplus(crys_fea)
         return crys_fea
 
 
 class ReadoutNet(CrystalGraphConvNet):
-    #Calculate energy by crys_fea
-    def __init__(self, orig_atom_fea_len, nbr_fea_len):
-        super(ReadoutNet, self).__init__(orig_atom_fea_len, nbr_fea_len)
+    #get energy by crystal vector
+    def __init__(self):
+        super(ReadoutNet, self).__init__()
 
     def forward(self, crys_fea):
         out = self.fc_out(crys_fea)
@@ -674,8 +668,8 @@ class ReadoutNet(CrystalGraphConvNet):
     
 class BayesianOpt(Select):
     #select initial searching points by bayesian method
-    def __init__(self):
-        Select.__init__(self, 0)
+    def __init__(self, iteration):
+        Select.__init__(self, iteration)
     
     def select(self, recyc, atom_pos, atom_type, atom_symm,
                grid_name, grid_ratio, space_group, energys):
@@ -684,13 +678,13 @@ class BayesianOpt(Select):
         
         Parameters
         ----------
-        recyc [int, 0d]: recycle of ccop
+        recyc [int, 0d]: recycle of sccop
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
         atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
-        sgs [int, 1d]: space group
+        space_group [int, 1d]: space group
         energys [float, 1d]: energy of structures
         
         Returns
@@ -703,16 +697,15 @@ class BayesianOpt(Select):
         init_sgs [int, 1d]: initial space group
         """
         #import random sampling buffer
-        points, pos, type, symm, grid, ratio, sgs = self.import_buffer(recyc)
+        crys_vec_all, pos, type, symm, grid, ratio, sgs = self.import_buffer(recyc)
         #train gaussian distribution
         gp = GaussianProcessRegressor()
-        _, states = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
-                                             grid_name, grid_ratio, space_group)
-        values = energys[:len(states)]
-        gp.fit(states, values)
-        e_min = min(values)
-        #select most improvement points
-        idx = self.ac_max(num_path, points, gp, e_min)
+        crys_vec, _ = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
+                                               grid_name, grid_ratio, space_group)
+        gp.fit(crys_vec, energys)
+        e_min = min(energys)
+        #select most potential structures
+        idx = self.ac_max(num_path, crys_vec_all, gp, e_min)
         init_pos, init_type, init_symm, init_grid, init_ratio, init_sgs = \
             self.filter_samples(idx, pos, type, symm, grid, ratio, sgs)
         return init_pos, init_type, init_symm, init_grid, init_ratio, init_sgs
@@ -730,10 +723,12 @@ class BayesianOpt(Select):
 
         Returns
         ----------
-        idx [int, 1d]: index of selected samples
+        idx [int, 1d, np]: index of selected samples
         """
         ac = self.PI(states, gp, e_min)
-        idx = np.argsort(ac)[::-1][:num]
+        weight = ac/np.sum(ac)
+        idx_all = np.arange(len(ac))
+        idx = np.random.choice(idx_all, num, p=weight)
         return idx
     
     def PI(self, states, gp, e_min):
@@ -748,9 +743,9 @@ class BayesianOpt(Select):
 
         Returns
         ----------
-        ac [float, 1d]: acquisition value
+        ac [float, 1d, np]: acquisition value
         """
-        xi = 0
+        xi = np.random.uniform(low=-.05, high=.05, size=len(states))
         mean, std = gp.predict(states, return_std=True)
         z = (mean - e_min - xi)/std
         ac = 1 - norm.cdf(z)
@@ -784,5 +779,5 @@ if __name__ == '__main__':
     #from core.sub_vasp import VASPoptimize
     #vasp = VASPoptimize(1)
     #vasp.run_optimization_high(vdW=add_vdW)
-    bayes = BayesianOpt()
+    bayes = BayesianOpt(0)
     print(bayes.import_buffer(0))

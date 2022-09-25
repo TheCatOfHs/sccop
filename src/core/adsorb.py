@@ -21,7 +21,7 @@ from pymatgen.analysis.transition_state import NEBAnalysis
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.utils import *
 from core.post_process import PostProcess
 from core.search import GeoCheck

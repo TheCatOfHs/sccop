@@ -2,6 +2,7 @@ import os, sys
 import time
 import random
 import copy
+import torch
 import numpy as np
 from collections import Counter
 
@@ -20,8 +21,10 @@ from core.grid_sampling import PlanarSpaceGroup
 
 
 if __name__ == '__main__':
-    for i, j in ((1, 2), (3, 4)):
-        print(i)
+    a = np.array([[1,2],[1,3],[4,5],[0,0]],dtype=object)
+    print(a[[True,False,False,True]].tolist())
+    
+        
         
     '''
     from sklearn.gaussian_process import GaussianProcessRegressor

@@ -5,7 +5,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.global_var import *
-from core.dir_path import *
+from core.path import *
 from core.utils import ListRWTools, system_echo
 
 
@@ -441,28 +441,20 @@ class DeleteDuplicates(MultiGridTransfer):
         """
         strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
         strus_num = len(strus)
-        strus_idx = np.arange(strus_num)
         idx = []
         #compare structure by pymatgen
-        while True:
-            i = strus_idx[0]
+        for i in range(strus_num):
             stru_1 = strus[i]
-            store, delet = [i], [0]
-            for k in range(1, len(strus_idx)):
-                j = strus_idx[k]
+            for j in range(i+1, strus_num):
                 stru_2 = strus[j]
                 same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
                                       primitive_cell=True, scale=False, 
                                       attempt_supercell=False, allow_subset=False)
                 if same:
-                    store.append(j)
-                    delet.append(k)
-            #update
-            idx.append(np.random.choice(store))
-            strus_idx = np.delete(strus_idx, delet)
-            #break condition
-            if len(strus_idx) == 0:
-                break
+                    idx.append(i)
+                    break
+        all_idx = np.arange(strus_num)
+        idx = np.setdiff1d(all_idx, idx)
         return idx
     
     def delete_duplicates_sg_pymatgen(self, atom_pos, atom_type, 
