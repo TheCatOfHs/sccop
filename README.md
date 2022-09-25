@@ -50,12 +50,13 @@ Package requirement:
 
 Hardware requirement:
 
-- CPU node
-- GPU node: at least 2 gpus
+- GPU node: train prediction model and deal with data
+- CPU node: optimize structure by ML-SA and VASP
+ 
 
 ## Usage
 
-### Define a customized dataset 
+### Define a Customized Search File
 
 To input crystal structures to CGCNN, you will need to define a customized dataset. Note that this is required for both training and predicting. 
 
