@@ -63,13 +63,6 @@ Hardware requirements:
 ## Usage
 ### Server and Absolute Path Configuration
 In SCCOP, GPU node send VASP jobs to cpu nodes by python package `paramiko`, thus the user and password are needed.
-Moreover, we use shell command `ssh` and `scp` to transfer files between nodes, you need to make sure the `ssh` between nodes without password, and we provide one way as follows:
-```
-cd ~/.ssh
-ssh-keygen -t rsa -b 4096
-ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
-```
-
 
 ```
 [Server]
@@ -81,19 +74,37 @@ password = 'XXXXXX'
 num_gpus = 2 
 # Name of gpu node
 gpu_node = 'node151'
-# List of cpu nodes and thus the name is, e.g., 'node131' 
+# List of cpu nodes, thus the cpu name is, e.g., 'node131' 
 nodes = [131, 132, 133, 134, 135, 136] 
 ```
 
+Moreover, we use shell command `ssh` and `scp` to transfer files between nodes, you should make sure the `ssh` between nodes without password, here we provide one way as follows:
+
+```
+cd ~/.ssh
+ssh-keygen -t rsa -b 4096
+ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
+```
+
+Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.
+
 ```
 [Absolute path]
-SCCOP_path = '/local/sccop' #
-CPU_local_path = '/local' #
-VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' #
-VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' #
-VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab' #
-VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' #
+#Path of SCCOP on GPU node
+SCCOP_path = '/local/sccop' 
+#Directory of SCCOP on CPU nodes
+CPU_local_path = '/local' 
+#Path of VASP 2d
+VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
+#Path of VASP 3d
+VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
+#VASP 2d parallelization
+VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab' 
+#VASP 3d parallelization
+VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
+
+Note: we recommend put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`, e.g., use Protable Batch System (PBS) to submit VASP jobs.
 
 
 ### Define a Customized Search File
