@@ -64,7 +64,7 @@ Hardware requirements:
 ### Server and Absolute Path Configuration
 In SCCOP, GPU node send VASP jobs to cpu nodes by python package `paramiko`, thus the user and password are needed.
 
-```
+```diff
 [Server]
 # User name
 user = 'XXX' 
@@ -80,7 +80,7 @@ nodes = [131, 132, 133, 134, 135, 136]
 
 Moreover, we use shell command `ssh` and `scp` to transfer files between nodes, you should make sure the `ssh` between nodes without password, here we provide one way as follows:
 
-```
+```bash
 cd ~/.ssh
 ssh-keygen -t rsa -b 4096
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
@@ -126,7 +126,7 @@ You can create a customized dataset by creating a directory `root_dir` with the 
 
 The structure of the `root_dir` should be:
 
-```
+```diff
 [Grid]
 cutoff = 8 #
 num_min_atom = 5 #
