@@ -1,6 +1,9 @@
-#User
+#Server
 user = 'lcn'
 password = '199612qweasd'
+num_gpus = 2
+gpu_node = 'node151'
+nodes = [131, 132, 133, 134, 135, 136]
 
 #Absolute path
 SCCOP_path = '/local/sccop'

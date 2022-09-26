@@ -12,7 +12,7 @@ The following paper describes the details of the SCCOP framework:
 - [How to cite](#how-to-cite)
 - [Prerequisites](#prerequisites)
 - [Usage](#usage)
-  - [Confiugration](#absolute-path-and-user-configuration)
+  - [Confiugration](#server-and-absolute-path-configuration)
   - [Customize initial search file](#define-a-customized-search-file)
   - [Submit sccop job on cluster](#submit-sccop-job)
   - [Successful example](#successful-example)
@@ -58,10 +58,10 @@ Hardware requirements:
 
 
 ## Usage
-### User and Absolute Path Configuration
+### Server and Absolute Path Configuration
 
 ```
-#Absolute path
+[Absolute path]
 SCCOP_path = '/local/sccop'
 CPU_local_path = '/local'
 VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun'
@@ -71,9 +71,12 @@ VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
 ```
 
 ```
-#Server
+[Server]
 user = 'XXX'
 password = 'XXXXXX'
+num_gpus = 2
+gpu_node = 'node151'
+nodes = [131, 132, 133, 134, 135, 136]
 ```
 
 ### Define a Customized Search File
@@ -152,11 +155,6 @@ num_models = 5
 num_components = 2
 num_clusters = 60
 ratio_min_energy = 0.5
-
-[Server]
-num_gpus = 2
-gpu_node = 'node151'
-nodes = [131, 132, 133, 134, 135, 136]
 ```
 
 There are two examples of customized datasets in the repository: `data/sample-regression` for regression and `data/sample-classification` for classification. 
