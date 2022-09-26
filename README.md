@@ -78,9 +78,9 @@ GPU node send VASP jobs to cpu nodes by python package `paramiko`.
 # GPU number
 num_gpus = 2 
 # Name of gpu node
-gpu_node = 'node151'
-# List of cpu nodes, thus the cpu name is, e.g., 'node131' 
-nodes = [131, 132, 133, 134, 135, 136] 
+gpu_node = 'nodeXXX'
+# List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
+nodes = [XXX, XXX, XXX] 
 ```
 
 Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.
