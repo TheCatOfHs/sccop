@@ -7,9 +7,9 @@ do
         sed -i s/'XXX'/$i/g src/core/global_var.py
         python src/main.py > log
         cp log ../search/$i/.
-        cp data/poscar/optim_strus/* ../search/$i/.
-        cp data/vasp_out/optim_strus/energy/* ../search/$i/.
-	cp -r data/poscar ../search/$i/.
+        cp data/poscar/SCCOP-0/POSCAR* ../search/$i/.
+        cp data/vasp_out/initial_strus_1/* ../search/$i/.
+        cp -r data/poscar ../search/$i/.
         cp -r data/vasp_out ../search/$i/.
     cd ../
     rm -r sccop/
@@ -23,9 +23,9 @@ do
         sed -i s/'XXX'/$i/g src/core/global_var.py
         python src/main.py > log
         cp log ../search/$i/.
-        cp data/poscar/optim_strus/* ../search/$i/.
-        cp data/vasp_out/optim_strus/energy/* ../search/$i/.
-	cp -r data/poscar ../search/$i/.
+        cp data/poscar/SCCOP-0/POSCAR* ../search/$i/.
+        cp data/vasp_out/initial_strus_1/* ../search/$i/.
+        cp -r data/poscar ../search/$i/.
         cp -r data/vasp_out ../search/$i/.
     cd ../
     rm -r sccop/
@@ -39,9 +39,9 @@ do
         sed -i s/'XXX'/$i/g src/core/global_var.py
         python src/main.py > log
         cp log ../search/$i/.
-        cp data/poscar/optim_strus/* ../search/$i/.
-        cp data/vasp_out/optim_strus/energy/* ../search/$i/.
-	cp -r data/poscar ../search/$i/.
+        cp data/poscar/SCCOP-0/POSCAR* ../search/$i/.
+        cp data/vasp_out/initial_strus_1/* ../search/$i/.
+        cp -r data/poscar ../search/$i/.
         cp -r data/vasp_out ../search/$i/.
     cd ../
     rm -r sccop/
@@ -55,9 +55,9 @@ do
         sed -i s/'XXX'/$i/g src/core/global_var.py
         python src/main.py > log
         cp log ../search/$i/.
-        cp data/poscar/optim_strus/* ../search/$i/.
-        cp data/vasp_out/optim_strus/energy/* ../search/$i/.
-	cp -r data/poscar ../search/$i/.
+        cp data/poscar/SCCOP-0/POSCAR* ../search/$i/.
+        cp data/vasp_out/initial_strus_1/* ../search/$i/.
+        cp -r data/poscar ../search/$i/.
         cp -r data/vasp_out ../search/$i/.
     cd ../
     rm -r sccop/

@@ -56,6 +56,8 @@ num_clusters = 60
 ratio_min_energy = 0.5
 
 #Server
+user = 'lcn'
+password = '199612qweasd'
 num_gpus = 2
 gpu_node = 'node151'
 nodes = [131, 132, 133, 134, 135, 136]

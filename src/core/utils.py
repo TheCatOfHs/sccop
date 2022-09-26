@@ -222,8 +222,8 @@ class SSHTools:
         ip [str, 0d]
         """
         port = 22
-        user = 'lcn'
-        password = '199612qweasd'
+        user = user
+        password = password
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         ssh.connect(ip, port, user, password, timeout=1000)

@@ -47,6 +47,7 @@ Package requirement:
 - [scikit-learn](http://scikit-learn.org/stable/)
 - [pymatgen](http://pymatgen.org)
 - [VASP](https://www.vaspweb.org/)
+- [paramiko](https://www.paramiko.org/)
 
 Hardware requirement:
 
@@ -151,7 +152,7 @@ python predict.py pre-trained/semi-metal-classification.pth.tar data/sample-clas
 
 Note that for classification, the predicted values in `test_results.csv` is a probability between 0 and 1 that the crystal can be classified as 1 (metal in the above example).
 
-After predicting, you will get one file in `cgcnn` directory:
+After predicting, you will get one file in `sccop` directory:
 
 - `test_results.csv`: stores the `ID`, target value, and predicted value for each crystal in test set. Here the target value is just any number that you set while defining the dataset in `id_prop.csv`, which is not important.
 
@@ -161,8 +162,8 @@ To reproduce our paper, you can download the corresponding datasets following th
 
 ## Authors
 
-This software was primarily written by [Tian Xie](http://txie.me) who was advised by [Prof. Jeffrey Grossman](https://dmse.mit.edu/faculty/profile/grossman). 
+This software was primarily written by Chuannan Li and Hanpu Liang. 
 
 ## License
 
-CGCNN is released under the MIT License.
+SCCOP is released under the MIT License.
