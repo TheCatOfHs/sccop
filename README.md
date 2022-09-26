@@ -7,7 +7,7 @@ The following paper describes the details of the SCCOP framework:
 
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
 
-SCCOP now only support the search for 2D materials, and support for 3D is under construction.
+SCCOP now only supports the search for 2D materials, and the supporting for 3D is under construction.
 
 ## Table of Contents
 
