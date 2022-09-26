@@ -95,9 +95,9 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 # text in gray
 @@ text in purple (and bold)@@
 ```
-
+```html
 <span style="color: green"> Some green text </span>
-
+```
 ```python
 [Absolute path]
 # Path of SCCOP on GPU node
