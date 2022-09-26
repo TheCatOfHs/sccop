@@ -6,6 +6,7 @@ SCCOP combines graph neural network and DFT calculation to accelerate the search
 The following paper describes the details of the SCCOP framework:
 
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
+![](images/SCCOP.png)
 
 SCCOP now only supports the search for 2D materials, and the supporting for 3D is under construction.
 
