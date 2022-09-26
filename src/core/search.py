@@ -7,8 +7,8 @@ import argparse
 from functools import reduce
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.data_transfer import Transfer
 from core.space_group import PlanarSpaceGroup
 from core.utils import ListRWTools, SSHTools, system_echo

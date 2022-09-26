@@ -2,8 +2,8 @@ import os
 import time
 import numpy as np
 
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.initialize import InitSampling, UpdateNodes
 from core.sample_select import Select, BayesianOpt
 from core.sub_vasp import ParallelSubVASP, VASPoptimize

@@ -10,8 +10,8 @@ from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.space_group import *
 from core.data_transfer import DeleteDuplicates
 from core.search import GeoCheck

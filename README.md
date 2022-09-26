@@ -63,28 +63,24 @@ Hardware requirements:
 
 ## Usage
 ### Server and Absolute Path Configuration
-In SCCOP, GPU node send VASP jobs to cpu nodes by python package `paramiko`, thus the user and password are needed.
+In SCCOP, we use shell command `ssh` and `scp` to transfer files between nodes, you should make sure the `ssh` between nodes without password, here we provide one way as follows:
+
+```bash
+cd ~/.ssh
+ssh-keygen -t rsa -b 4096
+ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
+```
+
+GPU node send VASP jobs to cpu nodes by python package `paramiko`.
 
 ```diff
 [Server]
-# User name
-user = 'XXX' 
-# Password of user
-password = 'XXXXXX' 
 # GPU number
 num_gpus = 2 
 # Name of gpu node
 gpu_node = 'node151'
 # List of cpu nodes, thus the cpu name is, e.g., 'node131' 
 nodes = [131, 132, 133, 134, 135, 136] 
-```
-
-Moreover, we use shell command `ssh` and `scp` to transfer files between nodes, you should make sure the `ssh` between nodes without password, here we provide one way as follows:
-
-```bash
-cd ~/.ssh
-ssh-keygen -t rsa -b 4096
-ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 ```
 
 Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.

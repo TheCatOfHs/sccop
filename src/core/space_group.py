@@ -7,8 +7,8 @@ from collections import Counter
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 
 
 class PlanarSpaceGroup:

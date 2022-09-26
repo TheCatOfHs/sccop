@@ -6,8 +6,8 @@ import json
 import numpy as np
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 
 
 def system_echo(ct):
@@ -222,11 +222,9 @@ class SSHTools:
         ip [str, 0d]
         """
         port = 22
-        user = user
-        password = password
         ssh = paramiko.SSHClient()
         ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-        ssh.connect(ip, port, user, password, timeout=1000)
+        ssh.connect(ip, port, timeout=1000)
         ssh.exec_command(shell_script)
         ssh.close()
     
@@ -349,41 +347,4 @@ class SSHTools:
     
 
 if __name__ == '__main__':
-    import pandas as pd
-    from jarvis.db.figshare import data
-    from jarvis.core.atoms import Atoms
-    #
-    dft_2d = data(dataset='dft_2d')
-    matpd = data(dataset='twod_matpd')
-    c2db = data(dataset='c2db')
-    
-    names, energys = [], []
-    for i, obj in enumerate(dft_2d):
-        name = f'DFT2D-{i:04.0f}'
-        stru = Atoms.from_dict(obj['atoms'])
-        energy = obj['optb88vdw_total_energy']
-        if energy != 'na':
-            stru.write_cif(f'CIF2D/{name}.cif')
-            names.append(name)
-            energys.append(energy)
-    
-    for i, obj in enumerate(matpd):
-        name = f'MATPD-{i:05.0f}'
-        stru = Atoms.from_dict(obj['atoms'])
-        energy = obj['energy_per_atom']
-        if energy != 'na':
-            stru.write_cif(f'CIF2D/{name}.cif')
-            names.append(name)
-            energys.append(energy)
-    
-    for i, obj in enumerate(c2db):
-        name = f'C2DB-{i:05.0f}'
-        stru = Atoms.from_dict(obj['atoms'])
-        energy = obj['etot']/stru.num_atoms
-        if energy != 'na':
-            stru.write_cif(f'CIF2D/{name}.cif')
-            names.append(name)
-            energys.append(energy)
-    #
-    df = pd.DataFrame({'cif':names, 'E':energys})
-    df.to_csv('id_prop.csv',index =False ,sep = ',')
+    pass

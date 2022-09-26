@@ -4,8 +4,8 @@ import numpy as np
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.utils import ListRWTools, system_echo
 
 

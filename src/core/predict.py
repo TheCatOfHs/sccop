@@ -11,8 +11,8 @@ from torch.utils.data import Dataset, DataLoader
 from torch.nn import DataParallel as DataParallel_raw
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.sub_vasp import system_echo
 from core.utils import ListRWTools
 

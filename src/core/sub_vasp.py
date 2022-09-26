@@ -6,8 +6,8 @@ from pymatgen.core.structure import Structure
 from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.global_var import *
 from core.path import *
+from core.global_var import *
 from core.utils import ListRWTools, SSHTools, system_echo
 from core.data_transfer import DeleteDuplicates
 
