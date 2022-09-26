@@ -7,6 +7,8 @@ The following paper describes the details of the SCCOP framework:
 
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
 
+SCCOP now only support the search for 2D materials, and support for 3D is under construction.
+
 ## Table of Contents
 
 - [How to cite](#how-to-cite)
@@ -60,7 +62,15 @@ Hardware requirements:
 
 ## Usage
 ### Server and Absolute Path Configuration
-In SCCOP, GPU node send VASP jobs to cpu nodes, thus  
+In SCCOP, GPU node send VASP jobs to cpu nodes by python package `paramiko`, thus the user and password are needed.
+Moreover, we use shell command `ssh` and `scp` to transfer files between nodes, you need to make sure the `ssh` between nodes without password, and we provide one way as follows:
+```
+cd ~/.ssh
+ssh-keygen -t rsa -b 4096
+ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
+```
+
+
 ```
 [Server]
 # User name
