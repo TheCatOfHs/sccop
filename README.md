@@ -90,7 +90,7 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 
 ```
 [Absolute path]
-# <font color=Blue>Path of SCCOP on GPU node</font>
+<font color=Blue># Path of SCCOP on GPU node</font>
 SCCOP_path = '/local/sccop' 
 # Directory of SCCOP on CPU nodes
 CPU_local_path = '/local' 
