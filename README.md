@@ -97,26 +97,25 @@ The structure of the `root_dir` should be:
 
 ```
 [Grid]
-#
-cutoff = 8
-num_min_atom = 5
-num_max_atom = 10
-grain = [.5, .5, 1.2]
-plane_upper = [100, 100, 1]
+cutoff = 8  #
+num_min_atom = 5  #
+num_max_atom = 10 #
+grain = [.5, .5, 1.2] #
+plane_upper = [100, 100, 1] #
 
 [Dimension]
-num_dim = 2
-add_vacuum = True
-vacuum_space = 15
-puckered = True
-thickness = 0.1
+num_dim = 2 #
+add_vacuum = True #
+vacuum_space = 15 #
+puckered = True #
+thickness = 0.1 #
 
 [Recycling]
-num_recycle = 1
-num_ml_list = [1]
-num_poscars = 12
-num_optims = 6
-vasp_time_limit = 480
+num_recycle = 1 #
+num_ml_list = [1] #
+num_poscars = 12  #
+num_optims = 6  #
+vasp_time_limit = 480 #
 
 [Initial Samples]
 component = 'XXX'
