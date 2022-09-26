@@ -1,3 +1,7 @@
+#User
+user = 'lcn'
+password = '199612qweasd'
+
 #Absolute path
 SCCOP_path = '/local/sccop'
 CPU_local_path = '/local'

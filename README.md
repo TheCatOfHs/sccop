@@ -2,6 +2,7 @@
 
 This software package implements the Symmetry Crystal Combinatorial Optimization Program (SCCOP) that predicts crystal structure of specific composition. 
 
+SCCOP combines graph neural network and DFT calculation to accelerate the search of crystal structure.
 The following paper describes the details of the SCCOP framework:
 
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
@@ -11,8 +12,9 @@ The following paper describes the details of the SCCOP framework:
 - [How to cite](#how-to-cite)
 - [Prerequisites](#prerequisites)
 - [Usage](#usage)
-  - [Customize initial file](#define-a-customized-search-file)
-  - [Submit search job on cluster](#submit-sccop-job)
+  - [Confiugration](#absolute-path-and-user-configuration)
+  - [Customize initial search file](#define-a-customized-search-file)
+  - [Submit sccop job on cluster](#submit-sccop-job)
   - [Successful example](#successful-example)
 - [Data](#data)
 - [Authors](#authors)
@@ -41,21 +43,38 @@ Please cite the following work if you want to use SCCOP.
 
 ##  Prerequisites
 
-Package requirement:
+Package requirements:
 
-- [PyTorch](http://pytorch.org)
-- [scikit-learn](http://scikit-learn.org/stable/)
-- [pymatgen](http://pymatgen.org)
-- [VASP](https://www.vaspweb.org/)
-- [paramiko](https://www.paramiko.org/)
+- [PyTorch (1.8.1)](http://pytorch.org/)
+- [scikit-learn (1.0.1)](http://scikit-learn.org/stable/)
+- [pymatgen (2022.5.26)](http://pymatgen.org/)
+- [VASP (5.4.4)](https://www.vaspweb.org/)
+- [paramiko (2.7.2)](https://www.paramiko.org/)
 
-Hardware requirement:
+Hardware requirements:
 
 - [GPU node](https://en.wikipedia.org/wiki/GPU_cluster)
 - [CPU node](https://en.wikipedia.org/wiki/Server_(computing))
 
 
 ## Usage
+### User and Absolute Path Configuration
+
+```
+#Absolute path
+SCCOP_path = '/local/sccop'
+CPU_local_path = '/local'
+VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun'
+VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun'
+VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab'
+VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
+```
+
+```
+#Server
+user = 'XXX'
+password = 'XXXXXX'
+```
 
 ### Define a Customized Search File
 
@@ -77,12 +96,68 @@ You can create a customized dataset by creating a directory `root_dir` with the 
 The structure of the `root_dir` should be:
 
 ```
-root_dir
-├── id_prop.csv
-├── atom_init.json
-├── id0.cif
-├── id1.cif
-├── ...
+[Grid]
+#
+cutoff = 8
+num_min_atom = 5
+num_max_atom = 10
+grain = [.5, .5, 1.2]
+plane_upper = [100, 100, 1]
+
+[Dimension]
+num_dim = 2
+add_vacuum = True
+vacuum_space = 15
+puckered = True
+thickness = 0.1
+
+[Recycling]
+num_recycle = 1
+num_ml_list = [1]
+num_poscars = 12
+num_optims = 6
+vasp_time_limit = 480
+
+[Initial Samples]
+component = 'XXX'
+num_latt = 72
+num_Rand = 120
+num_ave_sg = 10
+num_cores = 4
+num_per_sg = 5
+len_mu = 5
+len_lower = 4
+len_upper = 6
+len_sigma = 1
+ang_mu = 90
+ang_sigma = 20
+system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
+
+[Training]
+train_batchsize = 64
+train_epochs = 120
+use_pretrain_model = True
+
+[Searching]
+T = .1
+decay = .95
+latt_steps = 3
+sa_steps = 100
+num_jump = 2
+num_path = 360
+sa_cores = 2
+min_bond = 1.2
+
+[Sample Select]
+num_models = 5
+num_components = 2
+num_clusters = 60
+ratio_min_energy = 0.5
+
+[Server]
+num_gpus = 2
+gpu_node = 'node151'
+nodes = [131, 132, 133, 134, 135, 136]
 ```
 
 There are two examples of customized datasets in the repository: `data/sample-regression` for regression and `data/sample-classification` for classification. 
