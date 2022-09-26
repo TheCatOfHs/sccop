@@ -387,4 +387,3 @@ if __name__ == '__main__':
     #
     df = pd.DataFrame({'cif':names, 'E':energys})
     df.to_csv('id_prop.csv',index =False ,sep = ',')
-    

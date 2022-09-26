@@ -607,18 +607,4 @@ class AverageMeter():
         
 
 if __name__ == '__main__':
-    checkpoint = torch.load('test/model_best.pth.tar')
-    model = CrystalGraphConvNet()
-    model.load_state_dict(checkpoint['state_dict'])
-    model = DataParallel(model)
-    
-    print(model.parameters())
-    print(model.module.parameters())
-    '''
-    normalizer = Normalizer(torch.tensor([]))
-    print(normalizer.std)
-    print(normalizer.mean)
-    normalizer.load_state_dict(checkpoint['normalizer'])
-    print(checkpoint['normalizer'])
-    print(normalizer.std)
-    '''
+    pass

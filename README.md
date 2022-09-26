@@ -49,6 +49,7 @@ Package requirements:
 - [scikit-learn (1.0.1)](http://scikit-learn.org/stable/)
 - [pymatgen (2022.5.26)](http://pymatgen.org/)
 - [VASP (5.4.4)](https://www.vaspweb.org/)
+- [DPT (0.8.3)](XXX)
 - [paramiko (2.7.2)](https://www.paramiko.org/)
 
 Hardware requirements:

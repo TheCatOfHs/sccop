@@ -385,6 +385,4 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
         
     
 if __name__ == "__main__":
-    vasp = ParallelSubVASP()
-    #vasp.sub_job(0)
-    vasp.get_energy(0)
+    pass

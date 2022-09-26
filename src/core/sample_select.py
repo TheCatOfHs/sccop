@@ -774,10 +774,4 @@ class BayesianOpt(Select):
     
 
 if __name__ == '__main__':
-    select = Select(1)
-    #select.optim_strus()
-    #from core.sub_vasp import VASPoptimize
-    #vasp = VASPoptimize(1)
-    #vasp.run_optimization_high(vdW=add_vdW)
-    bayes = BayesianOpt(0)
-    print(bayes.import_buffer(0))
+    pass

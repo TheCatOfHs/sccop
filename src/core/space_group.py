@@ -704,15 +704,4 @@ def get_space_group(num, system):
 
 
 if __name__ == '__main__':
-    psg = PlanarSpaceGroup()
-    stru = Structure.from_file('data/poscar/initial_strus_0/POSCAR-RCSD-045', sort=True)
-    latt = stru.lattice
-    all_grid, _ = psg.get_grid_points(3, grain, latt)
-    print(all_grid)
-    print(len(all_grid))
-    
-    from core.utils import ListRWTools
-    rw = ListRWTools()
-    coords = rw.import_list2d(f'data/grid/045_frac_coords_3.bin', float, binary=True)
-    #print(coords)
-    #print(len(coords))
+    pass
