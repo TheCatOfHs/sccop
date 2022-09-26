@@ -100,22 +100,7 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 <p>Hi here is some text this is red.</p>
 ```
 
-```js
-  import { Component } from '@angular/core';
-  import { MovieService } from './services/movie.service';
-
-  @Component({
-    selector: 'app-root',
-    templateUrl: './app.component.html',
-    styleUrls: ['./app.component.css'],
-    providers: [ MovieService ]
-  })
-  export class AppComponent {
-    title = 'app works!';
-  }
-```
-
-```bash
+```python
 [Absolute path]
 # Path of SCCOP on GPU node
 SCCOP_path = '/local/sccop' 
