@@ -90,7 +90,7 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 
 ```
 [Absolute path]
-# Path of SCCOP on GPU node
+# <font color=Blue>Path of SCCOP on GPU node</font>
 SCCOP_path = '/local/sccop' 
 # Directory of SCCOP on CPU nodes
 CPU_local_path = '/local' 
@@ -104,7 +104,7 @@ VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab'
 VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
 
-Note: we recommend put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`, e.g., use Protable Batch System (PBS) to submit VASP jobs.
+Note: we recommend that put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`, e.g., use Protable Batch System (PBS) to submit VASP jobs.
 
 
 ### Define a Customized Search File
