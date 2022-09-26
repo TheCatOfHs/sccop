@@ -60,7 +60,7 @@ Hardware requirements:
 
 ## Usage
 ### Server and Absolute Path Configuration
-
+In SCCOP, GPU node send VASP jobs to cpu nodes, thus  
 ```
 [Server]
 # User name
