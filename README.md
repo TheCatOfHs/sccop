@@ -90,17 +90,17 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 
 ```
 [Absolute path]
-#Path of SCCOP on GPU node
+# Path of SCCOP on GPU node
 SCCOP_path = '/local/sccop' 
-#Directory of SCCOP on CPU nodes
+# Directory of SCCOP on CPU nodes
 CPU_local_path = '/local' 
-#Path of VASP 2d
+# Path of VASP 2d
 VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
-#Path of VASP 3d
+# Path of VASP 3d
 VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
-#VASP 2d parallelization
+# VASP 2d parallelization
 VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab' 
-#VASP 3d parallelization
+# VASP 3d parallelization
 VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
 
