@@ -89,16 +89,6 @@ ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.
 
 ```diff
-- text in red
-+ text in green
-! text in orange
-# text in gray
-@@ text in purple (and bold)@@
-```
-```html
-<span style="color: green"> Some green text </span>
-```
-```python
 [Absolute path]
 # Path of SCCOP on GPU node
 SCCOP_path = '/local/sccop' 
