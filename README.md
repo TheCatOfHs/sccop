@@ -96,7 +96,11 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 @@ text in purple (and bold)@@
 ```
 
+```html
+<p>Hi here is some text this is red.</p>
 ```
+
+```diff
 [Absolute path]
 $\color{red} {# Path of SCCOP on GPU node}$
 SCCOP_path = '/local/sccop' 
