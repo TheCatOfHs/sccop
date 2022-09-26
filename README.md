@@ -63,11 +63,11 @@ Hardware requirements:
 
 ```
 [Server]
-user = 'XXX' #
-password = 'XXXXXX' #
-num_gpus = 2 #
-gpu_node = 'node151' #
-nodes = [131, 132, 133, 134, 135, 136] #
+user = 'XXX' # user name
+password = 'XXXXXX' # password of user
+num_gpus = 2 # gpu number
+gpu_node = 'node151' # name of gpu node
+nodes = [131, 132, 133, 134, 135, 136] # number of cpu node and thus the name is, e.g., 'node131'
 ```
 
 ```
