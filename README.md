@@ -107,91 +107,93 @@ To run SCCOP, you will need to define a customized initial search file, i.e., th
 
 ```diff
 [Grid]
-#
+# Cut off distance to find neighbor atoms
 cutoff = 8 
-#
+# Number of atoms in unit cell
 num_min_atom = 5 
 num_max_atom = 10 
-#
+# Grain of grid
 grain = [.5, .5, 1.2] 
+# Number of gridlines in a, b, c direction
 plane_upper = [100, 100, 1]
 
 [Dimension]
-#
+# Dimension of target composition
 num_dim = 2 
-#
+# Whether add vacuum layer
 add_vacuum = True 
 vacuum_space = 15 
-#
+# Whether search puckered structure
 puckered = True 
 thickness = 0.1 
 
 [Recycling]
-#
+# Number search recycle
 num_recycle = 1 
+# List of ML search and optimize in each recycle
 num_ml_list = [1] 
-#
+# Number of structures that sent to VASP optimize
 num_poscars = 12 
-#
+# High accuracy optimized by VASP
 num_optims = 6 
-#
+# VASP time limit
 vasp_time_limit = 480 
 
 [Initial Samples]
-#
+# The chemical formula of the compound, e.g., 'B1C3'
 component = 'XXX' 
-#
+# Number of initial lattice
 num_latt = 72 
-#
+# Number of initial structures sent to VASP
 num_Rand = 120 
-#
+# Average space group per crystal system
 num_ave_sg = 10 
-#
-num_cores = 4 
+# Number of sampling structure = num_cores*num_per_sg
+num_cores = 4  
 num_per_sg = 5 
-#
+# Lattice parameters
 len_mu = 5 
 len_lower = 4 
 len_upper = 6 
 len_sigma = 1 
-#
 ang_mu = 90 
 ang_sigma = 20 
-#
-#
+# Sampling weight of crystal system
+# [triclinic, monoclinic, orthorhombic, tetragonal, trigonal, hexagonal, cubic]
 system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0] 
 
 [Training]
-#
+# Training prediction model parameters
 train_batchsize = 64 
 train_epochs = 120 
 use_pretrain_model = True 
 
 [Searching]
-#
+# SA parameters
 T = .1 
 decay = .95 
-#
+# Total SA steps = latt_steps*sa_steps
 latt_steps = 3 
 sa_steps = 100 
-#
+# Metropolis judge interval
 num_jump = 2 
+# Number of SA path
 num_path = 360
-# 
+# SA cores
 sa_cores = 2 
-#
+# Distance constraint
 min_bond = 1.2 
 
 [Sample Select]
-#
+# Number of models to predict energy
 num_models = 5 
+# TSNE components
 num_components = 2 
-#
+# Number of clusters
 num_clusters = 60 
 ratio_min_energy = 0.5 
 ```
 
-There are two examples of customized datasets in the repository: `data/sample-regression` for regression and `data/sample-classification` for classification. 
 
 ### Submit SCCOP Job
 
