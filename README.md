@@ -194,31 +194,8 @@ ratio_min_energy = 0.5
 
 ### Submit SCCOP Job
 
-Before training a new CGCNN model, you will need to:
-
-- [Define a customized dataset](#define-a-customized-dataset) at `root_dir` to store the structure-property relations of interest.
-
-Then, in directory `cgcnn`, you can train a CGCNN model for your customized dataset by:
-
-```bash
-python main.py root_dir
-```
-
-You can set the number of training, validation, and test data with labels `--train-size`, `--val-size`, and `--test-size`. Alternatively, you may use the flags `--train-ratio`, `--val-ratio`, `--test-ratio` instead. Note that the ratio flags cannot be used with the size flags simultaneously. For instance, `data/sample-regression` has 10 data points in total. You can train a model by:
-
-```bash
-python main.py --train-size 6 --val-size 2 --test-size 2 data/sample-regression
-```
-or alternatively
-```bash
-python main.py --train-ratio 0.6 --val-ratio 0.2 --test-ratio 0.2 data/sample-regression
-```
-
-You can also train a classification model with label `--task classification`. For instance, you can use `data/sample-classification` by:
-
-```bash
-python main.py --task classification --train-size 5 --val-size 2 --test-size 3 data/sample-classification
-```
+To submit the SCCOP job, you need to download the `data`, `libs` and `src` directory, and make a directory named sccop under `/local`.
+If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by the command `nohup python src/main.py >& log&`.
 
 After training, you will get three files in `cgcnn` directory.
 
