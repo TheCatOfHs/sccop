@@ -75,7 +75,7 @@ GPU node send VASP jobs to cpu nodes by python package `paramiko`.
 
 ```diff
 [Server]
-*# GPU number*
+# GPU number
 num_gpus = 2 
 # Name of gpu node
 gpu_node = 'nodeXXX'
