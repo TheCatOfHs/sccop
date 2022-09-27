@@ -207,15 +207,13 @@ After searching, you will get three important files.
 
 ### Successful Example
 
-
+Initial sampling structures by symmetry
 ![](images/BC3_log_1.png)
 
-
-
+Update prediction model and optimize structures by ML-SA
 ![](images/BC3_log_2.png)
 
-
-
+Optimize structures by VASP
 ![](images/BC3_log_3.png)
 
 The log file and corresponding data are stored in `/examples`.
