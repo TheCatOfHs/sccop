@@ -75,9 +75,8 @@ GPU node send VASP jobs to cpu nodes by python package `paramiko`.
 
 ```diff
 [Server]
-# GPU number
+# GPU number and name of gpu node
 num_gpus = 2 
-# Name of gpu node
 gpu_node = 'nodeXXX'
 # List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
 nodes = [XXX, XXX, XXX] 
@@ -91,22 +90,20 @@ Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as wel
 SCCOP_path = '/local/sccop' 
 # Directory of SCCOP on CPU nodes
 CPU_local_path = '/local' 
-# Path of VASP 2d
+# Path of VASP 2d and VASP 3d
 VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
-# Path of VASP 3d
 VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
-# VASP 2d parallelization
+# VASP parallelization
 VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab' 
-# VASP 3d parallelization
 VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
 
-**Note:** we recommend that put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
+**Note:** we recommend that you put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
 
 
 ### Define a Customized Search File
 
-To input crystal structures to CGCNN, you will need to define a customized dataset. Note that this is required for both training and predicting. 
+To run SCCOP, you will need to define a customized dataset. Note that this is required for both training and predicting. 
 
 Before defining a customized dataset, you will need:
 
@@ -114,61 +111,87 @@ The structure of the `root_dir` should be:
 
 ```diff
 [Grid]
-cutoff = 8 #
-num_min_atom = 5 #
-num_max_atom = 10 #
-grain = [.5, .5, 1.2] #
-plane_upper = [100, 100, 1] #
+#
+cutoff = 8 
+#
+num_min_atom = 5 
+num_max_atom = 10 
+#
+grain = [.5, .5, 1.2] 
+plane_upper = [100, 100, 1]
 
 [Dimension]
-num_dim = 2 #
-add_vacuum = True #
-vacuum_space = 15 #
-puckered = True #
-thickness = 0.1 #
+#
+num_dim = 2 
+#
+add_vacuum = True 
+vacuum_space = 15 
+#
+puckered = True 
+thickness = 0.1 
 
 [Recycling]
-num_recycle = 1 #
-num_ml_list = [1] #
-num_poscars = 12 #
-num_optims = 6 #
-vasp_time_limit = 480 #
+#
+num_recycle = 1 
+num_ml_list = [1] 
+#
+num_poscars = 12 
+#
+num_optims = 6 
+#
+vasp_time_limit = 480 
 
 [Initial Samples]
-component = 'XXX' #
-num_latt = 72 #
-num_Rand = 120 #
-num_ave_sg = 10 #
-num_cores = 4 #
-num_per_sg = 5 #
-len_mu = 5 #
-len_lower = 4 #
-len_upper = 6 #
-len_sigma = 1 #
-ang_mu = 90 #
-ang_sigma = 20 #
-system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0] #
+#
+component = 'XXX' 
+#
+num_latt = 72 
+#
+num_Rand = 120 
+#
+num_ave_sg = 10 
+#
+num_cores = 4 
+num_per_sg = 5 
+#
+len_mu = 5 
+len_lower = 4 
+len_upper = 6 
+len_sigma = 1 
+#
+ang_mu = 90 
+ang_sigma = 20 
+#
+system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0] 
 
 [Training]
-train_batchsize = 64 #
-train_epochs = 120 #
-use_pretrain_model = True #
+#
+train_batchsize = 64 
+train_epochs = 120 
+use_pretrain_model = True 
 
 [Searching]
-T = .1 #
-decay = .95 #
-latt_steps = 3 #
-sa_steps = 100 #
-num_jump = 2 #
-num_path = 360 #
-sa_cores = 2 #
-min_bond = 1.2 #
+#
+T = .1 
+decay = .95 
+#
+latt_steps = 3 
+sa_steps = 100 
+#
+num_jump = 2 
+num_path = 360
+# 
+sa_cores = 2 
+#
+min_bond = 1.2 
 
 [Sample Select]
-num_models = 5 #
-num_components = 2 #
-num_clusters = 60 #
-ratio_min_energy = 0.5 #
+#
+num_models = 5 
+num_components = 2 
+#
+num_clusters = 60 
+ratio_min_energy = 0.5 
 ```
 
 There are two examples of customized datasets in the repository: `data/sample-regression` for regression and `data/sample-classification` for classification. 
