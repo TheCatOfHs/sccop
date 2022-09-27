@@ -101,7 +101,7 @@ VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab'
 VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
 
-Note: we recommend that put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`, e.g., use Protable Batch System (PBS) to submit VASP jobs.
+Note: we recommend that put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
 
 
 ### Define a Customized Search File
@@ -109,17 +109,6 @@ Note: we recommend that put SCCOP under the /local directory to accelerate the s
 To input crystal structures to CGCNN, you will need to define a customized dataset. Note that this is required for both training and predicting. 
 
 Before defining a customized dataset, you will need:
-
-- [CIF](https://en.wikipedia.org/wiki/Crystallographic_Information_File) files recording the structure of the crystals that you are interested in
-- The target properties for each crystal (not needed for predicting, but you need to put some random numbers in `id_prop.csv`)
-
-You can create a customized dataset by creating a directory `root_dir` with the following files: 
-
-1. `id_prop.csv`: a [CSV](https://en.wikipedia.org/wiki/Comma-separated_values) file with two columns. The first column recodes a unique `ID` for each crystal, and the second column recodes the value of target property. If you want to predict material properties with `predict.py`, you can put any number in the second column. (The second column is still needed.)
-
-2. `atom_init.json`: a [JSON](https://en.wikipedia.org/wiki/JSON) file that stores the initialization vector for each element. An example of `atom_init.json` is `data/sample-regression/atom_init.json`, which should be good for most applications.
-
-3. `ID.cif`: a [CIF](https://en.wikipedia.org/wiki/Crystallographic_Information_File) file that recodes the crystal structure, where `ID` is the unique `ID` for the crystal.
 
 The structure of the `root_dir` should be:
 
@@ -183,10 +172,6 @@ ratio_min_energy = 0.5 #
 ```
 
 There are two examples of customized datasets in the repository: `data/sample-regression` for regression and `data/sample-classification` for classification. 
-
-**For advanced PyTorch users**
-
-The above method of creating a customized dataset uses the `CIFData` class in `cgcnn.data`. If you want a more flexible way to input crystal structures, PyTorch has a great [Tutorial](http://pytorch.org/tutorials/beginner/data_loading_tutorial.html#sphx-glr-beginner-data-loading-tutorial-py) for writing your own dataset class.
 
 ### Submit SCCOP Job
 
