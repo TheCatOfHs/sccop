@@ -197,13 +197,16 @@ ratio_min_energy = 0.5
 To submit the SCCOP job, you need to download the `data`, `libs` and `src` directory, and make a directory named sccop under `/local`.
 If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by the command `nohup python src/main.py >& log&`.
 
-After training, you will get three files in `cgcnn` directory.
+After searching, you will get three important files.
 
-- `model_best.pth.tar`: stores the CGCNN model with the best validation accuracy.
-- `checkpoint.pth.tar`: stores the CGCNN model at the last epoch.
-- `test_results.csv`: stores the `ID`, target value, and predicted value for each crystal in test set.
+- `log`: stores the searching process of SCCOP.
+- `data/poscars/optim_strus`: stores the searched structures.
+- `data/vasp_out/Energy-XXX.dat`: stores the average energy of searched structures.
+
+**Note**: if you 
 
 ### Successful Example
+
 
 ![](images/BC3_log_1.png)
 
@@ -215,9 +218,11 @@ After training, you will get three files in `cgcnn` directory.
 
 ![](images/BC3_log_3.png)
 
+The log file and corresponding data are stored in `/examples`.
+
 ## Data
 
-To reproduce our paper, you can download the corresponding datasets following the [instruction](data/material-data).
+We have applied SCCOP to systematic search of B-C-N system, and you can download the corresponding data from [BCN_data](XXX).
 
 ## Authors
 
