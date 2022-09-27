@@ -103,11 +103,7 @@ VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
 
 ### Define a Customized Search File
 
-To run SCCOP, you will need to define a customized dataset. Note that this is required for both training and predicting. 
-
-Before defining a customized dataset, you will need:
-
-The structure of the `root_dir` should be:
+To run SCCOP, you will need to define a customized initial search file, i.e., the `global_var.py` should be:
 
 ```diff
 [Grid]
@@ -161,6 +157,7 @@ len_sigma = 1
 #
 ang_mu = 90 
 ang_sigma = 20 
+#
 #
 system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0] 
 
