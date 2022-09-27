@@ -60,7 +60,6 @@ Hardware requirements:
 - [GPU node](https://en.wikipedia.org/wiki/GPU_cluster)
 - [CPU node](https://en.wikipedia.org/wiki/Server_(computing))
 
-
 ## Usage
 ### Server and Absolute Path Configuration
 In SCCOP, we use shell command `ssh` and `scp` to transfer files between nodes, you should make sure the `ssh` between nodes without password, here we provide one way as follows:
@@ -99,7 +98,6 @@ VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
 ```
 
 **Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
-
 
 ### Define a Customized Search File
 
@@ -194,7 +192,6 @@ num_clusters = 60
 ratio_min_energy = 0.5 
 ```
 
-
 ### Submit SCCOP Job
 
 Before training a new CGCNN model, you will need to:
@@ -240,35 +237,6 @@ After training, you will get three files in `cgcnn` directory.
 
 
 ![](images/BC3_log_3.png)
-
-Before predicting the material properties, you will need to:
-
-- [Define a customized dataset](#define-a-customized-dataset) at `root_dir` for all the crystal structures that you want to predict.
-- Obtain a [pre-trained CGCNN model](pre-trained) named `pre-trained.pth.tar`.
-
-Then, in directory `cgcnn`, you can predict the properties of the crystals in `root_dir`:
-
-```bash
-python predict.py pre-trained.pth.tar root_dir
-```
-
-For instace, you can predict the formation energies of the crystals in `data/sample-regression`:
-
-```bash
-python predict.py pre-trained/formation-energy-per-atom.pth.tar data/sample-regression
-```
-
-And you can also predict if the crystals in `data/sample-classification` are metal (1) or semiconductors (0):
-
-```bash
-python predict.py pre-trained/semi-metal-classification.pth.tar data/sample-classification
-```
-
-Note that for classification, the predicted values in `test_results.csv` is a probability between 0 and 1 that the crystal can be classified as 1 (metal in the above example).
-
-After predicting, you will get one file in `sccop` directory:
-
-- `test_results.csv`: stores the `ID`, target value, and predicted value for each crystal in test set. Here the target value is just any number that you set while defining the dataset in `id_prop.csv`, which is not important.
 
 ## Data
 
