@@ -224,6 +224,10 @@ After training, you will get three files in `cgcnn` directory.
 
 ### Successful Example
 
+![](images/BC3_log_1.png)
+![](images/BC3_log_2.png)
+![](images/BC3_log_3.png)
+
 Before predicting the material properties, you will need to:
 
 - [Define a customized dataset](#define-a-customized-dataset) at `root_dir` for all the crystal structures that you want to predict.
