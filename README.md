@@ -98,7 +98,7 @@ VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab'
 VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
 ```
 
-**Note:** we recommend that you put SCCOP under the /local directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
+**Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
 
 
 ### Define a Customized Search File
