@@ -191,7 +191,10 @@ ratio_min_energy = 0.5
 ### Submit SCCOP Job
 
 To submit the SCCOP job, you need to download the `data`, `libs` and `src` directory, and make a directory named sccop under `/local`.
-If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by the command `nohup python src/main.py >& log&`.
+If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by:
+```bash
+nohup python src/main.py >& log&
+```
 
 After searching, you will get three important files.
 
@@ -199,7 +202,7 @@ After searching, you will get three important files.
 - `data/poscars/optim_strus`: stores the searched structures.
 - `data/vasp_out/Energy-XXX.dat`: stores the average energy of searched structures.
 
-**Note**: if you 
+**Note**: if you want to 
 
 ### Successful Example
 
@@ -216,7 +219,7 @@ The log file and corresponding data are stored in `/examples/B1C3_log.dat`.
 
 ## Data
 
-We have applied SCCOP to systematic search of B-C-N system, and you can download the corresponding data from [BCN_data](XXX).
+We have applied SCCOP to systematic search 82 compositions of B-C-N system, and you can download the data from [B-C-N_POSCAR](XXX).
 
 ## Authors
 
