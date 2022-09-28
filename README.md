@@ -88,7 +88,7 @@ CPU_local_path = '/local'
 # Path of openmpi
 MPI_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
 MPI_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
-# Call VASP for DFT
+# Call VASP for DFT calculation
 VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab' 
 VASP_3d = f'{MPI_3d_path} -np 48 vasp' 
 ```
@@ -101,7 +101,7 @@ To run SCCOP for desired composition, you need to define a customized initial se
 
 ```diff
 [Grid]
-# Cut off distance to find neighbor atoms
+# Cut off distance, used to find neighbor atoms
 cutoff = 8 
 # Number of atoms in unit cell
 num_min_atom = 5 
