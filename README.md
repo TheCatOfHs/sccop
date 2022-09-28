@@ -8,7 +8,7 @@ The following paper describes the details of the SCCOP framework:
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
 ![](images/SCCOP.png)
 
-SCCOP now only supports the search for 2D materials, and the supporting for 3D is under construction.
+**Note:** SCCOP now only supports the search for 2D materials, and the supporting for 3D is under construction.
 
 ## Table of Contents
 
@@ -93,11 +93,11 @@ VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab'
 VASP_3d = f'{MPI_3d_path} -np 48 vasp' 
 ```
 
-**Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
+**Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing, e.g., `/local/sccop` which includes `sccop/src`, `sccop/data` and `sccop/libs`. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
 
 ### Define a Customized Search File
 
-To run SCCOP, you will need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
+To run SCCOP, you first need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
 
 ```diff
 [Grid]
