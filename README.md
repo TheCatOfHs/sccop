@@ -70,7 +70,7 @@ ssh-keygen -t rsa -b 4096
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 ```
 
-Then, GPU node can send jobs to cpu nodes, and you need to specify the GPU node and CPU nodes in `src/core/path.py`.
+Then, you need to specify server info and absolute path in `src/core/path.py`, thus GPU node can send jobs to cpu nodes via `paramiko`.
 
 ```diff
 [Server]
@@ -79,11 +79,7 @@ num_gpus = 2
 gpu_node = 'node151'
 # List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
 nodes = [131, 132, 133, 134, 135, 136] 
-```
 
-Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.
-
-```diff
 [Absolute path]
 # Path of SCCOP on GPU node
 SCCOP_path = '/local/sccop' 
@@ -216,7 +212,7 @@ Update prediction model and optimize structures by ML-SA.
 Optimize structures by VASP.
 ![](images/BC3_log_3.png)
 
-The log file and corresponding data are stored in `/examples`.
+The log file and corresponding data are stored in `/examples/B1C3_log.dat`.
 
 ## Data
 
