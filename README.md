@@ -190,7 +190,6 @@ ratio_min_energy = 0.5
 
 ### Submit SCCOP Job
 
-To submit the SCCOP job, you need to download the `data`, `libs` and `src` directory, and make a directory named sccop under `/local`.
 If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by:
 ```bash
 nohup python src/main.py >& log&
