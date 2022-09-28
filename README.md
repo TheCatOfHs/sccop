@@ -190,7 +190,7 @@ ratio_min_energy = 0.5
 
 ### Submit SCCOP Job
 
-If you finish the [configuration](#server-and-absolute-path-configuration) and [initial file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by:
+If you install all packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by:
 ```bash
 nohup python src/main.py >& log&
 ```
