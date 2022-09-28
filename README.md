@@ -97,7 +97,7 @@ VASP_3d = f'{MPI_3d_path} -np 48 vasp'
 
 ### Define a Customized Search File
 
-To run SCCOP, you first need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
+To run SCCOP for desired composition, you need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
 
 ```diff
 [Grid]
