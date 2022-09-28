@@ -70,15 +70,15 @@ ssh-keygen -t rsa -b 4096
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 ```
 
-GPU node send VASP jobs to cpu nodes by python package `paramiko`.
+Then, GPU node can send jobs to cpu nodes, and you need to specify the GPU node and CPU nodes in `src/core/path.py`.
 
 ```diff
 [Server]
 # GPU number and name of gpu node
 num_gpus = 2 
-gpu_node = 'nodeXXX'
+gpu_node = 'node151'
 # List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
-nodes = [XXX, XXX, XXX] 
+nodes = [131, 132, 133, 134, 135, 136] 
 ```
 
 Last, you need to set up the absolute path of SCCOP on GPU and CPU nodes, as well as the path of VASP software.
@@ -101,7 +101,7 @@ VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
 
 ### Define a Customized Search File
 
-To run SCCOP, you will need to define a customized initial search file, i.e., the `global_var.py` should be:
+To run SCCOP, you will need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
 
 ```diff
 [Grid]
