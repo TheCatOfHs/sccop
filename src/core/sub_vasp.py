@@ -83,7 +83,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
         node = job[0].split('-')[-1]
         poscar_str = ' '.join(job)
         ip = f'node{node}'
-        job_num = f'`ps -ef | grep {VASP_3d_path} | grep -v grep | wc -l`'
+        job_num = f'`ps -ef | grep {MPI_3d_path} | grep -v grep | wc -l`'
         local_vasp_out_path = f'{SCCOP_path}/{vasp_out_path}/{iteration:03.0f}'
         shell_script = f'''
                         cd {SCCOP_path}/vasp
@@ -96,7 +96,7 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                             scp {gpu_node}:{SCCOP_path}/{poscar_path}/{iteration:03.0f}/$p POSCAR
                             DPT -v potcar
                             
-                            nohup {VASP_3d_exe} >& $p.out&
+                            nohup {VASP_3d} >& $p.out&
                             cd ../
                             
                             counter={job_num}
@@ -208,8 +208,8 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                {VASP_2d_exe} >> vasp-$i.vasp
-                                #{VASP_3d_exe} >> vasp-$i.vasp
+                                {VASP_2d} >> vasp-$i.vasp
+                                #{VASP_3d} >> vasp-$i.vasp
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i
@@ -279,8 +279,8 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                {VASP_2d_exe} >> vasp-$i.vasp
-                                #{VASP_3d_exe} >> vasp-$i.vasp
+                                {VASP_2d} >> vasp-$i.vasp
+                                #{VASP_3d} >> vasp-$i.vasp
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i

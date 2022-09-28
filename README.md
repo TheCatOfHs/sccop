@@ -85,12 +85,12 @@ nodes = [131, 132, 133, 134, 135, 136]
 SCCOP_path = '/local/sccop' 
 # Directory of SCCOP on CPU nodes
 CPU_local_path = '/local' 
-# Path of VASP 2d and VASP 3d
-VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
-VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
-# VASP parallelization
-VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab' 
-VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp' 
+# Path of openmpi
+MPI_2d_path = '/opt/openmpi-1.6.3/bin/mpirun' 
+MPI_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun' 
+# Call VASP for DFT
+VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab' 
+VASP_3d = f'{MPI_3d_path} -np 48 vasp' 
 ```
 
 **Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.

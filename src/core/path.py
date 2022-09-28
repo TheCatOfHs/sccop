@@ -6,10 +6,10 @@ nodes = [131, 132, 133, 134, 135, 136]
 #Absolute path
 SCCOP_path = '/local/sccop'
 CPU_local_path = '/local'
-VASP_2d_path = '/opt/openmpi-1.6.3/bin/mpirun'
-VASP_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun'
-VASP_2d_exe = f'{VASP_2d_path} -np 48 vasp_relax_ab'
-VASP_3d_exe = f'{VASP_3d_path} -np 48 vasp'
+MPI_2d_path = '/opt/openmpi-1.6.3/bin/mpirun'
+MPI_3d_path = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun'
+VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab'
+VASP_3d = f'{MPI_3d_path} -np 48 vasp'
 
 #Save directory
 poscar_path = 'data/poscar' 
