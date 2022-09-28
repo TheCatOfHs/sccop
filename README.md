@@ -93,7 +93,7 @@ VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab'
 VASP_3d = f'{MPI_3d_path} -np 48 vasp' 
 ```
 
-**Note:** we recommend that you put SCCOP under the `/local` directory to accelerate the speed of data processing, e.g., `/local/sccop` which includes `sccop/src`, `sccop/data` and `sccop/libs`. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
+**Note:** the SCCOP should under the `/local` directory of GPU node, e.g., `/local/sccop` which includes `sccop/src`, `sccop/data` and `sccop/libs`. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
 
 ### Define a Customized Search File
 
@@ -190,16 +190,16 @@ ratio_min_energy = 0.5
 
 ### Submit SCCOP Job
 
-If you install all packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you can `cd /local/sccop` to submit sccop by:
+If you install all packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you need to make sure the `sccop` is under `/local` of GPU node, and you can `cd /local/sccop` to submit sccop by:
 ```bash
 nohup python src/main.py >& log&
 ```
 
 After searching, you will get three important files.
 
-- `log`: stores the searching process of SCCOP.
+- `data/system.dat`: stores the searching process of SCCOP.
 - `data/poscars/optim_strus`: stores the searched structures.
-- `data/vasp_out/Energy-XXX.dat`: stores the average energy of searched structures.
+- `data/vasp_out/optim_strus/energy/Energy.dat`: stores the average energy of searched structures.
 
 **Note**: if you want to 
 
