@@ -202,20 +202,20 @@ After searching, you will get three important files.
 - `data/poscars/optim_strus`: stores the POSCAR of searched structures.
 - `data/vasp_out/optim_strus/energy/Energy.dat`: stores the energy of searched structures.
 
-**Note**: if you do not want to high accuracy DFT optimization, shadow the code `select.optim_strus()` and `vasp.run_optimization_high()` in `src/main.py`. Moreover, if you want to change the INCAR of VASP, you can change corresponding files in `libs/VASP_inputs`.
+**Note**: if you do not want to high accuracy DFT optimization, shadow the code `select.optim_strus()` and `vasp.run_optimization_high()` in `src/main.py`. Moreover, if you want to change the INCAR of VASP, change corresponding files in `libs/VASP_inputs`.
 
 ### Successful Example
 
-Initial sampling structures by symmetry.
+Here we give one successful example of SCCOP, you can find the log file and searched structures in `/examples`.
+
+Initial sampling structures by symmetry in parallel.
 ![](images/BC3_log_1.png)
 
-Update prediction model and optimize structures by ML-SA.
+Update prediction model and optimize structures by ML-SA in parallel.
 ![](images/BC3_log_2.png)
 
-Optimize structures by VASP.
+Optimize structures by VASP in parallel.
 ![](images/BC3_log_3.png)
-
-The log file and corresponding data are stored in `/examples/B1C3_log.dat`.
 
 ## Data
 
