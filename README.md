@@ -70,7 +70,7 @@ ssh-keygen -t rsa -b 4096
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 ```
 
-Then, you need to specify server info and absolute path in `src/core/path.py`, thus GPU node can send jobs to cpu nodes via [`paramiko`](https://www.paramiko.org/).
+Then, you need to specify server info and absolute path in `src/core/path.py`, thus GPU node can send jobs to cpu nodes via `paramiko`(https://www.paramiko.org/).
 
 ```diff
 [Server]
