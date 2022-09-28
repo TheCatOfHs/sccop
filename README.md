@@ -190,7 +190,7 @@ ratio_min_energy = 0.5
 
 ### Submit SCCOP Job
 
-If you install all packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you need to make sure the `sccop` is under `/local` of GPU node, and you can `cd /local/sccop` to submit sccop by:
+If you install packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you need to make sure the `sccop` is under `/local` of GPU node, and you can `cd /local/sccop` to submit sccop job by:
 
 ```bash
 nohup python src/main.py >& log&
@@ -199,10 +199,10 @@ nohup python src/main.py >& log&
 After searching, you will get three important files.
 
 - `data/system.dat`: stores the searching process of SCCOP.
-- `data/poscars/optim_strus`: stores the searched structures.
-- `data/vasp_out/optim_strus/energy/Energy.dat`: stores the average energy of searched structures.
+- `data/poscars/optim_strus`: stores the POSCAR of searched structures.
+- `data/vasp_out/optim_strus/energy/Energy.dat`: stores the energy of searched structures.
 
-**Note**: if you want to 
+**Note**: if you do not want to high accuracy DFT optimization, shadow the code `select.optim_strus()` and `vasp.run_optimization_high()` in `src/main.py`. Moreover, if you want to change the INCAR of VASP, you can change corresponding files in `libs/VASP_inputs`.
 
 ### Successful Example
 
