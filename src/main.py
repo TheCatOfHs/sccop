@@ -16,7 +16,7 @@ from core.data_transfer import MultiGridTransfer
 class CrystalOptimization(ListRWTools):
     #crystal combinational optimization program
     def __init__(self):
-        os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
+        os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
         self.init = InitSampling()
         self.cpu_nodes = UpdateNodes()
         self.transfer = MultiGridTransfer()
