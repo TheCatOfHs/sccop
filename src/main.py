@@ -16,7 +16,7 @@ from core.data_transfer import MultiGridTransfer
 class CrystalOptimization(ListRWTools):
     #crystal combinational optimization program
     def __init__(self):
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
+        os.environ['CUDA_VISIBLE_DEVICES'] = '1,2'
         self.init = InitSampling()
         self.cpu_nodes = UpdateNodes()
         self.transfer = MultiGridTransfer()
@@ -105,12 +105,12 @@ class CrystalOptimization(ListRWTools):
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low()
             start += num_iteration + 1  
-        '''
+
         #Select optimized structures
         select.optim_strus()
         #Optimize
         vasp.run_optimization_high()
-        '''
+
         
     def import_sampling_data(self, iteration):
         """
@@ -252,10 +252,21 @@ class CrystalOptimization(ListRWTools):
         train_nbr_fea += nbr_fea[add_num:]
         train_nbr_fea_idx += nbr_fea_idx[add_num:]
         
+    def header(self):
+        system_echo('''      
+     _____  _____  _____  _____ ______        
+    /  ___|/  __ \/  __ \|  _  || ___ \\       *------------*-------------*
+    \ `--. | /  \/| /  \/| | | || |_/ /       |     Version: 0.1.0       |
+     `--. \| |    | |    | | | ||  __/        | Last Update: 2022-09-28  |
+    /\__/ /| \__/\| \__/\\\ \_/ /| |           |     Authors: LCN and LHP |
+    \____/  \____/ \____/ \___/ \_|           *------------*-------------*                                                                                                
+        ''', header=True)
+
 
 if __name__ == '__main__':
     start_time = time.time()
     sccop = CrystalOptimization()
+    sccop.header()
     sccop.main()
     end_time = time.time()
     system_echo(f'Time: {end_time - start_time}')

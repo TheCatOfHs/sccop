@@ -10,7 +10,7 @@ from core.path import *
 from core.global_var import *
 
 
-def system_echo(ct):
+def system_echo(ct, header=False):
     """
     write system log
     
@@ -18,9 +18,11 @@ def system_echo(ct):
     ----------
     ct [str, 0d]: content
     """
-    echo_ct = time.strftime("%Y-%m-%d %H:%M:%S",
-                            time.localtime()) + ' -- ' + ct
-    print(echo_ct)
+    if header:
+        echo_ct = ct
+    else:
+        echo_ct = time.strftime("%Y-%m-%d %H:%M:%S",
+                                time.localtime()) + ' -- ' + ct 
     with open(log_file, 'a') as obj:
         obj.write(echo_ct + '\n')
 
