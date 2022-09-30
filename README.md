@@ -17,7 +17,7 @@ The following paper describes the details of the SCCOP framework:
 - [Usage](#usage)
   - [Confiugration](#server-and-absolute-path-configuration)
   - [Customize initial search file](#define-a-customized-search-file)
-  - [Submit sccop job on cluster](#submit-sccop-job)
+  - [Submit SCCOP job on cluster](#submit-sccop-job)
   - [Successful example](#successful-example)
 - [Data](#data)
 - [Authors](#authors)
