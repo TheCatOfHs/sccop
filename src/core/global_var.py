@@ -29,9 +29,9 @@ num_per_sg = 5
 len_mu = 5
 len_lower = 4
 len_upper = 6
-len_sigma = 1
+len_sigma = .5
 ang_mu = 90
-ang_sigma = 20
+ang_sigma = 30
 system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0]
 
 #Training
@@ -42,9 +42,9 @@ use_pretrain_model = True
 #Searching
 T = .1
 decay = .95
-latt_steps = 3
-sa_steps = 100
-num_jump = 2
+latt_steps = 5
+sa_steps = 80
+num_jump = 1
 num_path = 360
 sa_cores = 2
 min_bond = 1.2

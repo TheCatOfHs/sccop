@@ -738,13 +738,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
             for i in ratios:
                 energy = self.predict(pos, type, symm, i, grid_idx, grid_dis)
                 energys.append(energy)
-            #choose grid ratio randomly
-            ratios_num = int(.2*ratios_num)
-            idx_sort = np.argsort(energys)
-            if ratios_num >= 1:
-                idx = np.random.choice(idx_sort[:ratios_num])
-            else:
-                idx = idx_sort[0]
+            idx = np.argsort(energys)[0]
             new_ratio = ratios[idx]
         else:
             new_ratio = ratio

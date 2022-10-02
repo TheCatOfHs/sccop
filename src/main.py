@@ -105,12 +105,12 @@ class CrystalOptimization(ListRWTools):
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low()
             start += num_iteration + 1  
-
+        
         #Select optimized structures
         select.optim_strus()
         #Optimize
         vasp.run_optimization_high()
-
+        
         
     def import_sampling_data(self, iteration):
         """
