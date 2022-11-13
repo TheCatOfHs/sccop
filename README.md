@@ -180,7 +180,7 @@ Optimize structures by VASP in parallel.
 
 ## Data
 
-We have applied SCCOP to systematic search 82 compositions of B-C-N system, and newly discovered 28 stable low energy configurations, and you can download the data from [B-C-N_POSCAR](examples/BCN.zip).
+We have applied SCCOP to systematic search 82 compositions of B-C-N system, and you can download the newly discovered 28 stable low energy configurations from [B-C-N_POSCAR](examples/BCN.zip).
 
 ## Authors
 
