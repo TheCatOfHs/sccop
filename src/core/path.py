@@ -31,7 +31,8 @@ sing_point_energy_path = 'libs/VASP_inputs/SinglePointEnergy'
 log_file = 'data/system.log'
 elements_file = 'data/elements.dat'
 atom_init_file = 'data/atom_init.dat'
-pretrain_model = 'data/pretrain/model_2d.pth.tar'
+pretrain_model_2d = 'data/pretrain/model_2d.pth.tar'
+pretrain_model_3d = 'data/pretrain/model_3d.pth.tar'
 
 #Property file
 optim_vasp_path = f'{vasp_out_path}/optim_strus'

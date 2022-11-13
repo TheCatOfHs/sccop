@@ -1,17 +1,16 @@
 import os, sys, time
 import itertools
 import numpy as np
-
 import torch
 import argparse
 from functools import reduce
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.data_transfer import Transfer
-from core.space_group import PlanarSpaceGroup
-from core.utils import ListRWTools, SSHTools, system_echo
+from core.grid_generate import GridGenerate
+from core.utils import *
 from core.predict import CrystalGraphConvNet, Normalizer
 
 
@@ -164,7 +163,7 @@ class ParallelWorkers(ListRWTools, SSHTools):
         path [str, 1d]: searching path
         node [str, 1d]: searching node
         grid_name [str, 1d]: name of grid
-        grid_ratio [str, 1d]L ratio of grid
+        grid_ratio [str, 1d]: ratio of grid
         space_group [str, 1d]: space group number
         """
         ip = f'node{node[0]}'
@@ -376,6 +375,9 @@ class ParallelWorkers(ListRWTools, SSHTools):
 
 class ActionSpace:
     #action space of optimizing position of atoms
+    def __init__(self):
+        self.min_bond = get_min_bond(composition)
+    
     def action_filter(self, idx, pos, symm, symm_site,
                       ratio, grid_idx, grid_dis, move=True):
         """
@@ -414,6 +416,29 @@ class ActionSpace:
         allow = np.setdiff1d(vacancy, forbid).tolist()
         return allow
     
+    def check_near(self, pos, ratio, grid_idx, grid_dis):
+        """
+        check near distance of atoms
+        
+        Parameters
+        ----------
+        pos [int, 1d]: position of atoms
+        ratio [float, 0d]: grid ratio
+        grid_idx [int, 2d, np]: neighbor index of grid
+        grid_dis [float, 2d, np]: neighbor distance of grid
+
+        Returns
+        ----------
+        flag [bool, 0d]: whether satisfy bond constrain
+        """
+        flag = True
+        forbid = self.get_forbid(pos, ratio, grid_idx, grid_dis)
+        for i in pos:
+            if i in forbid:
+                flag = False
+                break
+        return flag
+    
     def get_forbid(self, point, ratio, grid_idx, grid_dis):
         """
         get position of forbid area
@@ -435,7 +460,7 @@ class ActionSpace:
         forbid_idx = []  
         for item in nbr_dis:
             for i, dis in enumerate(item):
-                if dis > min_bond:
+                if dis > self.min_bond:
                     forbid_idx.append(i)
                     break
         actions = [nbr_idx[i][:j] for i, j in enumerate(forbid_idx)]
@@ -547,64 +572,58 @@ class ActionSpace:
         min_dis = min(nbr_dis)
         #boundary of scaling
         low, up = scale_bound
-        hold = 1.1*min_bond/min_dis
+        hold = 1.1*self.min_bond/min_dis
         low = max(low, ratio*hold)
         allow = [i for i in np.arange(low, up, .01)]
         return allow
     
-    def get_scale_bound(self, latt_vec):
+    def get_scale_bound_2d(self, latt_vec, lower, upper):
         """
-        get boundary of scaling lattice
+        get boundary of scaling lattice 2d
         
         Parameters
         ----------
         latt_vec [float, 2d, np]: lattice vector
-
+        lower [float, 0d]: lower boundary of area
+        upper [float, 0d]: upper boundary of area
+        
         Returns
         ----------
-        low [float, 0d]: lower boundary
-        up [float, 0d]: upper boundary
+        ratio_lower [float, 0d]: lower boundary of ratio
+        ratio_upper [float, 0d]: upper boundary of ratio
         """
-        #get short and long axis of lattice
-        norms = np.linalg.norm(latt_vec, axis=1)
-        if add_vacuum:
-            norms = norms[:2]
-        short, long = min(norms), max(norms)
-        #get basic scale boundary
-        low = len_lower/short
-        up = len_upper/long
-        return low, up
+        a_vec, b_vec = latt_vec[0:2]
+        area = np.linalg.norm(np.cross(a_vec, b_vec))
+        ratio_lower = np.sqrt(lower/area)
+        ratio_upper = np.sqrt(upper/area)
+        return ratio_lower, ratio_upper
 
-
-class GeoCheck(ActionSpace):
-    #check geometry property of structure
-    def check_near(self, pos, ratio, grid_idx, grid_dis):
+    def get_scale_bound_3d(self, latt_vec, lower, upper):
         """
-        check near distance of atoms
+        get boundary of scaling lattice 3d
         
         Parameters
         ----------
-        pos [int, 1d]: position of atoms
-        ratio [float, 0d]: grid ratio
-        grid_idx [int, 2d, np]: neighbor index of grid
-        grid_dis [float, 2d, np]: neighbor distance of grid
-
+        latt_vec [float, 2d, np]: lattice vector
+        lower [float, 0d]: lower boundary of volume
+        upper [float, 0d]: upper boundary of volume
+        
         Returns
         ----------
-        flag [bool, 0d]: whether satisfy bond constrain
+        ratio_lower [float, 0d]: lower boundary of ratio
+        ratio_upper [float, 0d]: upper boundary of ratio
         """
-        flag = True
-        forbid = self.get_forbid(pos, ratio, grid_idx, grid_dis)
-        for i in pos:
-            if i in forbid:
-                flag = False
-                break
-        return flag
+        a_vec, b_vec, c_vec = latt_vec
+        volume = np.abs(np.dot(np.cross(a_vec, b_vec), c_vec))
+        ratio_lower = np.cbrt(lower/volume)
+        ratio_upper = np.cbrt(upper/volume)
+        return ratio_lower, ratio_upper
     
 
-class Search(GeoCheck, PlanarSpaceGroup, Transfer):
+class Search(ActionSpace, GridGenerate, Transfer):
     #Searching on PES by machine-learning potential
     def __init__(self, iteration):
+        ActionSpace.__init__(self)
         Transfer.__init__(self)
         self.device = torch.device('cpu')
         self.normalizer = Normalizer(torch.tensor([]))
@@ -612,7 +631,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         self.model_save_path = f'{model_path}/{self.iteration}'
         self.sh_save_path = f'{search_path}/{self.iteration}'
     
-    def explore(self, pos, type, symm, grid, ratio, sg, path, node):
+    def explore(self, pos, type, symm, grid, ratio, sg, path, node, T=.1, decay=.95):
         """
         simulated annealing
         
@@ -626,6 +645,8 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         sg [int, 0d]: space group number
         path [int, 0d]: path number
         node [int, 0d]: node number
+        T [float, 0d]: initial SA temperature
+        decay [float, 0d]: decay rate of temperature
         """
         #load prediction model
         self.load_model()
@@ -634,7 +655,14 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         latt_vec = self.import_data('latt', grid, sg)
         grid_idx, grid_dis = self.import_data('grid', grid, sg)
         #get boundary of scaling lattice
-        scale_bound = self.get_scale_bound(latt_vec)
+        atom_type_full = self.get_atom_type_all(type, symm)
+        params = self.get_parameters(atom_type_full)
+        if dimension == 2:
+            lower, upper = self.area_boundary_predict(params)
+            scale_bound = self.get_scale_bound_2d(latt_vec, lower, upper)
+        elif dimension == 3:
+            lower, upper = self.volume_boundary_predict(params)
+            scale_bound = self.get_scale_bound_3d(latt_vec, lower, upper)
         #group sites by symmetry
         mapping = self.import_data('mapping', grid, sg)
         symm_site = self.group_symm_sites(mapping)
@@ -858,7 +886,7 @@ class Search(GeoCheck, PlanarSpaceGroup, Transfer):
         
 
 if __name__ == '__main__':
-    torch.set_num_threads(sa_cores)
+    torch.set_num_threads(2)
     parser = argparse.ArgumentParser()
     parser.add_argument('--pos', type=int, nargs='+')
     parser.add_argument('--type', type=int, nargs='+')

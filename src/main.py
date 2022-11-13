@@ -3,7 +3,7 @@ import time
 import numpy as np
 
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.initialize import InitSampling, UpdateNodes
 from core.sample_select import Select, BayesianOpt
 from core.sub_vasp import ParallelSubVASP, VASPoptimize
@@ -16,7 +16,6 @@ from core.data_transfer import MultiGridTransfer
 class CrystalOptimization(ListRWTools):
     #crystal combinational optimization program
     def __init__(self):
-        os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
         self.init = InitSampling()
         self.cpu_nodes = UpdateNodes()
         self.transfer = MultiGridTransfer()
@@ -160,7 +159,7 @@ class CrystalOptimization(ListRWTools):
                                      grid_name, grid_ratio, space_group)
         return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energys
 
-    def check_num_train_data(self, energy, train_energy):
+    def check_num_train_data(self, energy, train_energy, train_batchsize=64):
         """
         check number of train data assigned to gpus    
 
@@ -256,14 +255,15 @@ class CrystalOptimization(ListRWTools):
         system_echo('''      
      _____  _____  _____  _____ ______        
     /  ___|/  __ \/  __ \|  _  || ___ \\       *------------*-------------*
-    \ `--. | /  \/| /  \/| | | || |_/ /       |     Version: 0.1.0       |
-     `--. \| |    | |    | | | ||  __/        | Last Update: 2022-09-28  |
+    \ `--. | /  \/| /  \/| | | || |_/ /       |     Version: 0.2.5       |
+     `--. \| |    | |    | | | ||  __/        | Last Update: 2022-10-31  |
     /\__/ /| \__/\| \__/\\\ \_/ /| |           |     Authors: LCN and LHP |
     \____/  \____/ \____/ \___/ \_|           *------------*-------------*                                                                                                
         ''', header=True)
 
 
 if __name__ == '__main__':
+    os.environ['CUDA_VISIBLE_DEVICES'] = '0,1'
     start_time = time.time()
     sccop = CrystalOptimization()
     sccop.header()

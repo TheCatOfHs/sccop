@@ -12,7 +12,7 @@ from torch.nn import DataParallel as DataParallel_raw
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.sub_vasp import system_echo
 from core.utils import ListRWTools
 
@@ -299,6 +299,7 @@ class CrystalGraphConvNet(nn.Module):
 class PPModel(ListRWTools):
     #Train property predict model
     def __init__(self, iteration, train_data, valid_data, test_data, 
+                 train_batchsize=64, train_epochs=120,
                  lr=1e-2, num_workers=0, num_gpus=num_gpus, print_feq=10):
         self.device = torch.device('cuda')
         self.train_data = train_data
@@ -328,22 +329,18 @@ class PPModel(ListRWTools):
         sample_target = self.sample_data_list(self.train_data)
         normalizer = Normalizer(sample_target)
         #build prediction model
-        if use_pretrain_model:
-            checkpoint = torch.load(pretrain_model)
-            model = self.model_initial(checkpoint)
-            normalizer.load_state_dict(checkpoint['normalizer'])
-        else:
-            model = CrystalGraphConvNet()
+        if dimension == 2:
+            checkpoint = torch.load(pretrain_model_2d)
+        elif dimension == 3:
+            checkpoint = torch.load(pretrain_model_3d)
+        model = self.model_initial(checkpoint)
         model = DataParallel(model)
         model.to(self.device)
         #set learning rate
-        if use_pretrain_model:
-            out_layer_id = list(map(id, model.module.fc_out.parameters()))
-            crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
-            params = [{'params': crysfea_layer, 'lr': self.lr*0},
-                      {'params': model.module.fc_out.parameters()}]
-        else:
-            params = model.parameters()
+        out_layer_id = list(map(id, model.module.fc_out.parameters()))
+        crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
+        params = [{'params': crysfea_layer, 'lr': self.lr*0},
+                  {'params': model.module.fc_out.parameters()}]
         #training model
         criterion = nn.MSELoss()
         optimizer = optim.Adam(params, lr=self.lr, weight_decay=0)
@@ -358,8 +355,7 @@ class PPModel(ListRWTools):
             best_mae_error = min(mae_error, best_mae_error)
             self.save_checkpoint(epoch,
                 {'state_dict': model.module.state_dict(),
-                'normalizer': normalizer.state_dict()
-                }, is_best)
+                'normalizer': normalizer.state_dict()}, is_best)
             mae_buffer.append([mae_error])
         system_echo('-----------------Evaluate Model on Test Set-----------------')
         best_checkpoint = torch.load(f'{self.model_save_path}/model_best.pth.tar')
@@ -379,7 +375,7 @@ class PPModel(ListRWTools):
         model [obj]: property predict model
         criterion [obj]: loss function
         optimizer [obj]: training optimizer
-        epoch [int]: training epoch
+        epoch [int, 0d]: training epoch
         normalizer [obj]: normalize targets
         """
         batch_time = AverageMeter()

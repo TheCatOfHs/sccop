@@ -3,11 +3,14 @@ import time
 import paramiko
 import pickle
 import json
+import re
 import numpy as np
+
+from pymatgen.core.periodic_table import Element
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 
 
 def system_echo(ct, header=False):
@@ -25,6 +28,46 @@ def system_echo(ct, header=False):
                                 time.localtime()) + ' -- ' + ct 
     with open(log_file, 'a') as obj:
         obj.write(echo_ct + '\n')
+
+def convert_composition_into_atom_type(comp):
+    """
+    convert composition into list of atom types
+    
+    Parameters
+    ----------
+    comp [str, 0d]: search composition
+    
+    Returns
+    ----------
+    atom_type [str, 1d]: type of atoms
+    """
+    elements= re.findall('[A-Za-z]+', comp)
+    ele_num = [int(i) for i in re.findall('[0-9]+', comp)]
+    atom_type = []
+    for ele, num in zip(elements, ele_num):
+        for _ in range(num):
+            atom_type.append(ele)
+    return atom_type
+
+def get_min_bond(comp):
+    """
+    get min distance between atoms
+    
+    Parameters
+    ----------
+    comp [str, 0d]: search composition
+    
+    Returns
+    ----------
+    min_bond [float, 0d]: minimum bond
+    """
+    atom_type = convert_composition_into_atom_type(comp)
+    radius = 0
+    for i in atom_type:
+        radius += Element(i).atomic_radius.real
+    ave_radiu = radius/len(atom_type)
+    min_bond = 0.8*2*ave_radiu
+    return min_bond
 
 
 class ListRWTools:
@@ -178,7 +221,7 @@ class ListRWTools:
         Parameters
         ----------
         file [str, 0d]: name of file 
-
+        
         Returns
         ----------
         dict [list, dict, 1d]: list-dict with int keys
@@ -201,11 +244,19 @@ class ListRWTools:
         new [list, dict, 1d]: list-dict with int keys
         """
         new = []
-        for dict in list_dict:
+        #list dict transfer
+        if isinstance(list_dict, list):
+            for item in list_dict:
+                store = {}
+                for key in item.keys():
+                    store[int(key)] = item[key]
+                new.append(store)
+        #dict transfer
+        elif isinstance(list_dict, dict):
             store = {}
-            for key in dict.keys():
-                store[int(key)] = dict[key]
-            new.append(store)
+            for key in list_dict.keys():
+                store[int(key)] = list_dict[key]
+            new = store
         return new
     
     

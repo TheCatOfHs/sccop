@@ -10,7 +10,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.utils import *
 from core.predict import *
 from core.data_transfer import DeleteDuplicates
@@ -74,16 +74,18 @@ class Select(SSHTools, DeleteDuplicates):
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, grid_ratio, space_group)
-        #predict energy and get crystal vector
+        #predict energy and crystal vector
         loader = self.dataloader(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
+        crys_vec = self.get_crystal_vector(loader)
         models= self.model_select(self.model_save_path)
         model_names = [f'{self.model_save_path}/{i}' for i in models]
-        mean_pred, crys_mean = self.mean(model_names, loader)
+        mean_pred = self.get_energy_bagging(model_names, loader)
+        #filter by energy
         idx = self.select_samples(mean_pred)
+        crys_vec = crys_vec[idx].cpu().numpy()
         mean_pred = mean_pred[idx].cpu().numpy()
-        crys_mean = crys_mean[idx].cpu().numpy()
         #reduce dimension and clustering
-        crys_embedded = self.reduce(crys_mean)
+        crys_embedded = self.reduce(crys_vec)
         clusters = self.cluster(num_clusters, crys_embedded)
         idx = self.min_in_cluster(idx, mean_pred, clusters)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
@@ -118,6 +120,42 @@ class Select(SSHTools, DeleteDuplicates):
         loader = get_loader(dataset, self.batch_size, self.num_workers)
         return loader
     
+    def get_crystal_vector(self, loader):
+        """
+        get crystal vector by pretrain model
+        
+        Parameters
+        ----------
+        loader [obj]: dataloader
+        
+        Returns
+        ----------
+        crys_fea [float, 2d, tensor]: crystal feature
+        """
+        #load crystal vector model
+        if dimension == 2:
+            model_name = pretrain_model_2d
+        elif dimension == 3:
+            model_name = pretrain_model_3d
+        self.model_vec = FeatureExtractNet()
+        params = torch.load(model_name, map_location=self.device)
+        self.model_vec.load_state_dict(params['state_dict'])
+        #calculate crystal vector
+        self.model_vec = DataParallel(self.model_vec)
+        self.model_vec.to(self.device)
+        self.model_vec.eval()
+        crys_vec = []
+        with torch.no_grad():
+            for input, _ in loader:
+                atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
+                vecs = self.model_vec(atom_fea=atom_fea, 
+                                      atom_symm=atom_symm,
+                                      nbr_fea=nbr_fea,
+                                      nbr_fea_idx=nbr_fea_idx, 
+                                      crystal_atom_idx=crystal_atom_idx)
+                crys_vec.append(vecs)
+        return torch.cat(crys_vec)
+        
     def model_select(self, model_path):
         """
         select models with lowest validation mae
@@ -140,9 +178,9 @@ class Select(SSHTools, DeleteDuplicates):
         best_models = sort_models[:num_models]
         return best_models
     
-    def mean(self, model_names, loader):
+    def get_energy_bagging(self, model_names, loader):
         """
-        calculate mean_pred, crys_mean
+        predict enegy by several models
 
         Parameters
         ----------
@@ -151,22 +189,16 @@ class Select(SSHTools, DeleteDuplicates):
         
         Returns
         ----------
-        mean_pred [float, 1d, tensor]: mean of predict
-        crys_mean [float, 2d, tensor]: mean of crystal feature
+        ave_energy [float, 1d, tensor]: mean of energy prediction
         """
-        model_pred, crys_fea = [], []
+        energy_pred = []
         for name in model_names:
             self.load_model(name)
-            pred, vec = self.predict_batch(loader)
-            model_pred.append(pred)
-            crys_fea.append(vec)
-        model_pred = torch.cat(model_pred, axis=1)
-        mean_pred = torch.mean(model_pred, axis=1)
-        crys_mean = torch.zeros(crys_fea[0].shape).to(self.device)
-        for tensor in crys_fea:
-            crys_mean += tensor
-        crys_mean = crys_mean/len(model_names)
-        return mean_pred, crys_mean
+            pred = self.predict_batch(loader)
+            energy_pred.append(pred)
+        model_pred = torch.cat(energy_pred, axis=1)
+        ave_energy = torch.mean(model_pred, axis=1)
+        return ave_energy
     
     def load_model(self, model_name):
         """
@@ -176,13 +208,11 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         model_name [str, 0d]: full name of model
         """
-        self.model_vec = FeatureExtractNet()
-        self.model_val = ReadoutNet()
-        paras = torch.load(model_name, map_location=self.device)
+        self.model_val = CrystalGraphConvNet()
+        params = torch.load(model_name, map_location=self.device)
         #load parameters of prediction model
-        self.model_vec.load_state_dict(paras['state_dict'])
-        self.model_val.load_state_dict(paras['state_dict'])
-        self.normalizer.load_state_dict(paras['normalizer'])
+        self.model_val.load_state_dict(params['state_dict'])
+        self.normalizer.load_state_dict(params['normalizer'])
     
     def preserve_models(self, model_names):
         """
@@ -205,7 +235,7 @@ class Select(SSHTools, DeleteDuplicates):
     
     def predict_batch(self, loader):
         """
-        calculate crys_fea and energy by predict model
+        predict energy in batch
         
         Parameters
         ----------
@@ -213,30 +243,22 @@ class Select(SSHTools, DeleteDuplicates):
         
         Returns
         ----------
-        pred [float, 2d, tensor]: predict value
-        crys_fea [float, 2d, tensor]: crystal feature
+        energy [float, 1d, tensor]: prediction energy
         """
-        self.model_vec = DataParallel(self.model_vec)
         self.model_val = DataParallel(self.model_val)
-        self.model_vec.to(self.device)
         self.model_val.to(self.device)
-        self.model_vec.eval()
         self.model_val.eval()
-        pred, crys_fea = [], []
+        energy = []
         with torch.no_grad():
             for input, _ in loader:
                 atom_fea, atom_symm, nbr_fea, nbr_fea_idx, crystal_atom_idx = input
-                vec = self.model_vec(atom_fea=atom_fea, 
-                                     atom_symm=atom_symm,
-                                     nbr_fea=nbr_fea,
-                                     nbr_fea_idx=nbr_fea_idx, 
-                                     crystal_atom_idx=crystal_atom_idx)
-                crys_fea.append(vec)
-            crys_fea = torch.cat(crys_fea, dim=0)
-            crys_fea_assign = torch.chunk(crys_fea, num_gpus)
-            pred = self.model_val(crys_fea=crys_fea_assign)
-            pred = self.normalizer.denorm(pred)
-        return pred, crys_fea
+                pred = self.model_val(atom_fea=atom_fea, 
+                                      atom_symm=atom_symm,
+                                      nbr_fea=nbr_fea,
+                                      nbr_fea_idx=nbr_fea_idx, 
+                                      crystal_atom_idx=crystal_atom_idx)
+                energy.append(self.normalizer.denorm(pred))
+        return torch.cat(energy)
     
     def select_samples(self, mean_pred):
         """
@@ -270,7 +292,7 @@ class Select(SSHTools, DeleteDuplicates):
         ----------
         crys_embedded [float, 2d, np]: redcued crystal vector
         """
-        crys_embedded = TSNE(n_components=num_components, 
+        crys_embedded = TSNE(n_components=2, 
                              learning_rate='auto', 
                              init='random',
                              random_state=0).fit_transform(crys_fea)
@@ -292,7 +314,7 @@ class Select(SSHTools, DeleteDuplicates):
         sample_num = len(crys_embedded)
         if num > sample_num:
             num = sample_num
-        kmeans = KMeans(num, random_state=0).fit(crys_embedded)
+        kmeans = KMeans(n_clusters=num).fit(crys_embedded)
         return kmeans.labels_
     
     def min_in_cluster(self, idx, value, clusters):
@@ -410,6 +432,12 @@ class Select(SSHTools, DeleteDuplicates):
                                     grid_name, grid_ratio, space_group)
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
+            #filter structure by energy
+            idx = np.argsort(energy)[:2*num_recycle*num_poscars]
+            atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
+                self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
+                                    grid_name, grid_ratio, space_group)
+            energy = np.array(energy)[idx]
             #delete same selected structures by pymatgen
             strus_1 = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
             strus_2 = self.collect_optim(recyc)
@@ -420,7 +448,7 @@ class Select(SSHTools, DeleteDuplicates):
             energy = np.array(energy)[idx]
             system_echo(f'Delete duplicates same as previous recycle: {len(grid_name)}')
         #filter structure by energy
-        idx = np.argsort(energy)[:5*num_poscars]
+        idx = np.argsort(energy)[:2*num_poscars]
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                     grid_name, grid_ratio, space_group)
@@ -438,7 +466,9 @@ class Select(SSHTools, DeleteDuplicates):
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
                 self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                     grid_name, grid_ratio, space_group)
-        if puckered:
+        #puckered structure
+        add_thickness = False
+        if dimension == 2 and thickness > 0:
             add_thickness = True
         self.write_POSCARs(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, add_thickness)
         system_echo(f'SCCOP optimize structures: {len(grid_name)}')
@@ -557,9 +587,9 @@ class Select(SSHTools, DeleteDuplicates):
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
         """
-        crys_mean, mean_pred = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
+        crys_vec, mean_pred = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
                                                         grid_name, grid_ratio, space_group)
-        self.export_buffer(recyc, crys_mean, atom_pos, atom_type, atom_symm, 
+        self.export_buffer(recyc, crys_vec, atom_pos, atom_type, atom_symm, 
                            grid_name, grid_ratio, space_group)
         #select low energy structures as initial points
         idx = np.argsort(mean_pred)[:int(.5*len(mean_pred))]
@@ -584,11 +614,12 @@ class Select(SSHTools, DeleteDuplicates):
                                 grid_name, grid_ratio, space_group)
         #predict energy and get crystal vector
         loader = self.dataloader(atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group)
+        crys_vec = self.get_crystal_vector(loader)
         model_names = self.get_init_models()
-        mean_pred, crys_mean = self.mean(model_names, loader)
+        mean_pred = self.get_energy_bagging(model_names, loader)
         mean_pred = mean_pred.cpu().numpy()
-        crys_mean = crys_mean.cpu().numpy()
-        return crys_mean, mean_pred
+        crys_vec = crys_vec.cpu().numpy()
+        return crys_vec, mean_pred
     
     def get_init_models(self):
         """
@@ -600,7 +631,10 @@ class Select(SSHTools, DeleteDuplicates):
         """
         model_dir = sorted(os.listdir(model_path))
         if len(model_dir) == 0:
-            model_names = [pretrain_model]
+            if dimension == 2:
+                model_names = [pretrain_model_2d]
+            elif dimension == 3:
+                model_names = [pretrain_model_3d]
         else:
             path = f'{model_path}/{model_dir[-1]}'
             files = os.listdir(path)
@@ -654,16 +688,6 @@ class FeatureExtractNet(CrystalGraphConvNet):
         crys_fea = self.conv_to_fc(self.conv_to_fc_softplus(crys_fea))
         crys_fea = self.conv_to_fc_softplus(crys_fea)
         return crys_fea
-
-
-class ReadoutNet(CrystalGraphConvNet):
-    #get energy by crystal vector
-    def __init__(self):
-        super(ReadoutNet, self).__init__()
-
-    def forward(self, crys_fea):
-        out = self.fc_out(crys_fea)
-        return out
     
     
 class BayesianOpt(Select):
@@ -720,7 +744,7 @@ class BayesianOpt(Select):
         states [list, 2d]: state vectors
         gp [obj, 0d]: gaussian process object
         e_min [float, 0d]: minimal energy
-
+        
         Returns
         ----------
         idx [int, 1d, np]: index of selected samples

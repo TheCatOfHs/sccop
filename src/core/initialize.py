@@ -1,5 +1,4 @@
 import os, sys
-import re
 import time
 import random
 import numpy as np
@@ -8,10 +7,11 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.utils import *
 from core.data_transfer import DeleteDuplicates
-from core.grid_sampling import GridDivide, ParallelSampling
+from core.grid_generate import GridGenerate
+from core.sampling import ParallelSampling
 from core.sample_select import Select
 
 
@@ -106,8 +106,7 @@ class UpdateNodes(SSHTools):
         os.system(shell_script)
     
 
-class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
-                   DeleteDuplicates):
+class InitSampling(UpdateNodes, GridGenerate, ParallelSampling, DeleteDuplicates):
     #generate initial structures of sccop
     def __init__(self):
         UpdateNodes.__init__(self)
@@ -134,7 +133,7 @@ class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
         space_group [int, 1d]: space group number
         """
         #generate initial lattice
-        self.initial_poscars(recyc, num_latt, component)
+        self.initial_poscars(recyc, composition)
         #structures generated randomly
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.random_sampling(recyc)
@@ -150,38 +149,48 @@ class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
         system_echo(f'Sampling number: {len(atom_pos)}')    
         return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
     
-    def initial_poscars(self, recyc, number, component):
+    def initial_poscars(self, recyc, composition):
         """
         generate initial poscars randomly
         
         Parameters
         ----------
         recyc [int, 0d]: times of recycle
-        number [int, 0d]: number of poscars
-        component [str, 0d]: component of searching system
+        composition [str, 0d]: composition of searching system
         """
-        #transfer component to atom type list
-        elements= re.findall('[A-Za-z]+', component)
-        ele_num = [int(i) for i in re.findall('[0-9]+', component)]
-        atom_type = []
-        for ele, num in zip(elements, ele_num):
-            for _ in range(num):
-                atom_type.append(ele)
+        #transfer composition to atom type list
+        atom_type = convert_composition_into_atom_type(composition)
         atom_types = self.control_atom_number(atom_type)
         #make directory of initial poscars
-        dir = f'{poscar_path}/initial_strus_{recyc}'
-        if not os.path.exists(dir):
-            os.mkdir(dir)
-        #generate poscars from crystal system randomly
+        init_path = f'{poscar_path}/initial_strus_{recyc}'
+        if not os.path.exists(init_path):
+            os.mkdir(init_path)
+        #add symmetry to last iteration poscars
+        else:
+            self.add_symmetry_manually(init_path)
+        #generate lattice from crystal system randomly
         num = len(atom_types)
-        for i in range(number):
-            latt = self.lattice_generate()
+        crystal_system = self.crystal_system_sampling(num_latt)
+        for i in range(num_latt):
             seed = random.randint(0, num-1)
             atom_type = atom_types[seed]
             atom_num = len(atom_type)
-            coors = np.random.rand(atom_num, 3)
-            stru = Structure(latt, atom_type, coors)
-            stru.to(filename=f'{dir}/POSCAR-RCSD-{i:03.0f}', fmt='poscar')
+            #estimate size of lattice
+            params = self.get_parameters(atom_type)
+            if dimension == 2:
+                latt = self.lattice_generate_2d(crystal_system[i], params)
+            elif dimension == 3:
+                latt = self.lattice_generate_3d(crystal_system[i], params)
+            coords = np.random.rand(atom_num, 3)
+            stru = Structure(latt, atom_type, coords)
+            stru.to(filename=f'{init_path}/POSCAR-RCSD-{crystal_system[i]}-{i:03.0f}', fmt='poscar')
+        #sort lattice poscar in crystal system order
+        poscars = os.listdir(init_path)
+        poscars = [i for i in poscars if i.split('-')[1]=='Last' or i.split('-')[1]=='RCSD']
+        poscars = sorted(poscars, key=lambda x: int(x.split('-')[2]))
+        for i, poscar in enumerate(poscars):
+            crystal_system = poscar.split('-')[2]
+            os.rename(f'{init_path}/{poscar}', f'{init_path}/POSCAR-Lattice-{crystal_system}-{i:03.0f}')
         system_echo(f'Generate Initial Lattice')
     
     def random_sampling(self, recyc):
@@ -231,11 +240,12 @@ class InitSampling(UpdateNodes, GridDivide, ParallelSampling,
         times = 1
         atom_types = []
         type = atom_type
-        while len(type) <= num_max_atom: 
+        min_atom, max_atom = num_atom
+        while len(type) <= max_atom: 
             type = [i for i in atom_type for _ in range(times)]
             atom_types.append(type)
             times += 1
-        atom_types = [i for i in atom_types if num_min_atom <= len(i)]
+        atom_types = [i for i in atom_types if min_atom <= len(i) <= max_atom]
         return atom_types
     
     def reduce_samples(self, atom_pos, atom_type, atom_symm, 

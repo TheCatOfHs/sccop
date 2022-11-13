@@ -5,7 +5,7 @@ from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.utils import ListRWTools, system_echo
 
 
@@ -14,6 +14,7 @@ class Transfer(ListRWTools):
     def __init__(self, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
         self.nbr = nbr
         self.var = var
+        self.dmax = dmax
         self.filter = np.arange(dmin, dmax+step, step)
     
     def get_atom_fea(self, atom_type, elem_embed):
@@ -60,11 +61,20 @@ class Transfer(ListRWTools):
         for i, point in enumerate(point_idx):
             #find nearest atoms
             atom_idx = np.where(point==atom_pos[:, None])[-1]
-            order = np.argsort(atom_idx)[:self.nbr]
-            atom_idx = atom_idx[order]
-            #get neighbor index and distancs
-            nbr_idx[i] = point_idx[i, atom_idx]
-            nbr_dis[i] = point_dis[i, atom_idx]
+            order = np.argsort(atom_idx)
+            #get neighbor index and distance
+            if len(order) < self.nbr:
+                atom_idx = atom_idx[order]
+                lack_num = self.nbr - len(order)
+                nearest_atom = point_idx[i, atom_idx[0]]
+                #fill with nearest atom within cutoff
+                nbr_idx[i] = np.concatenate((point_idx[i, atom_idx], [nearest_atom]*lack_num))
+                nbr_dis[i] = np.concatenate((point_dis[i, atom_idx], [self.dmax+1]*lack_num))
+            else:
+                order = order[:self.nbr]
+                atom_idx = atom_idx[order]
+                nbr_idx[i] = point_idx[i, atom_idx]
+                nbr_dis[i] = point_dis[i, atom_idx]
         #get bond features
         nbr_fea = self.expand(nbr_dis)
         nbr_fea_idx = self.idx_transfer(atom_pos, nbr_idx)
@@ -147,7 +157,7 @@ class Transfer(ListRWTools):
         ----------
         stru [obj, 0d]: structure object in pymatgen
         """
-        if add_vacuum:
+        if dimension == 2:
             latt = latt_vec*[[ratio], [ratio], [1]]
         else:
             latt = latt_vec*ratio
@@ -414,7 +424,7 @@ class DeleteDuplicates(MultiGridTransfer):
         pos_str = self.list2d_to_str(atom_pos, '{0}')
         type_str = self.list2d_to_str(atom_type, '{0}')
         grid_str = self.list1d_to_str(grid_name, '{0}')
-        ratio_str = self.list1d_to_str(grid_ratio, '{0:4.2f}')
+        ratio_str = self.list1d_to_str(grid_ratio, '{0:4.1f}')
         group_str = self.list1d_to_str(space_group, '{0}')
         label = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
                  zip(pos_str, type_str, grid_str, ratio_str, group_str)]
@@ -520,12 +530,12 @@ class DeleteDuplicates(MultiGridTransfer):
         pos_str_1 = self.list2d_to_str(pos_1, '{0}')
         type_str_1 = self.list2d_to_str(type_1, '{0}')
         grid_str_1 = self.list1d_to_str(grid_1, '{0}')
-        ratio_str_1 = self.list1d_to_str(ratio_1, '{0:4.2f}')
+        ratio_str_1 = self.list1d_to_str(ratio_1, '{0:4.1f}')
         sg_str_1 = self.list1d_to_str(sg_1, '{0}')
         pos_str_2 = self.list2d_to_str(pos_2, '{0}')
         type_str_2 = self.list2d_to_str(type_2, '{0}')
         grid_str_2 = self.list1d_to_str(grid_2, '{0}')
-        ratio_str_2 = self.list1d_to_str(ratio_2, '{0:4.2f}')
+        ratio_str_2 = self.list1d_to_str(ratio_2, '{0:4.1f}')
         sg_str_2 = self.list1d_to_str(sg_2, '{0}')
         #find unique structures
         array_1 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 

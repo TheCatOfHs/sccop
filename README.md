@@ -8,8 +8,6 @@ The following paper describes the details of the SCCOP framework:
 [Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
 ![](images/SCCOP.png)
 
-**Note:** SCCOP now only supports the search for 2D materials, and the supporting for 3D is under construction.
-
 ## Table of Contents
 
 - [How to cite](#how-to-cite)
@@ -100,92 +98,57 @@ VASP_3d = f'{MPI_3d_path} -np 48 vasp'
 To run SCCOP for desired composition, you need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
 
 ```diff
-[Grid]
-# Cut off distance, used to find neighbor atoms
-cutoff = 8 
-# Number of atoms in unit cell
-num_min_atom = 5 
-num_max_atom = 10 
-# Grain of grid
-grain = [.5, .5, 1.2] 
-# Number of gridlines in a, b, c direction
-plane_upper = [100, 100, 1]
-
-[Dimension]
+[Base]
 # Dimension of target composition
-num_dim = 2 
-# Whether add vacuum layer
-add_vacuum = True 
-vacuum_space = 15 
-# Whether search puckered structure
-puckered = True 
-thickness = 0.1 
+dimension = 2
+# The chemical formula of the compound, e.g., 'B1C3'
+composition = XXX
+# Number of atoms in unit cell
+num_atom = [5, 10]
+# Search space group
+space_group = [[2, 17]]
+
+[2-Dimension settings]
+# Vacuum space layer
+vacuum_space = 15
+# Puckered structure
+thickness = 0.1
+
+[Sampling]
+# Number of initial lattice
+num_latt = 72
+# Number of initial structures sent to VASP
+num_Rand = 120
+# Average space group per lattice
+sg_per_latt = 10
 
 [Recycling]
 # Number search recycle
-num_recycle = 1 
+num_recycle = 1
 # List of ML search and optimize in each recycle
-num_ml_list = [1] 
+num_ml_list = [1]
 # Number of structures that sent to VASP optimize
-num_poscars = 12 
+num_poscars = 12
 # High accuracy optimized by VASP
-num_optims = 6 
+num_optims = 6
 # VASP time limit
-vasp_time_limit = 480 
-
-[Initial Samples]
-# The chemical formula of the compound, e.g., 'B1C3'
-component = 'XXX' 
-# Number of initial lattice
-num_latt = 72 
-# Number of initial structures sent to VASP
-num_Rand = 120 
-# Average space group per crystal system
-num_ave_sg = 10 
-# Number of sampling structure = num_cores*num_per_sg
-num_cores = 4  
-num_per_sg = 5 
-# Lattice parameters
-len_mu = 5 
-len_lower = 4 
-len_upper = 6 
-len_sigma = 1 
-ang_mu = 90 
-ang_sigma = 20 
-# Sampling weight of crystal system
-# [triclinic, monoclinic, orthorhombic, tetragonal, trigonal, hexagonal, cubic]
-system_weight = [1/4, 0, 1/4, 1/4, 0, 1/4, 0] 
-
-[Training]
-# Training prediction model parameters
-train_batchsize = 64 
-train_epochs = 120 
-use_pretrain_model = True 
+vasp_time_limit = 480
 
 [Searching]
-# SA parameters
-T = .1 
-decay = .95 
 # Total SA steps = latt_steps*sa_steps
-latt_steps = 3 
-sa_steps = 100 
+latt_steps = 5
+sa_steps = 80
 # Metropolis judge interval
-num_jump = 2 
+num_jump = 1
 # Number of SA path
 num_path = 360
-# SA cores
-sa_cores = 2 
-# Distance constraint
-min_bond = 1.2 
 
 [Sample Select]
 # Number of models to predict energy
-num_models = 5 
-# TSNE components
-num_components = 2 
+num_models = 5
 # Number of clusters
-num_clusters = 60 
-ratio_min_energy = 0.5 
+num_clusters = 60
+ratio_min_energy = 0.5
 ```
 
 ### Submit SCCOP Job
@@ -202,11 +165,9 @@ After searching, you will get three important files.
 - `data/poscars/optim_strus`: stores the POSCAR of searched structures.
 - `data/vasp_out/optim_strus/energy/Energy.dat`: stores the energy of searched structures.
 
-**Note**: if you do not want to high accuracy DFT optimization, shadow the code `select.optim_strus()` and `vasp.run_optimization_high()` in `src/main.py`. Moreover, if you want to change the INCAR of VASP, change corresponding files in `libs/VASP_inputs`.
-
 ### Successful Example
 
-Here we give one successful example of SCCOP, you can find the log file and searched structures in `/examples`.
+Here we give one successful example of SCCOP, you can find the log file `system.log` and `POSCAR` of searched structures in `examples/`.
 
 Initial sampling structures by symmetry in parallel.
 ![](images/BC3_log_1.png)

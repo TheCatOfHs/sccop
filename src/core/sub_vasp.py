@@ -7,7 +7,7 @@ from pymatgen.symmetry.analyzer import SpacegroupAnalyzer
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.utils import ListRWTools, SSHTools, system_echo
 from core.data_transfer import DeleteDuplicates
 
@@ -91,8 +91,12 @@ class ParallelSubVASP(ListRWTools, SSHTools):
                         do
                             mkdir $p
                             cd $p
-
-                            cp ../../{vasp_files_path}/SinglePointEnergy/* .
+                            
+                            if [ {dimension} -eq 2 ]; then
+                                cp ../../{vasp_files_path}/SinglePointEnergy/2d/* .
+                            elif [ {dimension} -eq 3 ]; then
+                                cp ../../{vasp_files_path}/SinglePointEnergy/3d/* .
+                            fi
                             scp {gpu_node}:{SCCOP_path}/{poscar_path}/{iteration:03.0f}/$p POSCAR
                             DPT -v potcar
                             
@@ -197,7 +201,11 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            cp ../../{vasp_files_path}/Optimization/* .
+                            if [ {dimension} -eq 2 ]; then
+                                cp ../../{vasp_files_path}/Optimization/2d/* .
+                            elif [ {dimension} -eq 3 ]; then
+                                cp ../../{vasp_files_path}/Optimization/3d/* .
+                            fi
                             scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
@@ -208,8 +216,11 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                {VASP_2d} >> vasp-$i.vasp
-                                #{VASP_3d} >> vasp-$i.vasp
+                                if [ {dimension} -eq 2 ]; then
+                                    {VASP_2d} >> vasp-$i.vasp
+                                elif [ {dimension} -eq 3 ]; then
+                                    {VASP_3d} >> vasp-$i.vasp
+                                fi
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i
@@ -268,7 +279,11 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            cp ../../{vasp_files_path}/Optimization/* .
+                            if [ {dimension} -eq 2 ]; then
+                                cp ../../{vasp_files_path}/Optimization/2d/* .
+                            elif [ {dimension} -eq 3 ]; then
+                                cp ../../{vasp_files_path}/Optimization/3d/* .
+                            fi
                             scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             
                             cp POSCAR POSCAR_0
@@ -279,8 +294,11 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                                 cp INCAR_$i INCAR
                                 cp KPOINTS_$i KPOINTS
                                 date > vasp-$i.vasp
-                                {VASP_2d} >> vasp-$i.vasp
-                                #{VASP_3d} >> vasp-$i.vasp
+                                if [ {dimension} -eq 2 ]; then
+                                    {VASP_2d} >> vasp-$i.vasp
+                                elif [ {dimension} -eq 3 ]; then
+                                    {VASP_3d} >> vasp-$i.vasp
+                                fi
                                 date >> vasp-$i.vasp
                                 cp CONTCAR POSCAR
                                 cp CONTCAR POSCAR_$i

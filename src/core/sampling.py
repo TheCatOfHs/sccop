@@ -1,21 +1,20 @@
 import os, sys
 import time
-import random
 import argparse
 import numpy as np
 import multiprocessing as mp
 
 from collections import Counter
-from pymatgen.core.lattice import Lattice
 from pymatgen.core.structure import Structure
 
 sys.path.append(f'{os.getcwd()}/src')
 from core.path import *
-from core.global_var import *
+from core.input import *
 from core.space_group import *
 from core.data_transfer import DeleteDuplicates
-from core.search import GeoCheck
-from core.utils import ListRWTools, SSHTools, system_echo
+from core.grid_generate import GridGenerate
+from core.search import ActionSpace
+from core.utils import *
 
 
 class ParallelSampling(ListRWTools, SSHTools):
@@ -121,7 +120,7 @@ class ParallelSampling(ListRWTools, SSHTools):
         sampling_jobs = []
         for i in range(len(index)):
             option = f'--recyc {recyc} --index {index[i]} --grid {grids[i]} '
-            sampling_jobs.append(f'nohup python src/core/grid_sampling.py {option} >& log&')
+            sampling_jobs.append(f'nohup python src/core/sampling.py {option} >& log&')
         sampling_jobs = ' '.join(sampling_jobs)
         #shell script of grid divide
         shell_script = f'''
@@ -131,11 +130,12 @@ class ParallelSampling(ListRWTools, SSHTools):
                         rm -r data/grid/json
                         mkdir data/grid/buffer
                         mkdir data/grid/json
+                        scp {gpu_node}:{self.local_grid_path}/space_group_sampling.json data/grid/.
                         {sampling_jobs}
                         
                         while true;
                         do
-                            num=`ps -ef | grep grid_sampling.py | grep -v grep | wc -l`
+                            num=`ps -ef | grep sampling.py | grep -v grep | wc -l`
                             if [ $num -eq 0 ]; then
                                 rm log
                                 break
@@ -266,194 +266,9 @@ class ParallelSampling(ListRWTools, SSHTools):
         return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
     
 
-class GridDivide(ListRWTools, PlanarSpaceGroup):
-    #Build the grid
-    def __init__(self):
-        pass
-    
-    def build(self, grid, cutoff):
-        """
-        save nbr_idx, nbr_dis of grid
-        
-        Parameters
-        ----------
-        grid [int, 0d]: name of grid
-        cutoff [float, 0d]: cutoff distance
-        """
-        head = f'{grid_path}/{grid:03.0f}'
-        latt_vec = self.import_list2d(f'{head}_latt_vec.bin',
-                                      float, binary=True)
-        #add vacuum layer to structure
-        if add_vacuum:
-            latt = self.add_vacuum(latt_vec)
-        #get near neighbors and distance
-        space_group = self.grid_space_group(grid)
-        for sg in space_group:
-            coords = self.import_list2d(f'{head}_frac_coords_{sg}.bin',
-                                        float, binary=True)
-            mapping = self.import_list2d(f'{head}_mapping_{sg}.bin',
-                                        int, binary=True)
-            atoms = [1 for _ in range(len(coords))]
-            stru = Structure.from_spacegroup(1, latt, atoms, coords)
-            #export neighbor index and distance in min area
-            nbr_idx, nbr_dis = self.near_property(stru, cutoff, mapping)
-            self.write_list2d(f'{head}_nbr_idx_{sg}.bin', 
-                              nbr_idx, binary=True)
-            self.write_list2d(f'{head}_nbr_dis_{sg}.bin', 
-                              nbr_dis, binary=True)
-    
-    def grid_space_group(self, grid):
-        """
-        get space groups of grid
-
-        Parameters
-        ----------
-        grid [int, 0d]: name of grid
-        
-        Returns
-        ---------
-        space_group [str, 1d]: space group number
-        """
-        grid_file = os.listdir(grid_path)
-        coords_file = [i for i in grid_file 
-                       if i.startswith(f'{grid:03.0f}_frac')]
-        name = [i.split('.')[0] for i in coords_file]
-        space_group = [i.split('_')[-1] for i in name]
-        return space_group
-        
-    def add_vacuum(self, latt_vec):
-        """
-        add vacuum layer
-        
-        Parameters
-        ----------
-        latt_vec [float, 2d, np]: lattice vector
-
-        Returns
-        ----------
-        latt [obj]: lattice object in pymatgen 
-        """
-        latt = Lattice(latt_vec)
-        a, b, c, alpha, beta, gamma = latt.parameters
-        if c < vacuum_space:
-            c = vacuum_space
-        latt = Lattice.from_parameters(a=a, b=b, c=c, 
-                                       alpha=alpha,
-                                       beta=beta,
-                                       gamma=gamma)
-        return latt
-    
-    def near_property(self, stru, cutoff, mapping, near=0):
-        """
-        index and distance of near grid points
-        
-        Parameters
-        ----------
-        stru [obj]: structure object in pymatgen
-        cutoff [float, 0d]: cutoff distance
-        
-        Returns
-        ----------
-        nbr_idx [int, 2d, np]: index of near neighbor in min
-        nbr_dis [float, 2d, np]: distance of near neighbor in min
-        """
-        all_nbrs = stru.get_all_neighbors(cutoff)
-        all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
-        if near == 0:
-            num_near = min(map(lambda x: len(x), all_nbrs))
-        else:
-            num_near = near
-        nbr_idx, nbr_dis = [], []
-        for nbr in all_nbrs:
-            nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
-            nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
-        nbr_idx, nbr_dis = self.reduce_to_min(nbr_idx, nbr_dis, mapping)
-        return nbr_idx, nbr_dis
-    
-    def reduce_to_min(self, nbr_idx, nbr_dis, mapping):
-        """
-        reduce neighbors to min unequal area
-        
-        Parameters
-        ----------
-        nbr_idx [int, 2d]: index of near neighbor 
-        nbr_dis [float, 2d]: distance of near neighbor 
-        mapping [int, 2d]: mapping between min and all grid
-
-        Returns
-        ----------
-        nbr_idx [int, 2d, np]: index of near neighbor in min
-        nbr_dis [float, 2d, np]: distance of near neighbor in min
-        """
-        min_atom_num = len(mapping)
-        nbr_idx = np.array(nbr_idx)[:min_atom_num]
-        nbr_dis = np.array(nbr_dis)[:min_atom_num]
-        #reduce to min area
-        for line in mapping:
-            if len(line) > 1:
-                min_atom = line[0]
-                for atom in line[1:]:
-                    nbr_idx[nbr_idx==atom] = min_atom
-        return nbr_idx, nbr_dis
-    
-    def lattice_generate(self):
-        """
-        generate lattice by crystal system
-        
-        Returns
-        ----------
-        latt [obj]: Lattice object of pymatgen
-        crystal_system [int, 0d]: crystal system number
-        """
-        volume = 0
-        system = np.arange(0, 7)
-        while volume == 0:
-            crystal_system = np.random.choice(system, p=system_weight)
-            #triclinic
-            if crystal_system == 0:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, beta, gamma = np.random.normal(ang_mu, ang_sigma, 3)
-            #monoclinic
-            if crystal_system == 1:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, gamma = 90, 90
-                beta = random.normalvariate(ang_mu, ang_sigma)
-            #orthorhombic
-            if crystal_system == 2:
-                a, b, c = np.random.normal(len_mu, len_sigma, 3)
-                alpha, beta, gamma = 90, 90, 90
-            #tetragonal
-            if crystal_system == 3:
-                a, c = np.random.normal(len_mu, len_sigma, 2)
-                b = a
-                alpha, beta, gamma = 90, 90, 90
-            #trigonal
-            if crystal_system == 4:
-                a = random.normalvariate(len_mu, len_sigma)
-                b, c = a, a
-                alpha = random.normalvariate(ang_mu, ang_sigma)
-                beta, gamma = alpha, alpha
-            #hexagonal
-            if crystal_system == 5:
-                a, c = np.random.normal(len_mu, len_sigma, 2)
-                b = a
-                alpha, beta, gamma = 90, 90, 120
-            #cubic
-            if crystal_system == 6:
-                a = random.normalvariate(len_mu, len_sigma)
-                b, c = a, a
-                alpha, beta, gamma = 90, 90, 90
-            #check validity of lattice vector
-            a, b, c = [i if len_lower < i else len_lower for i in (a, b, c)]
-            a, b, c = [i if i < len_upper else len_upper for i in (a, b, c)]
-            latt = Lattice.from_parameters(a=a, b=b, c=c, alpha=alpha, beta=beta, gamma=gamma)
-            volume = latt.volume
-        return latt
-    
-
-class AssignPlan(GridDivide):
+class AssignPlan(GridGenerate):
     #find assignment of atoms
-    def get_assign(self, recyc, idx, grid):
+    def get_assign(self, recyc, idx, grid, grain):
         """
         #get assignment of atoms in grid with different space group
         
@@ -462,7 +277,8 @@ class AssignPlan(GridDivide):
         recyc [int, 0d]: recycle of sccop
         idx [int, 0d]: index of poscar
         grid [int, 0d]: grid name
-
+        grain [float, 1d]: grid of grid
+        
         Returns
         ----------
         sgs [int, 1d]: space groups
@@ -470,18 +286,19 @@ class AssignPlan(GridDivide):
         """
         #get poscar
         init_path = f'{init_strus_path}_{recyc}'
-        poscars = sorted(os.listdir(init_path))
+        poscars = os.listdir(init_path)
+        poscars = sorted([i for i in poscars if i.split('-')[1]=='Lattice'])
         poscar = f'{init_path}/{poscars[idx]}'
+        poscar_split = poscars[idx].split('-')
+        cry_system = int(poscar_split[2])
         #get lattice information
         stru = Structure.from_file(poscar, sort=True)
         latt = stru.lattice
         atom_num_dict = self.get_atom_number(stru)
-        cry_system, params = self.judge_crystal_system(latt)
-        latt = Lattice.from_parameters(*params)
         #get assignments
         sgs, assigns = self.get_plan(atom_num_dict, cry_system, grain, latt, grid)
         return sgs, assigns
-                
+        
     def get_plan(self, atom_num_dict, system, grain, latt, grid):
         """
         put atoms into lattice with different space groups
@@ -500,17 +317,24 @@ class AssignPlan(GridDivide):
         assigns [dict, 2d, list]: assignments of atoms
         """
         #sampling space group randomly
-        groups = get_space_group(num_ave_sg, system)
+        groups = self.get_space_group(sg_per_latt, system)
         sgs, assigns = [], []
         for sg in groups:
-            atom_num = sum(atom_num_dict.values())
-            assign_file = f'{json_path}/{grid}_{sg}_{atom_num}.json'
+            atom_num = atom_num_dict.values()
+            assign_file = f'{json_path}/{grid}_{sg}_{sum(atom_num)}.json'
             if not os.path.exists(assign_file):
                 #choose symmetry by space group
-                all_grid, mapping = self.get_grid_points(sg, grain, latt)
-                symm_site = self.group_symm_sites(mapping)
-                assign_list = self.assign_by_spacegroup(atom_num_dict, symm_site)
-                self.write_dict(assign_file, assign_list)
+                if dimension == 2:
+                    all_grid, mapping = self.get_grid_points_2d(sg, grain, latt, atom_num)
+                elif dimension == 3:
+                    all_grid, mapping = self.get_grid_points_3d(sg, grain, latt, atom_num)
+                #check grid
+                if len(all_grid) > 0:
+                    symm_site = self.group_symm_sites(mapping)
+                    assign_list = self.assign_by_spacegroup(atom_num_dict, symm_site)
+                    self.write_dict(assign_file, assign_list)
+                else:
+                    assign_list = []
                 #export lattice file and mapping relationship
                 if len(assign_list) > 0:
                     head = f'{grid_path}/{grid:03.0f}'
@@ -549,12 +373,12 @@ class AssignPlan(GridDivide):
         return atom_num
 
 
-class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
+class RandomSampling(ActionSpace, AssignPlan, DeleteDuplicates):
     #sampling structure with distance constrain randomly
     def __init__(self):
-        pass
+        ActionSpace.__init__(self)
     
-    def sampling(self, recyc, grid, sgs, assigns):
+    def sampling(self, recyc, grid, sgs, assigns, parallel=4, num_per_sg=10):
         """
         sampling randomly with symmetry
         
@@ -564,9 +388,11 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         grid [int, 0d]: number of grid
         sgs [int, 1d]: space groups
         assigns [dict, 2d, list]: assignments of atoms
+        parallel [int, 0d]: number of parallel sampling
+        num_per_sg [int, 0d]: sampling number each space group
         """
         #multi core
-        pool = mp.Pool(processes=num_cores)
+        pool = mp.Pool(processes=parallel)
         #sampling space group randomly
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             [], [], [], [], [], []
@@ -581,7 +407,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
                 for _ in range(num_per_sg):
                     #run on multi cores
                     args_list = []
-                    for _ in range(num_cores):
+                    for _ in range(parallel):
                         args = (symm, symm_site, 1, grid_idx, grid_dis)
                         args_list.append(args)
                     pos_job = [pool.apply_async(self.get_pos, args) for args in args_list]
@@ -648,24 +474,29 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         """
         flag = False
         counter = 0
-        while counter < 3:
+        while counter < 2:
             pos = []
             for i in range(len(symm)):
                 #get allowable sites
                 allow = self.action_filter(i, pos, symm, symm_site,
                                            ratio, grid_idx, grid_dis, move=False)
-                allow_num = len(allow)
-                if allow_num == 0:
+                if len(allow) == 0:
                     break
                 #check distance of new generate symmetry atoms
                 else:
-                    for _ in range(10):
+                    for _ in range(5):
                         check_pos = pos.copy()
+                        #choose allow position randomly
                         np.random.seed()
-                        point = np.random.choice(allow)
+                        idx = np.random.randint(len(allow))
+                        point = allow[idx]
+                        del allow[idx]
                         check_pos.append(point)
+                        #check distance
                         if self.check_near(check_pos, ratio, grid_idx, grid_dis):
                             pos = check_pos
+                            break
+                        if len(allow) == 0:
                             break
             #check number of atoms
             if len(pos) == len(symm):
@@ -677,7 +508,7 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
     def export_samples(self, recyc, grid, atom_pos, atom_type, atom_symm,
                        grid_name, grid_ratio, space_group):
         """
-        recyc [int, 0d]:
+        recyc [int, 0d]: 
         grid [int, 0d]: grid name
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
@@ -711,6 +542,10 @@ class RandomSampling(AssignPlan, GeoCheck, DeleteDuplicates):
         
 
 if __name__ == '__main__':
+    cutoff = 8
+    min_bond = get_min_bond(composition)
+    min_dis = min_bond/2
+    grain = [min_dis, min_dis, min_dis]
     parser = argparse.ArgumentParser()
     parser.add_argument('--recyc', type=int)
     parser.add_argument('--index', type=int)
@@ -723,11 +558,11 @@ if __name__ == '__main__':
     
     #get assignment
     ap = AssignPlan()
-    sgs, assigns = ap.get_assign(recyc, index, grid)
+    sgs, assigns = ap.get_assign(recyc, index, grid, grain)
     if len(assigns) > 0:
         #build grid
-        gd = GridDivide()
-        gd.build(grid, cutoff)
+        gg = GridGenerate()
+        gg.build(grid, cutoff)
         #random sampling
         rs = RandomSampling()
         rs.sampling(recyc, grid, sgs, assigns)
