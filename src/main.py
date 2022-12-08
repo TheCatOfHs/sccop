@@ -100,11 +100,17 @@ class CrystalOptimization(ListRWTools):
             select = Select(start+num_iteration)
             select.export_recycle(recycle, train_pos, train_type, train_symm, train_grid, train_ratio, train_sg, train_energy)
             system_echo(f'End Symmetry Crystal Combinatorial Optimization Program --- Recycle: {recycle}')
-            #VASP optimize
+            #VASP optimization
             vasp = VASPoptimize(recycle)
             vasp.run_optimization_low()
             start += num_iteration + 1  
-        
+            #Energy convergence
+            flag = False
+            if recycle >= 1:
+                flag = select.judge_convergence(recycle)
+            if flag:
+                break
+            
         #Select optimized structures
         select.optim_strus()
         #Optimize
@@ -158,8 +164,8 @@ class CrystalOptimization(ListRWTools):
             self.init.filter_samples(mask, atom_pos, atom_type, atom_symm,
                                      grid_name, grid_ratio, space_group)
         return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group, energys
-
-    def check_num_train_data(self, energy, train_energy, train_batchsize=64):
+    
+    def check_num_train_data(self, energy, train_energy, train_batchsize=16):
         """
         check number of train data assigned to gpus    
 
@@ -175,7 +181,7 @@ class CrystalOptimization(ListRWTools):
         """
         poscar_num = len(energy)
         add_num = int(poscar_num*0.8)
-        crys_num = add_num + len(train_energy)
+        crys_num = len(train_energy) + add_num
         last_batch_num = np.mod(crys_num, train_batchsize)
         if 0 < last_batch_num < num_gpus:
             add_num -= last_batch_num
@@ -255,8 +261,8 @@ class CrystalOptimization(ListRWTools):
         system_echo('''      
      _____  _____  _____  _____ ______        
     /  ___|/  __ \/  __ \|  _  || ___ \\       *------------*-------------*
-    \ `--. | /  \/| /  \/| | | || |_/ /       |     Version: 0.2.5       |
-     `--. \| |    | |    | | | ||  __/        | Last Update: 2022-10-31  |
+    \ `--. | /  \/| /  \/| | | || |_/ /       |     Version: 0.3.0       |
+     `--. \| |    | |    | | | ||  __/        | Last Update: 2022-11-30  |
     /\__/ /| \__/\| \__/\\\ \_/ /| |           |     Authors: LCN and LHP |
     \____/  \____/ \____/ \___/ \_|           *------------*-------------*                                                                                                
         ''', header=True)

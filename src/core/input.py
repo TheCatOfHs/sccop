@@ -8,14 +8,22 @@ space_group = [[int('SG1'), int('SG2')]]
 vacuum_space = 15
 thickness = 0.1
 
+#Model
+use_pretrain_model = [True if 'PM'=='True' else False][0]
+use_transfer_learning = True
+use_vasp_opt = [True if 'VASP'=='True' else False][0]
+
+#Recycling
+num_recycle = 2
+num_ml_list = [1, 1]
+convergence = 1e-3
+
 #Sampling
 num_latt = 72
 num_Rand = 120
 sg_per_latt = 10
 
-#Recycling
-num_recycle = 1
-num_ml_list = [1]
+#DFT Optimization
 num_poscars = 12
 num_optims = 6
 vasp_time_limit = 480

@@ -188,6 +188,7 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
         '''
         optimize configurations at low level
         '''
+        vasp_flag = 1 if use_vasp_opt else 0
         files = sorted(os.listdir(self.sccop_out_path))
         poscars = [i for i in files if i.startswith('POSCAR')]
         num_poscar = len(poscars)
@@ -201,37 +202,58 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            if [ {dimension} -eq 2 ]; then
-                                cp ../../{vasp_files_path}/Optimization/2d/* .
-                            elif [ {dimension} -eq 3 ]; then
-                                cp ../../{vasp_files_path}/Optimization/3d/* .
-                            fi
-                            scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             
+                            if [ {vasp_flag} -eq 1 ]; then
+                                if [ {dimension} -eq 2 ]; then
+                                    cp ../../{vasp_files_path}/Optimization/2d/* .
+                                elif [ {dimension} -eq 3 ]; then
+                                    cp ../../{vasp_files_path}/Optimization/3d/* .
+                                fi
+                            else
+                                if [ {dimension} -eq 2 ]; then
+                                    cp ../../{vasp_files_path}/SinglePointEnergy/2d/* .
+                                elif [ {dimension} -eq 3 ]; then
+                                    cp ../../{vasp_files_path}/SinglePointEnergy/3d/* .
+                                fi
+                            fi
+                            
+                            scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             cp POSCAR POSCAR_0
                             DPT -v potcar
                             
-                            for i in 1 2 3
-                            do
-                                cp INCAR_$i INCAR
-                                cp KPOINTS_$i KPOINTS
-                                date > vasp-$i.vasp
-                                if [ {dimension} -eq 2 ]; then
-                                    {VASP_2d} >> vasp-$i.vasp
-                                elif [ {dimension} -eq 3 ]; then
-                                    {VASP_3d} >> vasp-$i.vasp
-                                fi
-                                date >> vasp-$i.vasp
-                                cp CONTCAR POSCAR
-                                cp CONTCAR POSCAR_$i
-                                cp OUTCAR OUTCAR_$i
-                                rm WAVECAR CHGCAR
-                            done
+                            if [ {vasp_flag} -eq 1 ]; then
+                                for i in 1 2
+                                do
+                                    cp INCAR_$i INCAR
+                                    cp KPOINTS_$i KPOINTS
+                                    date > vasp-$i.vasp
+                                    if [ {dimension} -eq 2 ]; then
+                                        {VASP_2d} >> vasp-$i.vasp
+                                    elif [ {dimension} -eq 3 ]; then
+                                        {VASP_3d} >> vasp-$i.vasp
+                                    fi
+                                    date >> vasp-$i.vasp
+                                    cp CONTCAR POSCAR
+                                    cp CONTCAR POSCAR_$i
+                                    cp OUTCAR OUTCAR_$i
+                                    rm WAVECAR CHGCAR
+                                    
+                                    warning=`cat vasp-$i.vasp | grep WARNING | wc -l`
+                                    error=`cat vasp-$i.vasp | grep Error | wc -l`
+                                    if [ $warning -ge 10 -o $error -ge 10 ]; then
+                                        cp vasp-$i.vasp vasp-2.vasp
+                                        break
+                                    fi
+                                done
+                            else
+                                {VASP_3d} >> vasp-2.vasp
+                            fi
+                            
                             line=`cat CONTCAR | wc -l`
-                            fail=`tail -10 vasp-1.vasp | grep WARNING | wc -l`
+                            fail=`tail -10 vasp-2.vasp | grep WARNING | wc -l`
                             if [ $line -ge 8 -a $fail -eq 0 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strus_path}/$p
-                                scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                                scp vasp-2.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
                             cd ../
                             
@@ -257,6 +279,7 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
         '''
         optimize configurations from low to high level
         '''
+        vasp_flag = 1 if use_vasp_opt else 0
         #set path and make directory
         self.local_optim_strus_path = f'{SCCOP_path}/{optim_strus_path}'   
         self.local_sccop_out_path = f'{SCCOP_path}/{sccop_out_path}'
@@ -279,35 +302,48 @@ class VASPoptimize(SSHTools, DeleteDuplicates):
                             p={poscar}
                             mkdir $p
                             cd $p
-                            if [ {dimension} -eq 2 ]; then
-                                cp ../../{vasp_files_path}/Optimization/2d/* .
-                            elif [ {dimension} -eq 3 ]; then
-                                cp ../../{vasp_files_path}/Optimization/3d/* .
-                            fi
-                            scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             
-                            cp POSCAR POSCAR_0
+                            if [ {vasp_flag} -eq 1 ]; then
+                                if [ {dimension} -eq 2 ]; then
+                                    cp ../../{vasp_files_path}/Optimization/2d/* .
+                                elif [ {dimension} -eq 3 ]; then
+                                    cp ../../{vasp_files_path}/Optimization/3d/* .
+                                fi
+                            else
+                                if [ {dimension} -eq 2 ]; then
+                                    cp ../../{vasp_files_path}/SinglePointEnergy/2d/* .
+                                elif [ {dimension} -eq 3 ]; then
+                                    cp ../../{vasp_files_path}/SinglePointEnergy/3d/* .
+                                fi
+                            fi
+                            
+                            scp {gpu_node}:{self.local_sccop_out_path}/$p POSCAR
                             DPT -v potcar
                             
-                            for i in 4
-                            do
-                                cp INCAR_$i INCAR
-                                cp KPOINTS_$i KPOINTS
-                                date > vasp-$i.vasp
-                                if [ {dimension} -eq 2 ]; then
-                                    {VASP_2d} >> vasp-$i.vasp
-                                elif [ {dimension} -eq 3 ]; then
-                                    {VASP_3d} >> vasp-$i.vasp
-                                fi
-                                date >> vasp-$i.vasp
-                                cp CONTCAR POSCAR
-                                cp CONTCAR POSCAR_$i
-                                cp OUTCAR OUTCAR_$i
-                                rm WAVECAR CHGCAR
-                            done
-                            if [ `cat CONTCAR|wc -l` -ge 8 ]; then
+                            if [ {vasp_flag} -eq 1 ]; then
+                                for i in 3
+                                do
+                                    cp INCAR_$i INCAR
+                                    cp KPOINTS_$i KPOINTS
+                                    date > vasp-$i.vasp
+                                    if [ {dimension} -eq 2 ]; then
+                                        {VASP_2d} >> vasp-$i.vasp
+                                    elif [ {dimension} -eq 3 ]; then
+                                        {VASP_3d} >> vasp-$i.vasp
+                                    fi
+                                    date >> vasp-$i.vasp
+                                    cp CONTCAR POSCAR
+                                    cp CONTCAR POSCAR_$i
+                                    cp OUTCAR OUTCAR_$i
+                                    rm WAVECAR CHGCAR
+                                done
+                            else
+                                {VASP_3d} >> vasp-3.vasp
+                            fi
+                            
+                            if [ `cat CONTCAR | wc -l` -ge 8 ]; then
                                 scp CONTCAR {gpu_node}:{self.local_optim_strus_path}/$p
-                                scp vasp-4.vasp {gpu_node}:{self.local_energy_path}/out-$p
+                                scp vasp-3.vasp {gpu_node}:{self.local_energy_path}/out-$p
                             fi
                             cd ../
                             

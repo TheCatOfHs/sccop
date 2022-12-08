@@ -18,7 +18,7 @@ from core.data_transfer import DeleteDuplicates
 
 class Select(SSHTools, DeleteDuplicates):
     #Select training samples by active learning
-    def __init__(self, iteration, batch_size=1024, num_workers=0):
+    def __init__(self, iteration, batch_size=8*1024, num_workers=0):
         DeleteDuplicates.__init__(self)
         self.batch_size = batch_size
         self.num_workers = num_workers
@@ -192,8 +192,13 @@ class Select(SSHTools, DeleteDuplicates):
         ave_energy [float, 1d, tensor]: mean of energy prediction
         """
         energy_pred = []
-        for name in model_names:
-            self.load_model(name)
+        if len(model_names) > 0:
+            for name in model_names:
+                self.load_model(name)
+                pred = self.predict_batch(loader)
+                energy_pred.append(pred)
+        else:
+            self.load_model('Random')
             pred = self.predict_batch(loader)
             energy_pred.append(pred)
         model_pred = torch.cat(energy_pred, axis=1)
@@ -209,10 +214,13 @@ class Select(SSHTools, DeleteDuplicates):
         model_name [str, 0d]: full name of model
         """
         self.model_val = CrystalGraphConvNet()
-        params = torch.load(model_name, map_location=self.device)
         #load parameters of prediction model
-        self.model_val.load_state_dict(params['state_dict'])
-        self.normalizer.load_state_dict(params['normalizer'])
+        if model_name == 'Random':
+            self.normalizer.load_state_dict({'mean':0, 'std':1})
+        else:
+            params = torch.load(model_name, map_location=self.device)
+            self.model_val.load_state_dict(params['state_dict'])
+            self.normalizer.load_state_dict(params['normalizer'])
     
     def preserve_models(self, model_names):
         """
@@ -454,8 +462,8 @@ class Select(SSHTools, DeleteDuplicates):
                                     grid_name, grid_ratio, space_group)
         energy = np.array(energy)[idx]
         #delete same structures by pymatgen
-        idx = self.delete_duplicates_pymatgen(atom_pos, atom_type,
-                                              grid_name, grid_ratio, space_group)
+        idx = self.delete_duplicates_pymatgen_energy(atom_pos, atom_type,
+                                                     grid_name, grid_ratio, space_group, energy)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
             self.filter_samples(idx, atom_pos, atom_type, atom_symm, 
                                 grid_name, grid_ratio, space_group)
@@ -534,7 +542,7 @@ class Select(SSHTools, DeleteDuplicates):
         if not os.path.exists(sccop_out_path):
             os.mkdir(sccop_out_path)
         #delete same structures
-        strus, energy = self.collect_recycle()
+        strus, energy = self.collect_recycle(1, num_recycle+1)
         idx = self.delete_same_strus_energy(strus, energy)
         energy = energy[idx]
         #export top k structures
@@ -548,9 +556,14 @@ class Select(SSHTools, DeleteDuplicates):
             stru.to(filename=file_name, fmt='poscar')
         system_echo(f'Optimize configurations: {stru_num}')
     
-    def collect_recycle(self):
+    def collect_recycle(self, start, end):
         """
         collect poscars and corresponding energys from each recycle
+        
+        Parameters
+        ----------
+        start [int, 0d]: start number
+        end [int, 0d]: end number
         
         Returns
         ----------
@@ -559,20 +572,40 @@ class Select(SSHTools, DeleteDuplicates):
         """
         poscars, energys = [], []
         #get poscars and corresponding energys
-        for i in range(1, num_recycle+1):
+        for i in range(start, end):
             energy_file = f'{vasp_out_path}/initial_strus_{i}/Energy.dat'
-            energy_dat = self.import_list2d(energy_file, str, numpy=True)
-            poscar, energy = np.transpose(energy_dat)
-            poscar = [f'{init_strus_path}_{i}/{j[4:]}' for j in poscar]
-            poscars = np.concatenate((poscars, poscar))
-            energys = np.concatenate((energys, energy))
+            if os.path.exists(energy_file):
+                energy_dat = self.import_list2d(energy_file, str, numpy=True)
+                poscar, energy = np.transpose(energy_dat)
+                poscar = [f'{init_strus_path}_{i}/{j[4:]}' for j in poscar]
+                poscars = np.concatenate((poscars, poscar))
+                energys = np.concatenate((energys, energy))
         #get structure objects
         strus = []
         for poscar in poscars:
             stru = Structure.from_file(poscar)
             strus.append(stru)
-        return strus, np.array(energys, dtype=float)
-
+        return strus, np.array(energys, dtype=float)        
+    
+    def judge_convergence(self, recycle):
+        """
+        judge the convergence by energy
+        """
+        strus_new, energy_new = self.collect_recycle(recycle+1, recycle+2)
+        strus_old, energy_old = self.collect_recycle(1, recycle+1)
+        idx = self.delete_same_selected_pymatgen(strus_new, strus_old)
+        #compare energy
+        energy_new = energy_new[idx]
+        energy_new = [i for i in energy_new if -12 < i < 0]
+        energy_old = [i for i in energy_old if -12 < i < 0]
+        energy_new_mean = np.mean(energy_new)
+        energy_old_mean = np.mean(energy_old)
+        flag = False
+        if energy_old_mean - energy_new_mean < convergence:
+            flag = True
+            system_echo(f'Satisfy energy convergence condition')
+        return flag
+    
     def ml_sampling(self, recyc, atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group):
         """
         choose lowest energy structure in different clusters
@@ -606,7 +639,7 @@ class Select(SSHTools, DeleteDuplicates):
         #balance samples to GPU
         num_crys = len(atom_pos)
         tuple = atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
-        batch_balance(num_crys, 10*self.batch_size, tuple)
+        batch_balance(num_crys, self.batch_size, tuple)
         #sort structure in order of grid and space group
         idx = self.sort_by_grid_sg(grid_name, space_group)
         atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group = \
@@ -631,10 +664,13 @@ class Select(SSHTools, DeleteDuplicates):
         """
         model_dir = sorted(os.listdir(model_path))
         if len(model_dir) == 0:
-            if dimension == 2:
-                model_names = [pretrain_model_2d]
-            elif dimension == 3:
-                model_names = [pretrain_model_3d]
+            if use_pretrain_model:
+                if dimension == 2:
+                    model_names = [pretrain_model_2d]
+                elif dimension == 3:
+                    model_names = [pretrain_model_3d]
+            else:
+                model_names = []
         else:
             path = f'{model_path}/{model_dir[-1]}'
             files = os.listdir(path)
@@ -722,7 +758,7 @@ class BayesianOpt(Select):
         """
         #import random sampling buffer
         crys_vec_all, pos, type, symm, grid, ratio, sgs = self.import_buffer(recyc)
-        #train gaussian distribution
+        #train gaussian process
         gp = GaussianProcessRegressor()
         crys_vec, _ = self.get_crys_and_energy(atom_pos, atom_type, atom_symm, 
                                                grid_name, grid_ratio, space_group)

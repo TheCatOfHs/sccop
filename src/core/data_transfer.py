@@ -467,6 +467,46 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.setdiff1d(all_idx, idx)
         return idx
     
+    def delete_duplicates_pymatgen_energy(self, atom_pos, atom_type, 
+                                          grid_name, grid_ratio, space_group, energys):
+        """
+        delete same structures
+        
+        Parameters
+        -----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: grid of atoms
+        grid_ratio [float, 1d]: ratio of grids
+        space_group [int, 1d]: space group number
+        energys [float, 0d]: structure energy
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of different structures
+        """
+        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
+        strus_num = len(strus)
+        idx = []
+        #compare structure by pymatgen
+        for i in range(strus_num):
+            stru_1 = strus[i]
+            for j in range(i+1, strus_num):
+                stru_2 = strus[j]
+                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
+                                      primitive_cell=True, scale=False, 
+                                      attempt_supercell=False, allow_subset=False)
+                if same:
+                    if energys[i] < energys[j]:
+                        idx.append(j)
+                    else:
+                        idx.append(i)
+                    break
+        all_idx = np.arange(strus_num)
+        idx = np.unique(idx)
+        idx = np.setdiff1d(all_idx, idx)
+        return idx
+    
     def delete_duplicates_sg_pymatgen(self, atom_pos, atom_type, 
                                       grid_name, grid_ratio, space_group):
         """
@@ -553,7 +593,7 @@ class DeleteDuplicates(MultiGridTransfer):
         idx = np.delete(idx, same)
         idx = [i for i in idx if i < num]
         return idx
-
+    
     def delete_same_selected_pymatgen(self, strus_1, strus_2):
         """
         delete common structures of set1 and set2 by pymatgen

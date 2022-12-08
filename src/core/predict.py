@@ -299,8 +299,8 @@ class CrystalGraphConvNet(nn.Module):
 class PPModel(ListRWTools):
     #Train property predict model
     def __init__(self, iteration, train_data, valid_data, test_data, 
-                 train_batchsize=64, train_epochs=120,
-                 lr=1e-2, num_workers=0, num_gpus=num_gpus, print_feq=10):
+                 train_batchsize=16, train_epochs=120,
+                 lr=1e-3, num_workers=0, num_gpus=num_gpus, print_feq=10):
         self.device = torch.device('cuda')
         self.train_data = train_data
         self.valid_data = valid_data
@@ -333,14 +333,17 @@ class PPModel(ListRWTools):
             checkpoint = torch.load(pretrain_model_2d)
         elif dimension == 3:
             checkpoint = torch.load(pretrain_model_3d)
-        model = self.model_initial(checkpoint)
+        model = self.model_initial(checkpoint, use_pretrain_model)
         model = DataParallel(model)
         model.to(self.device)
         #set learning rate
-        out_layer_id = list(map(id, model.module.fc_out.parameters()))
-        crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
-        params = [{'params': crysfea_layer, 'lr': self.lr*0},
-                  {'params': model.module.fc_out.parameters()}]
+        if use_pretrain_model:
+            out_layer_id = list(map(id, model.module.fc_out.parameters()))
+            crysfea_layer = filter(lambda x: id(x) not in out_layer_id, model.parameters())
+            params = [{'params': crysfea_layer, 'lr': self.lr*0},
+                      {'params': model.module.fc_out.parameters()}]
+        else:
+            params = model.parameters()
         #training model
         criterion = nn.MSELoss()
         optimizer = optim.Adam(params, lr=self.lr, weight_decay=0)
@@ -348,7 +351,8 @@ class PPModel(ListRWTools):
         mae_buffer, best_mae_error = [], 1e10
         system_echo('-----------Begin Training Property Predict Model------------')
         for epoch in range(0, self.epochs):
-            self.train_batch(train_loader, model, criterion, optimizer, epoch, normalizer)
+            if use_transfer_learning:
+                self.train_batch(train_loader, model, criterion, optimizer, epoch, normalizer)
             mae_error = self.validate(valid_loader, model, criterion, epoch, normalizer)
             scheduler.step()
             is_best = mae_error < best_mae_error
@@ -367,7 +371,7 @@ class PPModel(ListRWTools):
         
     def train_batch(self, loader, model, criterion, optimizer, epoch, normalizer):
         """
-        train model one batch
+        train model one epoch
         
         Parameters
         ----------
@@ -458,20 +462,22 @@ class PPModel(ListRWTools):
                               vasp_all, style='{0:8.4f}')
         return mae_errors.avg
     
-    def model_initial(self, checkpoint):
+    def model_initial(self, checkpoint, load=True):
         """
         initialize model by input len_atom_fea and nbr_fea_len
         
         Parameters
         ----------
         checkpoint [dict]: save parameters of model
+        load [bool, 0d]: whether load model
         
         Returns
         ----------
         model [obj]: initialized model
         """
         model = CrystalGraphConvNet()
-        model.load_state_dict(checkpoint['state_dict'])
+        if load:
+            model.load_state_dict(checkpoint['state_dict'])
         return model
     
     def sample_data_list(self, dataset):

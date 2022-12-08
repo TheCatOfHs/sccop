@@ -426,7 +426,7 @@ class ActionSpace:
         ratio [float, 0d]: grid ratio
         grid_idx [int, 2d, np]: neighbor index of grid
         grid_dis [float, 2d, np]: neighbor distance of grid
-
+        
         Returns
         ----------
         flag [bool, 0d]: whether satisfy bond constrain

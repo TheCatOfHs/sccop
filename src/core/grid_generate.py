@@ -616,7 +616,7 @@ class GridGenerate(ListRWTools):
         space_group = [i.split('_')[-1] for i in name]
         return space_group
     
-    def near_property(self, stru, cutoff, mapping, near=0):
+    def near_property(self, stru, cutoff, mapping):
         """
         index and distance of near grid points
         
@@ -624,49 +624,49 @@ class GridGenerate(ListRWTools):
         ----------
         stru [obj]: structure object in pymatgen
         cutoff [float, 0d]: cutoff distance
+        mapping [int, 2d]: mapping between min and all grid
         
         Returns
         ----------
         nbr_idx [int, 2d, np]: index of near neighbor in min
         nbr_dis [float, 2d, np]: distance of near neighbor in min
         """
-        all_nbrs = stru.get_all_neighbors(cutoff)
+        #neighbor index and distance of DAU
+        min_atom_num = len(mapping)
+        all_nbrs = stru.get_all_neighbors(cutoff, sites=stru.sites[:min_atom_num])
         all_nbrs = [sorted(nbrs, key = lambda x: x[1]) for nbrs in all_nbrs]
-        if near == 0:
-            num_near = min(map(lambda x: len(x), all_nbrs))
-        else:
-            num_near = near
+        #constrain number of neighbors
+        num_near = min(map(lambda x: len(x), all_nbrs))
         nbr_idx, nbr_dis = [], []
         for nbr in all_nbrs:
             nbr_dis.append(list(map(lambda x: x[1], nbr[:num_near])))
             nbr_idx.append(list(map(lambda x: x[2], nbr[:num_near])))
-        nbr_idx, nbr_dis = self.reduce_to_min(nbr_idx, nbr_dis, mapping)
+        nbr_idx, nbr_dis = self.reduce_to_dau(nbr_idx, nbr_dis, mapping)
         return nbr_idx, nbr_dis
     
-    def reduce_to_min(self, nbr_idx, nbr_dis, mapping):
+    def reduce_to_dau(self, nbr_idx, nbr_dis, mapping):
         """
-        reduce neighbors to min unequal area
+        reduce neighbors to DAU
         
         Parameters
         ----------
         nbr_idx [int, 2d]: index of near neighbor 
         nbr_dis [float, 2d]: distance of near neighbor 
-        mapping [int, 2d]: mapping between min and all grid
+        mapping [int, 2d]: mapping between DAU and all grid
 
         Returns
         ----------
-        nbr_idx [int, 2d, np]: index of near neighbor in min
-        nbr_dis [float, 2d, np]: distance of near neighbor in min
+        nbr_idx [int, 2d, np]: index of near neighbor in DAU
+        nbr_dis [float, 2d, np]: distance of near neighbor in DAU
         """
-        min_atom_num = len(mapping)
-        nbr_idx = np.array(nbr_idx)[:min_atom_num]
-        nbr_dis = np.array(nbr_dis)[:min_atom_num]
+        nbr_idx = np.array(nbr_idx)
+        nbr_dis = np.array(nbr_dis)
         #reduce to min area
         for line in mapping:
             if len(line) > 1:
-                min_atom = line[0]
+                dau_atom = line[0]
                 for atom in line[1:]:
-                    nbr_idx[nbr_idx==atom] = min_atom
+                    nbr_idx[nbr_idx==atom] = dau_atom
         return nbr_idx, nbr_dis
     
     def lattice_generate_2d(self, crystal_system, params):
@@ -687,24 +687,24 @@ class GridGenerate(ListRWTools):
         while area < lower or area > upper:
             #triclinic
             if crystal_system == 1:
-                a = np.random.gamma(10.1342, 0.488421)
-                b = np.random.gamma(8.545, 0.92739)
-                gamma = np.random.choice([np.random.gamma(193.476, 0.548333),
-                                          np.random.gamma(127.104, 0.587854)], p=[.47, .53])
+                a = np.random.gamma(9.74078, 0.513692)
+                b = np.random.gamma(8.09637, 1.00711)
+                gamma = np.random.choice([np.random.normal(105.857, 8.12514),
+                                          np.random.normal(75.378, 6.33747)], p=[.5, .5])
             #orthorhombic
             elif crystal_system == 3:
-                a = np.random.gamma(10.8027, 0.437781)
-                b = np.random.gamma(6.12433, 1.32436)
+                a = np.random.gamma(10.2258, 0.458184)
+                b = np.random.gamma(7.26625, 1.17494)
                 gamma = 90
             #tetragonal
             elif crystal_system == 4:
-                a = np.random.gamma(12.2431, 0.375869)
+                a = np.random.gamma(10.6728, 0.441636)
                 b = a
                 gamma = 90
             #hexagonal
             elif crystal_system == 6:
-                a = np.random.choice([np.random.gamma(15.0002, 0.41934),
-                                      np.random.gamma(59.4088, 0.0606547)], p=[.36, .64])
+                a = np.random.choice([np.random.gamma(13.4302, 0.460956),
+                                      np.random.gamma(65.1615, 0.0554826)], p=[.5, .5])
                 b = a
                 gamma = 120
             #add vaccum layer
@@ -736,43 +736,41 @@ class GridGenerate(ListRWTools):
         while volume < lower or volume > upper:
             #triclinic
             if crystal_system == 1:
-                a = np.random.gamma(11.1789, 0.541671)
-                b = np.random.gamma(14.9705, 0.422635)
-                c = np.random.gamma(9.33099, 0.750567)
-                alpha = np.random.choice([np.random.gamma(21.7236, 4.77611), 
-                                          np.random.gamma(649.928, 0.217506)], p=[0.89, .11])
-                beta = np.random.gamma(21.6473, 4.76004)
-                gamma = np.random.choice([np.random.gamma(7.36734, 11.4208),
-                                          np.random.gamma(5344.6, 0.0278889)], p=[.95, .05])
+                a = np.random.gamma(11.1407, 0.54363)
+                b = np.random.gamma(14.9172, 0.423919)
+                c = np.random.gamma(9.3193, 0.751272)
+                alpha = np.random.gamma(19.6702, 5.48192)
+                beta = np.random.gamma(21.638, 4.76449)
+                gamma = np.random.gamma(6.80769, 12.8246)
             #monoclinic
             elif crystal_system == 2:
-                a = np.random.gamma(8.95802, 0.729762)
-                b = np.random.gamma(7.46691, 0.912014)
-                c = np.random.gamma(10.1186, 0.828915)
+                a = np.random.gamma(8.93408, 0.731207)
+                b = np.random.gamma(7.51874, 0.906048)
+                c = np.random.gamma(9.99707, 0.837898)
                 alpha, gamma = 90, 90
-                beta = np.random.choice([np.random.gamma(162.386, 0.667038),
-                                         np.random.gamma(161.983, 0.463127)], p=[.85, .15])
+                beta = np.random.choice([np.random.normal(108.242, 8.77108),
+                                         np.random.normal(74.8068, 4.97432)], p=[.85, .15])
             #orthorhombic
             elif crystal_system == 3:
-                a = np.random.gamma(5.85329, 1.05101)
-                b = np.random.gamma(6.98244, 0.925464)
-                c = np.random.gamma(6.42976, 1.08572)
+                a = np.random.gamma(5.84602, 1.05456)
+                b = np.random.gamma(6.95415, 0.93105)
+                c = np.random.gamma(6.40244, 1.09067)
                 alpha, beta, gamma = 90, 90, 90
             #tetragonal
             elif crystal_system == 4:
-                a = np.random.gamma(17.2592, 0.26948)
-                c = np.random.gamma(11.7421, 0.686633)
+                a = np.random.gamma(17.2155, 0.270062)
+                c = np.random.gamma(11.6461, 0.691331)
                 b = a
                 alpha, beta, gamma = 90, 90, 90
             #trigonal or hexagonal
             elif crystal_system == 5 or crystal_system == 6:
-                a = np.random.gamma(35.6221, 0.137729)
-                c = np.random.gamma(20.7554, 0.242826)
+                a = np.random.gamma(35.5889, 0.137857)
+                c = np.random.gamma(20.7842, 0.242435)
                 b = a
                 alpha, beta, gamma = 90, 90, 120
             #cubic
             elif crystal_system == 7:
-                a = np.random.gamma(17.096, 0.273723)
+                a = np.random.gamma(17.2494, 0.271047)
                 b, c = a, a
                 alpha, beta, gamma = 90, 90, 90
             #check validity of lattice vector
@@ -846,14 +844,16 @@ class GridGenerate(ListRWTools):
         negativity = sum(negativity)
         affinity = sum(affinity)
         #predict area
-        area_pred = 2.02687*radiu - 0.250512*negativity + 0.63003*affinity + 4.87134
+        area_pred = 2.77505*radiu - 0.213984*negativity + 0.500184*affinity + 2.85521
         dense_stack = np.sum(.5*np.pi*np.array(radius)**2)
         #get boundary by occupy rate distribution
-        lower, upper = dense_stack, 4*dense_stack
-        lower = max(lower, area_pred*.5)
-        upper = min(upper, area_pred*2)
+        lower_stack, upper_stack = 0.96*dense_stack, 2.66*dense_stack
+        lower = max(lower_stack, area_pred*0.65)
+        upper = min(upper_stack, area_pred*3.85)
+        if lower >= upper:
+            lower, upper = lower_stack, upper_stack
         return lower, upper
-
+    
     def volume_boundary_predict(self, params):
         """
         predict lattice volume boundary of specific composition
@@ -876,9 +876,11 @@ class GridGenerate(ListRWTools):
         volume_pred = 17.9984*radiu - 3.10083*negativity + 4.50924*affinity - 8.49767
         dense_stack = np.sum(4/3*np.pi*np.array(radius)**3)
         #get boundary by occupy rate distribution
-        lower, upper = dense_stack, 4*dense_stack
-        lower = max(lower, volume_pred*.5)
-        upper = min(upper, volume_pred*2)
+        lower_stack, upper_stack = 0.96*dense_stack, 2.66*dense_stack
+        lower = max(lower_stack, volume_pred*0.70)
+        upper = min(upper_stack, volume_pred*2.21)
+        if lower >= upper:
+            lower, upper = lower_stack, upper_stack
         return lower, upper
     
     def add_symmetry_manually(self, path):

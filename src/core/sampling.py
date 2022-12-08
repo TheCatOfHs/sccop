@@ -378,7 +378,7 @@ class RandomSampling(ActionSpace, AssignPlan, DeleteDuplicates):
     def __init__(self):
         ActionSpace.__init__(self)
     
-    def sampling(self, recyc, grid, sgs, assigns, parallel=4, num_per_sg=10):
+    def sampling(self, recyc, grid, sgs, assigns, parallel=20, num_per_sg=2):
         """
         sampling randomly with symmetry
         
