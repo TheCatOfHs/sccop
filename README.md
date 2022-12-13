@@ -27,7 +27,7 @@ Please cite the following work if you want to use SCCOP.
 
 ```
 @article{XXX,
-  title = {Crystal structure prediction and property related feature extraction by graph deep learning},
+  title = {Graph deep learning accelerated efficient crystal structure search and feature extraction},
   author = {Li, Chuannan and Liang, Hanpu and Zhang, Xie and Lin, Zijing and Wei, Su-Huai},
   journal = {XXX},
   volume = {XXX},
