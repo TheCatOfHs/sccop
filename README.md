@@ -5,7 +5,7 @@ This software package implements the Symmetry-based Combinatorial Crystal Optimi
 SCCOP combines graph neural network and DFT calculation to accelerate the search of crystal structure.
 The following paper describes the details of the SCCOP framework:
 
-[Crystal structure prediction and property related feature extraction by graph deep learning](XXX)
+[Graph deep learning accelerated efficient crystal structure search and feature extraction](XXX)
 ![](images/SCCOP.png)
 
 ## Table of Contents
