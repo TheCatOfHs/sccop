@@ -1,6 +1,6 @@
 # Symmetry-based Combinatorial Crystal Optimization Program
 
-This software package implements the Symmetry Crystal Combinatorial Optimization Program (SCCOP) that predicts crystal structure of specific composition. 
+This software package implements the Symmetry-based Combinatorial Crystal Optimization Program (SCCOP) that predicts crystal structure of specific composition. 
 
 SCCOP combines graph neural network and DFT calculation to accelerate the search of crystal structure.
 The following paper describes the details of the SCCOP framework:
