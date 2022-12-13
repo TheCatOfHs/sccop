@@ -1,4 +1,4 @@
-# Symmetry-based Combinatorial Crystal Optimization Program
+# Symmetry-based Combinatorial Crystal Optimization Program (SCCOP)
 
 This software package implements the Symmetry-based Combinatorial Crystal Optimization Program (SCCOP) that predicts crystal structure of specific composition. 
 
