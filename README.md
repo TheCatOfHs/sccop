@@ -26,19 +26,11 @@ The following paper describes the details of the SCCOP framework:
 Please cite the following work if you want to use SCCOP.
 
 ```
-@article{XXX,
-  title = {Graph deep learning accelerated efficient crystal structure search and feature extraction},
-  author = {Li, Chuannan and Liang, Hanpu and Zhang, Xie and Lin, Zijing and Wei, Su-Huai},
-  journal = {XXX},
-  volume = {XXX},
-  issue = {XXX},
-  pages = {XXX},
-  numpages = {XXX},
-  year = {XXX},
-  month = {XXX},
-  publisher = {XXX},
-  doi = {XXX},
-  url = {XXX}
+@article{SCCOP,
+    title = {Graph deep learning accelerated efficient crystal structure search and feature extraction},
+    author = {Chuannan Li, Hanpu Liang, Xie Zhang, Zijing Lin, Su-Huai Wei},
+    journal={arXiv preprint arXiv:2302.03331},
+    year={2023}
 }
 ```
 
