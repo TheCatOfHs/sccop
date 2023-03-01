@@ -66,9 +66,9 @@ Then, you need to specify server info and absolute path in `src/core/path.py`, t
 [Server]
 # GPU number and name of gpu node
 num_gpus = 2 
-gpu_node = 'node151'
+gpu_node = 'nodeXXX'
 # List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
-nodes = [131, 132, 133, 134, 135, 136] 
+nodes = [XXX, XXX] 
 
 [Absolute path]
 # Path of SCCOP on GPU node
