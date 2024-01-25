@@ -1,40 +1,73 @@
 #Base
-dimension = int('DIM')
-composition = 'XXX'
-num_atom = [5, 10]
-space_group = [[int('SG1'), int('SG2')]]
+Dimension = int('3')
+Composition = 'Cs1Ge1I3'
+Num_Atom = [int('15'), int('15')]
+Space_Group = [[int('SG0'), int('SG0')]]
 
 #2-Dimension settings
-vacuum_space = 15
-thickness = 0.1
+Vacuum_Space = 15
+Thickness = 1
+Z_Layers = 3
+
+#3-Dimension settings
+Pressure = 0
 
 #Model
-use_pretrain_model = [True if 'PM'=='True' else False][0]
-use_transfer_learning = True
-use_vasp_opt = [True if 'VASP'=='True' else False][0]
+Use_Pretrain_Model = [True if 'NOPRE' == 'PRE' else False][0]
+Update_ML_Model = True
 
 #Recycling
-num_recycle = 2
-num_ml_list = [1, 1]
-convergence = 1e-3
+Num_Recycle = 1
+Num_ML_Iter = [1 for _ in range(Num_Recycle)]
+Energy_Convergence = -1
+Use_Succeed = True
 
 #Sampling
-num_latt = 72
-num_Rand = 120
-sg_per_latt = 10
-
-#DFT Optimization
-num_poscars = 12
-num_optims = 6
-vasp_time_limit = 480
+Use_ML_Clustering = [True if 'CLUS' == 'CLUS' else False][0]
+Min_Dis_Constraint = True
+Init_Strus_per_Node = 20
+Num_Sample_Limit = 50000
+Sampling_Time_Limit = 120
+Rand_Latt_Ratio = 0.8
+#SpaceGroup-based
+General_Search = True
+Latt_per_Node = 40
+SG_per_Latt = 5
+#Cluster-based
+Cluster_Search = False
+Clus_per_Node = 10
+Cluster_Num_Ratio = 0.8
+Cluster_Weight = [1]
+#Tempelate-based
+Template_Search = False
+Disturb_Seeds = False
+Temp_per_Node = 20
+Num_Fixed_Temp = 36
 
 #Searching
-latt_steps = 5
-sa_steps = 80
-num_jump = 1
-num_path = 360
+SA_Path_per_Node = 40
+Restart_Times = 10
+Exploration_Ratio = .2
+Exploitation_Num = 10
+SA_Steps = 75
+SA_Decay = .97
+SA_Path_Ratio = 0.2
 
-#Sample Select
-num_models = 5
-num_clusters = 60
-ratio_min_energy = 0.5
+#Sample select
+SA_Strus_per_Node = 10
+SA_Energy_Ratio = 0.5
+
+#Energy calculate
+Energy_Method = 'VASP'
+Num_Opt_Low_per_Node = 2
+Num_Opt_High_per_Node = 1
+Refine_Stru = False
+Scf_Time_Limit = 72000
+Opt_Time_Limit = 72000
+#VASP 
+Use_VASP_Scf = True
+Use_VASP_Opt = True
+VASP_Opt_Symm = True
+#LAMMPS
+Use_LAMMPS_Scf = True
+Use_LAMMPS_Opt = True

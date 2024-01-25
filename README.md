@@ -23,14 +23,18 @@ The following paper describes the details of the SCCOP framework:
 
 ## How to cite
 
-Please cite the following work if you want to use SCCOP.
+Please cite the following works if you want to use SCCOP.
 
 ```
 @article{SCCOP,
     title = {Graph deep learning accelerated efficient crystal structure search and feature extraction},
-    author = {Chuannan Li, Hanpu Liang, Xie Zhang, Zijing Lin, Su-Huai Wei},
-    journal={arXiv preprint arXiv:2302.03331},
-    year={2023}
+    author = {Li, Chuan-Nan and Liang, Han-Pu and Zhang, Xie and Lin, Zijing and Wei, Su-Huai},
+    journal = {npj Comput. Mater.},
+    volume = {9},
+    pages = {176},
+    year = {2023},
+    doi = {10.1038/s41524-023-01122-4},
+    url = {https://doi.org/10.1038/s41524-023-01122-4}
 }
 ```
 
@@ -60,27 +64,30 @@ ssh-keygen -t rsa -b 4096
 ssh-copy-id -i ~/.ssh/id_rsa.pub user@nodeXXX
 ```
 
-Then, you need to specify server info and absolute path in `src/core/path.py`, thus GPU node can send jobs to cpu nodes via [paramiko](https://www.paramiko.org/).
-
 ```diff
 [Server]
-# GPU number and name of gpu node
-num_gpus = 2 
-gpu_node = 'nodeXXX'
-# List of cpu nodes, thus the cpu name is, e.g., 'nodeXXX' 
-nodes = [XXX, XXX] 
+# PBS or SLURM
+Job_System = 'PBS'
+Job_Queue = 'CPU'
+# Obtain node information automatically
+Host_Node = 'HOST_NODE'
+CPU_Nodes = 'CPU_NODES'
+GPU_Nodes = 'GPU_NODES'
+Num_GPUs = 'GPU_NUM'
+
+[Environment]
+SCCOP_Env = ''
+Sources = ''
+Modules = ''
+Envs = ''
 
 [Absolute path]
-# Path of SCCOP on GPU node
-SCCOP_path = '/local/sccop' 
-# Directory of SCCOP on CPU nodes
-CPU_local_path = '/local' 
-# Path of openmpi
-MPI_2d_path = 'path_mpi_2d' 
-MPI_3d_path = 'path_mpi_3d' 
-# Call VASP for DFT calculation
-VASP_2d = f'{MPI_2d_path} -np 48 vasp_relax_ab' 
-VASP_3d = f'{MPI_3d_path} -np 48 vasp' 
+# VASP settings
+VASP_scf = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 4 vasp'
+VASP_opt = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp'
+# LAMMPS settings
+LAMMPS_scf = 'lmp_intel_cpu_intelmpi -in input.inp'
+LAMMPS_opt = 'mpirun -np 96 lmp_intel_cpu_intelmpi -in input.inp'
 ```
 
 **Note:** the SCCOP should under the `/local` directory of GPU node, e.g., `/local/sccop` which includes `sccop/src`, `sccop/data` and `sccop/libs`. For researchers who want to change the submission of VASP jobs, see the code in `src/core/sub_vasp.py`.
@@ -90,85 +97,188 @@ VASP_3d = f'{MPI_3d_path} -np 48 vasp'
 To run SCCOP for desired composition, you need to define a customized initial search file, i.e., the `src/core/global_var.py` should be:
 
 ```diff
-[Base]
-# Dimension of target composition
-dimension = 2
-# The chemical formula of the compound, e.g., 'B1C3'
-composition = XXX
-# Number of atoms in unit cell
-num_atom = [5, 10]
-# Search space group
-space_group = [[2, 17]]
+#Base
+Dimension = 3
+Composition = 'C1'
+Num_Atom = [5, 10]
+Space_Group = [[1, 230]]
 
-[2-Dimension settings]
-# Vacuum space layer
-vacuum_space = 15
-# Puckered structure
-thickness = 0.1
+#2-Dimension settings
+Vacuum_Space = 15
+Thickness = 1
+Z_Layers = 3
 
-[Sampling]
-# Number of initial lattice
-num_latt = 72
-# Number of initial structures sent to VASP
-num_Rand = 120
-# Average space group per lattice
-sg_per_latt = 10
+#3-Dimension settings
+Pressure = 0
 
-[Recycling]
-# Number search recycle
-num_recycle = 1
-# List of ML search and optimize in each recycle
-num_ml_list = [1]
-# Number of structures that sent to VASP optimize
-num_poscars = 12
-# High accuracy optimized by VASP
-num_optims = 6
-# VASP time limit
-vasp_time_limit = 480
+#Model
+Use_Pretrain_Model = False
+Update_ML_Model = True
 
-[Searching]
-# Total SA steps = latt_steps*sa_steps
-latt_steps = 5
-sa_steps = 80
-# Metropolis judge interval
-num_jump = 1
-# Number of SA path
-num_path = 360
+#Recycling
+Num_Recycle = 1
+Num_ML_Iter = [1]
+Energy_Convergence = -1
+Use_Succeed = True
 
-[Sample Select]
-# Number of models to predict energy
-num_models = 5
-# Number of clusters
-num_clusters = 60
-ratio_min_energy = 0.5
+#Sampling
+Use_ML_Clustering = True
+Min_Dis_Constraint = True
+Init_Strus_per_Node = 20
+Num_Sample_Limit = 50000
+Sampling_Time_Limit = 120
+Rand_Latt_Ratio = 0.8
+#SpaceGroup-based
+General_Search = True
+Latt_per_Node = 40
+SG_per_Latt = 5
+#Cluster-based
+Cluster_Search = False
+Clus_per_Node = 10
+Cluster_Num_Ratio = 0.8
+Cluster_Weight = [1]
+#Tempelate-based
+Template_Search = False
+Disturb_Seeds = False
+Temp_per_Node = 20
+Num_Fixed_Temp = 36
+
+#Searching
+SA_Path_per_Node = 40
+Restart_Times = 10
+Exploration_Ratio = .2
+Exploitation_Num = 10
+SA_Steps = 75
+SA_Decay = .97
+SA_Path_Ratio = 0.2
+
+#Sample select
+SA_Strus_per_Node = 10
+SA_Energy_Ratio = 0.5
+
+#Energy calculate
+Energy_Method = 'VASP'
+Num_Opt_Low_per_Node = 2
+Num_Opt_High_per_Node = 1
+Refine_Stru = False
+Scf_Time_Limit = 72000
+Opt_Time_Limit = 72000
+#VASP 
+Use_VASP_Scf = True
+Use_VASP_Opt = True
+VASP_Opt_Symm = True
+#LAMMPS
+Use_LAMMPS_Scf = True
+Use_LAMMPS_Opt = True
+```
+
+### Job Script
+SCCOP supports the PBS and SLURM job system, we offer the job script here.
+For PBS job system
+```bash
+#!/bin/bash
+#PBS -N sccop_pbs
+#PBS -q queue
+#PBS -l nodes=6:ppn=48
+#PBS -l walltime=999:00:00
+work=$PBS_O_WORKDIR
+cd $work
+rm -r output
+mkdir output
+#get info about host and computation nodes
+host=`hostname`
+nodes=`cat $PBS_NODEFILE | tr ' ' '\n' | sort | uniq`
+echo $host > data/host.dat
+echo $nodes > data/nodes.dat
+#copy neccessary files to each node
+for node in $nodes
+do
+	ssh -T $node "
+		cd /tmp;
+		rm -rf sccop;
+		mkdir sccop;
+		cd sccop;
+		scp -r ${work}/data .;
+		scp -r ${work}/libs .;
+		scp -r ${work}/src .
+		"
+done
+#launch sccop on host node
+ssh -T $host "
+	cd /tmp/sccop;
+	python src/core/job_system.py;
+	python src/main.py;
+	scp data/log.sccop ${work}/.
+	scp data/poscar/optim_strus/POSCAR* ${work}/output/.
+	scp data/vasp_out/optim_strus/Energy.dat ${work}/output/.
+	scp -r data/poscar ${work}/output/.
+	"
+#delete temporary files
+rm data/host.dat
+rm data/nodes.dat
+```
+
+For SLURM job system
+```bash
+#!/bin/bash
+#SBATCH -J sccop
+#SBATCH -o sccop_%j.out
+#SBATCH -e sccop_%j.err
+#SBATCH -p partition
+#SBATCH -N 3
+#SBATCH -n 288
+work=$SLURM_SUBMIT_DIR
+cd $work
+rm -r output
+mkdir output
+#get info about host and computation nodes
+nodes=$(scontrol show hostname $SLURM_JOB_NODELIST)
+host=$(echo $nodes | awk '{print $1}')
+echo $host > data/host.dat
+echo $nodes > data/nodes.dat
+#copy neccessary files to each node
+for node in $nodes
+do
+	ssh -T $node "
+		cd /tmp;
+		rm -rf sccop;
+		mkdir sccop;
+		cd sccop;
+		scp -r ${work}/data .;
+		scp -r ${work}/libs .;
+		scp -r ${work}/src .
+		"
+done
+#launch sccop on host node
+ssh -T $host "
+	cd /tmp/sccop
+	python src/core/job_system.py
+	python src/main.py
+	scp data/log.sccop ${work}/output/.
+	scp data/poscar/optim_strus/POSCAR* ${work}/output/.
+	scp data/vasp_out/optim_strus/Energy.dat ${work}/output/.
+	scp -r data/poscar ${work}/output/.
+	"
+#delete temporary files
+rm data/host.dat
+rm data/nodes.dat
 ```
 
 ### Submit SCCOP Job
 
-If you install packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you need to make sure the `sccop` is under `/local` of GPU node, and you can `cd /local/sccop` to submit sccop job by:
+If you install packages in [prerequisites](#prerequisites), and finish the [server and path configuration](#server-and-absolute-path-configuration) and [initial search file](#define-a-customized-search-file), then you can `cd /path/sccop` to submit sccop job by:
 
 ```bash
-nohup python src/main.py >& log&
+# PBS job system
+qsub jobs.pbs
+# SLURM job system
+sbatch job.slurm
 ```
 
 After searching, you will get three important files.
 
-- `data/system.dat`: stores the searching process of SCCOP.
+- `data/log.sccop`: stores the searching process of SCCOP.
 - `data/poscars/optim_strus`: stores the POSCAR of searched structures.
-- `data/vasp_out/optim_strus/energy/Energy.dat`: stores the energy of searched structures.
-
-### Successful Example
-
-Here we give one successful example of SCCOP, you can find the log file `system.log` and `POSCAR` of searched structures in `examples/`.
-
-Initial sampling structures by symmetry in parallel.
-![](images/BC3_log_1.png)
-
-Update prediction model and optimize structures by ML-SA in parallel.
-![](images/BC3_log_2.png)
-
-Optimize structures by VASP in parallel.
-![](images/BC3_log_3.png)
 
 ## Data
 
@@ -176,7 +286,7 @@ We have applied SCCOP to systematic search 82 compositions of B-C-N system, and 
 
 ## Authors
 
-This software was primarily written by Chuannan Li and Hanpu Liang. 
+This software was developed by SCCOP group. 
 
 ## License
 

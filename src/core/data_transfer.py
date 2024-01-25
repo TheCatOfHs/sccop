@@ -1,121 +1,53 @@
 import os, sys
 import numpy as np
+import multiprocessing as pythonmp
 
 from pymatgen.core.structure import Structure
+from pymatgen.symmetry.groups import SpaceGroup
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.path import *
-from core.input import *
-from core.utils import ListRWTools, system_echo
+from core.log_print import *
+from core.neighbors import Neighbors
+from core.cluster import AtomManipulate
 
 
-class Transfer(ListRWTools):
-    #transfer data in different form
-    def __init__(self, nbr=12, dmin=0, dmax=8, step=0.2, var=0.2):
-        self.nbr = nbr
-        self.var = var
-        self.dmax = dmax
-        self.filter = np.arange(dmin, dmax+step, step)
+class Transfer(Neighbors, AtomManipulate):
+    #transfer data to structure object or input of GNN
+    def __init__(self):
+        Neighbors.__init__(self)
     
-    def get_atom_fea(self, atom_type, elem_embed):
+    def get_gnn_input_general(self, atom_pos, atom_type, elem_embed,
+                              ratio, sg, latt_vec, grid_coords):
         """
-        initialize atom feature vectors
-
+        get input of GNN model
+        
         Parameters
         ----------
+        atom_pos [int, 1d]: position of atoms
         atom_type [int, 1d]: type of atoms
         elem_embed [int, 2d, np]: embedding of elements
-        
-        Returns
-        ----------
-        atom_fea [int, 2d, np]: atom feature vectors
-        """
-        atom_fea = elem_embed[atom_type]
-        return atom_fea
-    
-    def get_nbr_fea(self, atom_pos, ratio, grid_idx, grid_dis):
-        """
-        neighbor bond features and index are cutoff by 12 atoms
-        
-        Parameters
-        ----------
-        atom_pos [int, 1d]: position of atoms
         ratio [float, 0d]: grid ratio
-        grid_idx [int, 2d, np]: neighbor index of grid
-        grid_dis [float, 2d, np]: neighbor distance of grid
+        sg [int, 0d]: space group number
+        latt_vec [float, 2d, np]: lattice vector
+        grid_coords [float, 2d, np]: fraction coordinates of grid
         
         Returns
         ----------
-        nbr_fea [float, 3d, np]: neighbor feature of atoms
-        nbr_fea_idx [int, 2d, np]: neighbor index of atoms
+        atom_fea [int, 2d, np]: atom feature
+        nbr_fea [float, 3d, np]: neighbor feature
+        nbr_idx [float, 2d, np]: neighbor index
         """
-        #get index and distance of points
-        atom_pos = np.array(atom_pos)
-        point_idx = grid_idx[atom_pos]
-        point_dis = grid_dis[atom_pos]
-        point_dis *= ratio
-        #initialize neighbor index and distance
-        min_atom_num = len(atom_pos)
-        nbr_idx = np.zeros((min_atom_num, self.nbr))
-        nbr_dis = np.zeros((min_atom_num, self.nbr))
-        for i, point in enumerate(point_idx):
-            #find nearest atoms
-            atom_idx = np.where(point==atom_pos[:, None])[-1]
-            order = np.argsort(atom_idx)
-            #get neighbor index and distance
-            if len(order) < self.nbr:
-                atom_idx = atom_idx[order]
-                lack_num = self.nbr - len(order)
-                nearest_atom = point_idx[i, atom_idx[0]]
-                #fill with nearest atom within cutoff
-                nbr_idx[i] = np.concatenate((point_idx[i, atom_idx], [nearest_atom]*lack_num))
-                nbr_dis[i] = np.concatenate((point_dis[i, atom_idx], [self.dmax+1]*lack_num))
-            else:
-                order = order[:self.nbr]
-                atom_idx = atom_idx[order]
-                nbr_idx[i] = point_idx[i, atom_idx]
-                nbr_dis[i] = point_dis[i, atom_idx]
-        #get bond features
-        nbr_fea = self.expand(nbr_dis)
-        nbr_fea_idx = self.idx_transfer(atom_pos, nbr_idx)
-        return nbr_fea, nbr_fea_idx
+        #get atom features
+        atom_fea = self.get_atom_fea(atom_type, elem_embed)
+        #get bond features and neighbor index
+        nbr_fea, nbr_idx = \
+            self.get_nbr_fea_general(atom_pos, ratio, sg, latt_vec, grid_coords)
+        return atom_fea, nbr_fea, nbr_idx
     
-    def idx_transfer(self, atom_pos, nbr_idx):
+    def get_gnn_input_template(self, atom_pos, atom_type, elem_embed,
+                               ratio, grid_idx, grid_dis):
         """
-        make nbr_idx consistent with nbr_dis
-    
-        Parameters
-        ----------
-        atom_pos [int, 1d]: position of atoms
-        nbr_idx [int, 2d, np]: near index of atoms
-        
-        Returns
-        ----------
-        nbr_idx [int, 2d, np]: index start from 0
-        """
-        for i, idx in enumerate(atom_pos):
-            nbr_idx[nbr_idx==idx] = i
-        return nbr_idx
-    
-    def expand(self, distances):
-        """
-        near distance expanded in gaussian feature space
-        
-        Parameters
-        ----------
-        distances [float, 2d, np]: distance of near neighbors
-        
-        Returns
-        ----------
-        nbr_fea [float, 3d, np]: gaussian feature vector
-        """
-        return np.exp(-(distances[:, :, np.newaxis] - self.filter)**2 /
-                      self.var**2)
-
-    def get_ppm_input(self, atom_pos, atom_type, elem_embed,
-                      ratio, grid_idx, grid_dis):
-        """
-        get input of property prediction model
+        get input of GNN model
         
         Parameters
         ----------
@@ -130,61 +62,151 @@ class Transfer(ListRWTools):
         ----------
         atom_fea [int, 2d, np]: atom feature
         nbr_fea [float, 3d, np]: neighbor feature
-        nbr_fea_idx [float, 2d, np]: neighbor index
+        nbr_idx [float, 2d, np]: neighbor index
         """
         #get atom features
         atom_fea = self.get_atom_fea(atom_type, elem_embed)
         #get bond features and neighbor index
-        nbr_fea, nbr_fea_idx = \
-            self.get_nbr_fea(atom_pos, ratio, grid_idx, grid_dis)
-        return atom_fea, nbr_fea, nbr_fea_idx
-        
-    def get_stru(self, atom_pos, atom_type, latt_vec, ratio, grid_coords, sg, add_thickness=False):
+        nbr_fea, nbr_idx = \
+            self.get_nbr_fea_template(atom_pos, ratio, grid_idx, grid_dis)
+        return atom_fea, nbr_fea, nbr_idx
+    
+    def get_gnn_input_from_stru(self, stru, elem_embed, type='structure'):
         """
-        get structure object in pymatgen
+        get input of GNN from structure
         
         Parameters
         ----------
-        atom_pos [int, 1d]: position of atoms
-        atom_type [int, 1d]: type of atoms
-        latt_vec [float, 2d, np]: lattice vector
-        ratio [float, 0d]: grid ratio
-        grid_coords [float, 2d, np]: fraction coordinates of grid
-        sg [int, 0d]: space group number
-        add_thickness [bool, 0d]: whether get puckered structure
+        stru [obj/str, 0d]: structure object or path of POSCAR
+        elem_embed [int, 2d, np]: embedding of atoms
+        type [str, 0d]: type of structure
         
         Returns
         ----------
-        stru [obj, 0d]: structure object in pymatgen
+        atom_fea [int, 2d, np]: feature of atoms
+        nbr_fea [float, 3d, np]: distance of neighbors 
+        nbr_idx [int, 2d, np]: index of neighbors
         """
-        if dimension == 2:
-            latt = latt_vec*[[ratio], [ratio], [1]]
-        else:
-            latt = latt_vec*ratio
-        coords = grid_coords[atom_pos]
-        #whether get puckered structure
-        if add_thickness:
-            atom_num = len(atom_pos)
-            frac_thick = thickness/vacuum_space
-            delta_thick = np.random.normal(0, frac_thick, atom_num)
-            delta_thick = [i if i < frac_thick else frac_thick for i in delta_thick]
-            delta_thick = [i if -frac_thick < i else -frac_thick for i in delta_thick]
-            disturb = [[0, 0, i] for i in delta_thick]
-            #disturb atoms in z direction
-            disturb_types, disturb_coords = [], []
-            for i in range(atom_num):
-                stru = Structure.from_spacegroup(sg, latt, [atom_type[i]], [coords[i]])
-                equal_coords = stru.frac_coords + disturb[i]
-                disturb_coords += equal_coords.tolist()
-                disturb_types += [atom_type[i] for _ in range(len(equal_coords))]
-            stru = Structure(latt, disturb_types, disturb_coords)
-        else:
-            stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
-        return stru
+        if type == 'structure':
+            pass
+        elif type == 'POSCAR':
+            stru = Structure.from_file(stru)
+        atom_type = np.array(stru.atomic_numbers)
+        nbr_idx, nbr_dis = self.get_nbr_stru(stru)
+        #get atom and bond features
+        nbr_fea = self.expand(nbr_dis)
+        atom_fea = self.get_atom_fea(atom_type, elem_embed)
+        return atom_fea, nbr_fea, nbr_idx
     
-    def get_ppm_input_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group):
+    def get_gnn_input_from_stru_batch(self, strus, type='structure'):
         """
-        get input of ppm under same grid
+        get input of GNN in batch
+        
+        Parameters
+        ----------
+        strus [obj, 1d]: structure object
+        type [str, 0d]: type of structure
+
+        Returns
+        ----------
+        atom_fea_bh [float, 3d]: batch atom feature
+        nbr_fea_bh [float, 4d]: batch bond feature
+        nbr_idx_bh [int, 3d]: batch neighbor index
+        """
+        elem_embed = self.import_data('elem')
+        atom_fea_bh, nbr_fea_bh, nbr_idx_bh = [], [], []
+        for stru in strus:
+            atom_fea, nbr_fea, nbr_idx = self.get_gnn_input_from_stru(stru, elem_embed)
+            atom_fea_bh.append(atom_fea)
+            nbr_fea_bh.append(nbr_fea)
+            nbr_idx_bh.append(nbr_idx)
+        return atom_fea_bh, nbr_fea_bh, nbr_idx_bh
+    
+    def get_gnn_input_from_stru_batch_parallel(self, strus, type='structure', limit=0):
+        """
+        get input of GNN in batch
+        
+        Parameters
+        ----------
+        strus [obj, 1d]: structure object
+        type [str, 0d]: type of structure
+        limit [int, 0d]: limit of core number
+        
+        Returns
+        ----------
+        atom_fea_bh [float, 3d]: batch atom feature
+        nbr_fea_bh [float, 4d]: batch bond feature
+        nbr_idx_bh [int, 3d]: batch neighbor index
+        """
+        elem_embed = self.import_data('elem')
+        atom_fea_bh, nbr_fea_bh, nbr_idx_bh = [], [], []
+        #multi-cores
+        args_list = []
+        if limit == 0:
+            cores = pythonmp.cpu_count()
+        else:
+            cores = min(limit, pythonmp.cpu_count())
+        with pythonmp.get_context('fork').Pool(processes=cores) as pool:
+            for stru in strus:
+                args_list.append((stru, elem_embed, type))
+            #put atoms into grid with symmetry constrain
+            jobs = [pool.apply_async(self.get_gnn_input_from_stru, args) for args in args_list]
+            pool.close()
+            pool.join()
+            #get results
+            jobs_pool = [p.get() for p in jobs]
+            for atom_fea, nbr_fea, nbr_idx in jobs_pool:
+                atom_fea_bh.append(atom_fea)
+                nbr_fea_bh.append(nbr_fea)
+                nbr_idx_bh.append(nbr_idx)
+        pool.close()
+        del pool
+        return atom_fea_bh, nbr_fea_bh, nbr_idx_bh
+    
+    def get_gnn_input_seq_general(self, atom_pos, atom_type, grid, grid_ratio, space_group,
+                                  latt_vec, elem_embed):
+        """
+        get input of GNN under same grid
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid [int, 0d]: name of grid
+        grid_ratio [float, 1d]: ratio of grids
+        space_group [int, 1d]: space group number
+        latt_vec [float, 2d, np]: lattice vector
+        elem_embed [int, 2d, np]: embedding of elements
+        
+        Returns
+        ----------
+        atom_fea_seq [float, 3d]: atom feature
+        nbr_fea_seq [float, 4d]: bond feature
+        nbr_idx_seq [int, 3d]: near index
+        """
+        last_sg = space_group[0]
+        atom_fea_seq, nbr_fea_seq, nbr_idx_seq = [], [], []
+        #transform pos, type into input of gnn for different space groups
+        grid_coords = self.import_data('frac', grid, last_sg)
+        atom_fea, nbr_fea, nbr_idx = \
+            self.get_gnn_input_general(atom_pos[0], atom_type[0], elem_embed,
+                                       grid_ratio[0], last_sg, latt_vec, grid_coords)
+        for i, sg in enumerate(space_group):
+            #update fraction coordinates
+            if sg != last_sg:
+                grid_coords = self.import_data('frac', grid, sg)
+                last_sg = sg
+            atom_fea, nbr_fea, nbr_idx = \
+                self.get_gnn_input_general(atom_pos[i], atom_type[i], elem_embed, 
+                                           grid_ratio[i], sg, latt_vec, grid_coords)
+            atom_fea_seq.append(atom_fea)
+            nbr_fea_seq.append(nbr_fea)
+            nbr_idx_seq.append(nbr_idx)
+        return atom_fea_seq, nbr_fea_seq, nbr_idx_seq
+    
+    def get_gnn_input_seq_template(self, atom_pos, atom_type, grid, grid_ratio, space_group):
+        """
+        get input of GNN under same grid
         
         Parameters
         ----------
@@ -200,32 +222,31 @@ class Transfer(ListRWTools):
         nbr_fea_seq [float, 4d]: bond feature
         nbr_fea_idx_seq [int, 3d]: near index
         """
-        #import element embeddings and neighbor in all grid
         last_sg = space_group[0]
-        elem_embed = self.import_data('elem', grid, last_sg)
-        grid_idx, grid_dis = self.import_data('grid', grid, last_sg)
         atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = [], [], []
-        #transform pos, type into input of ppm under different space groups
+        #transform pos, type into input of gnn under different space groups
+        elem_embed = self.import_data('elem')
+        grid_idx, grid_dis = self.import_data('grid', grid, last_sg)
         for i, sg in enumerate(space_group):
             if sg == last_sg:
                 atom_fea, nbr_fea, nbr_fea_idx = \
-                    self.get_ppm_input(atom_pos[i], atom_type[i], elem_embed,
-                                       grid_ratio[i], grid_idx, grid_dis)
+                    self.get_gnn_input_template(atom_pos[i], atom_type[i], elem_embed,
+                                                grid_ratio[i], grid_idx, grid_dis)
                 atom_fea_seq.append(atom_fea)
                 nbr_fea_seq.append(nbr_fea)
                 nbr_fea_idx_seq.append(nbr_fea_idx)
             else:
                 grid_idx, grid_dis = self.import_data('grid', grid, sg)
                 atom_fea, nbr_fea, nbr_fea_idx = \
-                    self.get_ppm_input(atom_pos[i], atom_type[i], elem_embed,
-                                       grid_ratio[i], grid_idx, grid_dis)
+                    self.get_gnn_input_template(atom_pos[i], atom_type[i], elem_embed,
+                                                grid_ratio[i], grid_idx, grid_dis)
                 atom_fea_seq.append(atom_fea)
                 nbr_fea_seq.append(nbr_fea)
                 nbr_fea_idx_seq.append(nbr_fea_idx)
                 last_sg = sg
         return atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq
     
-    def get_stru_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group, add_thickness=False):
+    def get_stru_seq(self, atom_pos, atom_type, grid, grid_ratio, space_group, angles, thicks, latt_vec):
         """
         get strucutre object in same lattice
         
@@ -236,70 +257,148 @@ class Transfer(ListRWTools):
         grid [int, 0d]: grid number 
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
-        add_thickness [bool, 0d]: whether get puckered structure
+        angles [int, 2d]: cluster rotation angles
+        thicks [int, 2d]: atom displacement in z-direction
+        latt_vec [float, 2d, np]: lattice vector
         
         Returns
         ----------
         stru_seq [obj, 1d]: structure object in pymatgen
         """
+        #import lattice and grid
         last_sg = space_group[0]
-        latt_vec = self.import_data('latt', grid, last_sg)
         grid_coords = self.import_data('frac', grid, last_sg)
+        cluster_angles, property_dict = [], []
+        if Cluster_Search:
+            cluster_angles = self.import_data('angles')
+            property_dict = self.import_data('property') 
+        #get structure objects for different space groups
         stru_seq = []
-        #get structure objects under different space groups
         for i, sg in enumerate(space_group):
             if sg == last_sg:
-                stru = self.get_stru(atom_pos[i], atom_type[i],
-                                     latt_vec, grid_ratio[i], grid_coords, sg, add_thickness)
+                stru = self.get_stru(atom_pos[i], atom_type[i], latt_vec, grid_ratio[i],
+                                     grid_coords, sg, cluster_angles, property_dict, angles[i], thicks[i])
                 stru_seq.append(stru)
             else:
                 grid_coords = self.import_data('frac', grid, sg)
-                stru = self.get_stru(atom_pos[i], atom_type[i],
-                                     latt_vec, grid_ratio[i], grid_coords, sg, add_thickness)
+                stru = self.get_stru(atom_pos[i], atom_type[i], latt_vec, grid_ratio[i],
+                                     grid_coords, sg, cluster_angles, property_dict, angles[i], thicks[i])
                 stru_seq.append(stru)
                 last_sg = sg
         return stru_seq
-    
-    def import_data(self, task, grid, sg):
+
+    def get_stru(self, atom_pos, atom_type, latt_vec, ratio, grid_coords, sg, 
+                 cluster_angles, property_dict, angle, thick):
         """
-        import data according to task
+        get structure object in pymatgen
         
         Parameters
         ----------
-        task [str, 0d]: name of import data
-        grid [int, 0d]: name of grid
+        atom_pos [int, 1d]: position of atoms
+        atom_type [int, 1d]: type of atoms
+        latt_vec [float, 2d, np]: lattice vector
+        ratio [float, 0d]: grid ratio
+        grid_coords [float, 2d, np]: fraction coordinates of grid
         sg [int, 0d]: space group number
+        cluster_angles [float, 2d, np]: cluster rotations
+        property_dict [dict, 2d, str:list]: property dictionary for new atoms
+        angle [int, 1d]: cluster rotation angles
+        thick [int, 1d]: atom displacement in z-direction
+        
+        Returns
+        ----------
+        stru [obj, 0d]: structure object in pymatgen
         """
-        head = f'{grid_path}/{grid:03.0f}'
-        #import element embedding file
-        if task == 'elem':
-            elem_embed = self.import_list2d(
-                atom_init_file, int, numpy=True)
-            return elem_embed
-        #import grid index and distance file
-        if task == 'grid':
-            grid_idx = self.import_list2d(
-                f'{head}_nbr_idx_{sg}.bin', int, binary=True)
-            grid_dis =  self.import_list2d(
-                f'{head}_nbr_dis_{sg}.bin', float, binary=True)
-            return grid_idx, grid_dis
-        #import mapping relationship
-        if task == 'mapping':
-            mapping = self.import_list2d(
-                f'{head}_mapping_{sg}.bin', int, binary=True)
-            return mapping
-        #import lattice vector
-        if task == 'latt':
-            latt_vec = self.import_list2d(
-                f'{head}_latt_vec.bin', float, binary=True)
-            return latt_vec
-        #import fraction coordinates of grid
-        if task == 'frac':
-            grid_coords = self.import_list2d(
-                f'{head}_frac_coords_{sg}.bin', float, binary=True)
-            return grid_coords
+        if Dimension == 2:
+            latt = latt_vec*[[ratio], [ratio], [1]]
+        else:
+            latt = latt_vec*ratio
+        coords = grid_coords[atom_pos]
+        #whether get puckered structure
+        if Cluster_Search:
+            stru = self.generate_stru_cluster(sg, latt, atom_type, coords,
+                                              cluster_angles, property_dict, angle, thick)
+        elif General_Search and Dimension == 2 and Thickness > 0:
+            stru = self.generate_stru_puckered(sg, latt, atom_type, coords, thick)
+        else:
+            stru = Structure.from_spacegroup(sg, latt, atom_type, coords)
+        return stru
     
+    def generate_stru_cluster(self, sg, latt, atom_type, coords, cluster_angles, property_dict, angle, thick):
+        """
+        generate cluster structure object
+        
+        Parameters
+        ----------
+        sg [int, 0d]: space group number
+        latt [float, 2d, np]: lattice vector
+        atom_type [int, 1d]: type of atoms
+        coords [float, 2d, np]: fraction coordinates of atoms
+        cluster_angles [float, 2d, np]: cluster rotations
+        property_dict [dict, 2d, str:list]: property dictionary for new atoms
+        angle [int, 1d]: cluster rotation angles
+        thick [int, 1d]: atom displacement in z-direction
+        
+        Returns
+        ----------
+        stru [obj, 0d]: structure object in pymatgen
+        """
+        frac_thick = Thickness/Vacuum_Space
+        all_coords, all_types = [], []
+        spg = SpaceGroup.from_int_number(sg)
+        for i, atom in enumerate(atom_type):
+            equal_coords = spg.get_orbit(coords[i])
+            carte_coords = np.dot(equal_coords, latt)
+            equal_num = len(equal_coords)
+            if atom > 0:
+                equal_coords = carte_coords.tolist()
+                all_coords += equal_coords
+                all_types += [atom for _ in range(equal_num)]
+            #replace atom with cluster
+            else:
+                properties = property_dict[str(atom)]
+                cluster_coords = properties['coords']
+                move_z = [0, 0, frac_thick*thick[i]/Z_Layers]
+                alpha, beta, gamma = cluster_angles[angle[i]]
+                cluster_coords = self.rotate_atom(alpha, beta, gamma, cluster_coords)
+                for center in carte_coords:
+                    tmp_coords = self.move_atom(center+move_z, cluster_coords)
+                    all_coords += tmp_coords
+                    all_types += properties['types']
+        stru = Structure(latt, all_types, all_coords, coords_are_cartesian=True, to_unit_cell=True)
+        return stru
     
+    def generate_stru_puckered(self, sg, latt, atom_type, coords, thick):
+        """
+        generate puckered structure object
+        
+        Parameters
+        ----------
+        sg [int, 0d]: space group number
+        latt [float, 2d, np]: lattice vector
+        atom_type [int, 1d]: type of atoms
+        coords [float, 2d, np]: fraction coordinates of atoms
+        thick [int, 1d]: atom displacement in z-direction
+        
+        Returns
+        ----------
+        stru [obj, 0d]: structure object in pymatgen
+        """
+        atom_num = len(atom_type)
+        frac_thick = Thickness/Vacuum_Space
+        disturb = [[0, 0, .5+frac_thick*i/Z_Layers] for i in thick]
+        #disturb atoms in z direction
+        disturb_types, disturb_coords = [], []
+        spg = SpaceGroup.from_int_number(sg)
+        for i in range(atom_num):
+            equal_coords = spg.get_orbit(coords[i])
+            disturb_equal_coords = np.array(equal_coords) + disturb[i]
+            disturb_coords += disturb_equal_coords.tolist()
+            disturb_types += [atom_type[i] for _ in range(len(equal_coords))]
+        stru = Structure(latt, disturb_types, disturb_coords)
+        return stru
+    
+
 class MultiGridTransfer(Transfer):
     #positoin, type, symmetry should be sorted in grid and sg
     def __init__(self):
@@ -319,15 +418,53 @@ class MultiGridTransfer(Transfer):
         idx [int, 1d, np]: index of grid-sg order
         """
         idx = np.arange(len(sg))
-        grid_sg = np.stack((idx, grid, sg), axis=1).tolist()
-        order = sorted(grid_sg, key=lambda x:(x[1], x[2]))
-        idx = np.array(order)[:,0]
+        tmp = np.stack((idx, grid, sg), axis=1).tolist()
+        order = sorted(tmp, key=lambda x:(x[1], x[2]))
+        idx = np.array(order)[:, 0]
         return idx
     
-    def get_ppm_input_bh(self, atom_pos, atom_type,
-                         grid_name, grid_ratio, space_group):
+    def sort_by_sg_energy(self, sg, energys):
         """
-        get input of ppm in different grids
+        sort pos, type, symm in order of space group and energy
+        
+        Parameters
+        ----------
+        sg [int, 1d]: space group number 
+        energys [float, 1d]: structure energys
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of grid-sg order
+        """
+        idx = np.arange(len(sg))
+        tmp = np.stack((idx, sg, energys), axis=1).tolist()
+        order = sorted(tmp, key=lambda x:(x[1], x[2]))
+        idx = np.array(order)[:, 0]
+        return np.array(idx, dtype=int)
+    
+    def sort_by_grid_sg_energy(self, grid, sg, energys):
+        """
+        sort pos, type, symm in order of grid and space group and energy
+        
+        Parameters
+        ----------
+        grid [int, 1d]: name of grid
+        sg [int, 1d]: space group number 
+        energys [float, 1d]: structure energys
+        
+        Returns
+        ----------
+        idx [int, 1d, np]: index of grid-sg order
+        """
+        idx = np.arange(len(sg))
+        tmp = np.stack((idx, grid, sg, energys), axis=1).tolist()
+        order = sorted(tmp, key=lambda x:(x[1], x[2], x[3]))
+        idx = np.array(order)[:, 0]
+        return np.array(idx, dtype=int)
+    
+    def get_gnn_input_batch_general(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, limit=20):
+        """
+        get input of GNN in different grids in multi-cores
         
         Parameters
         ----------
@@ -336,6 +473,99 @@ class MultiGridTransfer(Transfer):
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
+        limit [int, 0d]: limit of cores
+        
+        Returns
+        ----------
+        atom_fea_bh [float, 3d]: batch atom feature
+        nbr_fea_bh [float, 4d]: batch bond feature
+        nbr_idx_bh [int, 3d]: batch near index
+        """
+        #multi-cores
+        elem_embed = self.import_data('elem')
+        cores = max(1, min(limit, int(.5*pythonmp.cpu_count())))
+        with pythonmp.get_context('fork').Pool(processes=cores) as pool:
+            #initialize
+            last_grid = grid_name[0]
+            i, atom_fea_bh, nbr_fea_bh, nbr_idx_bh = 0, [], [], []
+            #get input of gnn under different grids
+            args_list = []
+            for j, grid in enumerate(grid_name):
+                if not grid == last_grid:
+                    #divide jobs
+                    latt_vec = self.import_data('latt', grid=last_grid)
+                    args_list = self.divide_jobs_gnn_general(args_list, i, j, atom_pos, atom_type,
+                                                             last_grid, grid_ratio, space_group, latt_vec, elem_embed)
+                    last_grid = grid
+                    i = j
+            #divide jobs
+            end = len(grid_name)
+            latt_vec = self.import_data('latt', grid=last_grid)
+            args_list = self.divide_jobs_gnn_general(args_list, i, end, atom_pos, atom_type,
+                                                     last_grid, grid_ratio, space_group, latt_vec, elem_embed)
+            #put atoms into grid with symmetry constrain
+            jobs = [pool.apply_async(self.get_gnn_input_seq_general, args) for args in args_list]
+            pool.close()
+            pool.join()
+            #get results
+            jobs_pool = [p.get() for p in jobs]
+            for atom_fea_seq, nbr_fea_seq, nbr_idx_seq in jobs_pool:
+                atom_fea_bh += atom_fea_seq
+                nbr_fea_bh += nbr_fea_seq
+                nbr_idx_bh += nbr_idx_seq
+        pool.close()
+        del pool
+        return atom_fea_bh, nbr_fea_bh, nbr_idx_bh
+    
+    def divide_jobs_gnn_general(self, args_list, start, end,
+                                atom_pos, atom_type, grid, grid_ratio, space_group, 
+                                latt_vec, elem_embed, limit=20):
+        """
+        divide parallel transfer jobs into smaller size for each core
+
+        Parameters
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        start [int, 0d]: start index
+        end [int, 0d]: end index
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid [int, 1d]: grid name
+        grid_ratio [int, 1d]: grid ratio
+        space_group [int, 1d]: space group
+        latt_vec [float, 2d, np]: lattice vector
+        elem_embed [int, 2d, np]: embedding of elements
+        limit [int, 0d]: number of structure per job
+        
+        Returns
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        """
+        a = start
+        counter = 0
+        for b in range(start, end):
+            counter += 1
+            if counter > limit:
+                args = (atom_pos[a:b], atom_type[a:b], grid, grid_ratio[a:b], space_group[a:b], latt_vec, elem_embed)
+                args_list.append(args)
+                a = b
+                counter = 0
+        args = (atom_pos[a:end], atom_type[a:end], grid, grid_ratio[a:end], space_group[a:end], latt_vec, elem_embed)
+        args_list.append(args)
+        return args_list
+    
+    def get_gnn_input_batch_template(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, limit=20):
+        """
+        get input of GNN in different grids in multi-cores
+        
+        Parameters
+        ----------
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid_name [int, 1d]: name of grids
+        grid_ratio [float, 1d]: ratio of grids
+        space_group [int, 1d]: space group number
+        limit [int, 0d]: limit of cores
         
         Returns
         ----------
@@ -343,29 +573,74 @@ class MultiGridTransfer(Transfer):
         nbr_fea_bh [float, 4d]: batch bond feature
         nbr_fea_idx_bh [int, 3d]: batch near index
         """
-        #initialize
-        last_grid = grid_name[0]
-        i, atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh = 0, [], [], []
-        #get input of ppm under different grids
-        for j, grid in enumerate(grid_name):
-            if not grid == last_grid:
-                atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = \
-                    self.get_ppm_input_seq(atom_pos[i:j], atom_type[i:j],
-                                           last_grid, grid_ratio[i:j], space_group[i:j])
+        #multi-cores
+        cores = min(limit, pythonmp.cpu_count())
+        with pythonmp.get_context('fork').Pool(processes=cores) as pool:
+            #initialize
+            last_grid = grid_name[0]
+            i, atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh = 0, [], [], []
+            #get input of gnn under different grids
+            args_list = []
+            for j, grid in enumerate(grid_name):
+                if not grid == last_grid:
+                    #divide jobs
+                    args_list = self.divide_jobs_gnn_template(args_list, i, j, atom_pos, atom_type,
+                                                              last_grid, grid_ratio, space_group)
+                    last_grid = grid
+                    i = j
+            #divide jobs
+            end = len(grid_name)
+            args_list = self.divide_jobs_gnn_template(args_list, i, end, atom_pos, atom_type,
+                                                      last_grid, grid_ratio, space_group)
+            #put atoms into grid with symmetry constrain
+            jobs = [pool.apply_async(self.get_gnn_input_seq_template, args) for args in args_list]
+            pool.close()
+            pool.join()
+            #get results
+            jobs_pool = [p.get() for p in jobs]
+            for atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq in jobs_pool:
                 atom_fea_bh += atom_fea_seq
                 nbr_fea_bh += nbr_fea_seq
                 nbr_fea_idx_bh += nbr_fea_idx_seq
-                last_grid = grid
-                i = j
-        atom_fea_seq, nbr_fea_seq, nbr_fea_idx_seq = \
-            self.get_ppm_input_seq(atom_pos[i:], atom_type[i:],
-                                   grid, grid_ratio[i:], space_group[i:])
-        atom_fea_bh += atom_fea_seq
-        nbr_fea_bh += nbr_fea_seq
-        nbr_fea_idx_bh += nbr_fea_idx_seq
+        pool.close()
+        del pool
         return atom_fea_bh, nbr_fea_bh, nbr_fea_idx_bh
     
-    def get_stru_bh(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, add_thickness=False):
+    def divide_jobs_gnn_template(self, args_list, start, end,
+                                 atom_pos, atom_type, grid, grid_ratio, space_group, limit=20):
+        """
+        divide parallel transfer jobs into smaller size for each core
+
+        Parameters
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        start [int, 0d]: start index
+        end [int, 0d]: end index
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid [int, 1d]: grid name
+        grid_ratio [int, 1d]: grid ratio
+        space_group [int, 1d]: space group
+        limit [int, 0d]: number of structure per job
+
+        Returns
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        """
+        a = start
+        counter = 0
+        for b in range(start, end):
+            counter += 1
+            if counter > limit:
+                args = (atom_pos[a:b], atom_type[a:b], grid, grid_ratio[a:b], space_group[a:b])
+                args_list.append(args)
+                a = b
+                counter = 0
+        args = (atom_pos[a:end], atom_type[a:end], grid, grid_ratio[a:end], space_group[a:end])
+        args_list.append(args)
+        return args_list
+    
+    def get_stru_batch(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, angles, thicks):
         """
         get strucutre object in different grids
         
@@ -376,7 +651,8 @@ class MultiGridTransfer(Transfer):
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
-        add_thickness [bool, 0d]: whether get puckered structure
+        angles [int, 2d]: cluster rotation angles
+        thicks [int, 2d]: atom displacement in z-direction
         
         Returns
         ----------
@@ -387,331 +663,110 @@ class MultiGridTransfer(Transfer):
         #get structure object in different grids
         for j, grid in enumerate(grid_name):
             if not last_grid == grid:
+                latt_vec = self.import_data('latt', grid=last_grid)
                 stru_seq = self.get_stru_seq(atom_pos[i:j], atom_type[i:j], 
-                                             last_grid, grid_ratio[i:j], space_group[i:j], add_thickness)
+                                             last_grid, grid_ratio[i:j], space_group[i:j], angles[i:j], thicks[i:j], latt_vec)
                 stru_bh += stru_seq
                 last_grid = grid
                 i = j
+        latt_vec = self.import_data('latt', grid=last_grid)
         stru_seq = self.get_stru_seq(atom_pos[i:], atom_type[i:],
-                                     grid, grid_ratio[i:], space_group[i:], add_thickness)
+                                     last_grid, grid_ratio[i:], space_group[i:], angles[i:], thicks[i:], latt_vec)
         stru_bh += stru_seq
         return stru_bh
-
-
-class DeleteDuplicates(MultiGridTransfer):
-    #delete same structures
-    def __init__(self):
-        MultiGridTransfer.__init__(self)
     
-    def delete_duplicates(self, atom_pos, atom_type,
-                          grid_name, grid_ratio, space_group):
+    def get_stru_batch_parallel(self, atom_pos, atom_type, grid_name, grid_ratio, space_group, angles, thicks, limit=0):
         """
-        delete same structures by pos, type, symm, grid
+        get strucutre object in different grids
         
         Parameters
         ----------
         atom_pos [int, 2d]: position of atoms
         atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        grid_ratio [float, 1d]: ratio of grids
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of unique samples 
-        """
-        #convert to string list
-        pos_str = self.list2d_to_str(atom_pos, '{0}')
-        type_str = self.list2d_to_str(atom_type, '{0}')
-        grid_str = self.list1d_to_str(grid_name, '{0}')
-        ratio_str = self.list1d_to_str(grid_ratio, '{0:4.1f}')
-        group_str = self.list1d_to_str(space_group, '{0}')
-        label = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                 zip(pos_str, type_str, grid_str, ratio_str, group_str)]
-        #delete same structure
-        _, idx = np.unique(label, return_index=True)
-        return idx
-    
-    def delete_duplicates_pymatgen(self, atom_pos, atom_type, 
-                                   grid_name, grid_ratio, space_group):
-        """
-        delete same structures
-        
-        Parameters
-        -----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        grid_ratio [float, 1d]: ratio of grids
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different structures
-        """
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
-        strus_num = len(strus)
-        idx = []
-        #compare structure by pymatgen
-        for i in range(strus_num):
-            stru_1 = strus[i]
-            for j in range(i+1, strus_num):
-                stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    idx.append(i)
-                    break
-        all_idx = np.arange(strus_num)
-        idx = np.setdiff1d(all_idx, idx)
-        return idx
-    
-    def delete_duplicates_pymatgen_energy(self, atom_pos, atom_type, 
-                                          grid_name, grid_ratio, space_group, energys):
-        """
-        delete same structures
-        
-        Parameters
-        -----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        grid_ratio [float, 1d]: ratio of grids
-        space_group [int, 1d]: space group number
-        energys [float, 0d]: structure energy
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different structures
-        """
-        strus = self.get_stru_bh(atom_pos, atom_type, grid_name, grid_ratio, space_group)
-        strus_num = len(strus)
-        idx = []
-        #compare structure by pymatgen
-        for i in range(strus_num):
-            stru_1 = strus[i]
-            for j in range(i+1, strus_num):
-                stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    if energys[i] < energys[j]:
-                        idx.append(j)
-                    else:
-                        idx.append(i)
-                    break
-        all_idx = np.arange(strus_num)
-        idx = np.unique(idx)
-        idx = np.setdiff1d(all_idx, idx)
-        return idx
-    
-    def delete_duplicates_sg_pymatgen(self, atom_pos, atom_type, 
-                                      grid_name, grid_ratio, space_group):
-        """
-        delete same structures in same space group
-        
-        Parameters
-        -----------
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        grid_name [int, 1d]: grid of atoms
-        grid_ratio [float, 1d]: ratio of grids
-        space_group [int, 1d]: space group number
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different structures
-        """
-        last_sg = space_group[0]
-        i, idx = 0, []
-        #delete in same space group
-        for j, sg in enumerate(space_group):
-            if not last_sg == sg:
-                unique_idx = self.delete_duplicates_pymatgen(atom_pos[i:j], atom_type[i:j], 
-                                                             grid_name[i:j], grid_ratio[i:j],
-                                                             space_group[i:j])
-                unique_idx = [i+k for k in unique_idx]
-                idx += unique_idx
-                last_sg = sg
-                i = j
-        unique_idx = self.delete_duplicates_pymatgen(atom_pos[i:], atom_type[i:],
-                                                     grid_name[i:], grid_ratio[i:],
-                                                     space_group[i:])
-        unique_idx = [i+k for k in unique_idx]
-        idx += unique_idx
-        return idx
-    
-    def delete_same_selected(self, pos_1, type_1, grid_1, ratio_1, sg_1,
-                             pos_2, type_2, grid_2, ratio_2, sg_2):
-        """
-        delete common structures of set1 and set2
-        return unique index of set1
-        
-        Parameters
-        ----------
-        pos_1 [int, 2d]: position of atoms in set1
-        type_1 [int, 2d]: type of atoms in set1
-        grid_1 [int, 1d]: name of grids in set1
-        ratio_1 [float, 1d]: ratio of grids in set1
-        sg_1 [int, 2d]: space group number in set1
-        pos_2 [int, 2d]: position of atoms in set2
-        type_2 [int, 2d]: type of atoms in set2
-        grid_2 [int, 1d]: name of grids in set2
-        ratio_2 [float, 1d]: ratio of grids in set2
-        sg_2 [int, 1d]: space group number in set2
-        
-        Returns
-        ----------
-        idx [int, 1d]: index of sample in set 1
-        """
-        #convert to string list
-        pos_str_1 = self.list2d_to_str(pos_1, '{0}')
-        type_str_1 = self.list2d_to_str(type_1, '{0}')
-        grid_str_1 = self.list1d_to_str(grid_1, '{0}')
-        ratio_str_1 = self.list1d_to_str(ratio_1, '{0:4.1f}')
-        sg_str_1 = self.list1d_to_str(sg_1, '{0}')
-        pos_str_2 = self.list2d_to_str(pos_2, '{0}')
-        type_str_2 = self.list2d_to_str(type_2, '{0}')
-        grid_str_2 = self.list1d_to_str(grid_2, '{0}')
-        ratio_str_2 = self.list1d_to_str(ratio_2, '{0:4.1f}')
-        sg_str_2 = self.list1d_to_str(sg_2, '{0}')
-        #find unique structures
-        array_1 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                   zip(pos_str_1, type_str_1, grid_str_1, ratio_str_1, sg_str_1)]
-        array_2 = [i+'-'+j+'-'+k+'-'+m+'-'+n for i, j, k, m, n in 
-                   zip(pos_str_2, type_str_2, grid_str_2, ratio_str_2, sg_str_2)]
-        array = np.concatenate((array_1, array_2))
-        _, idx, counts = np.unique(array, return_index=True, return_counts=True)
-        #delete structures same as training set
-        same = []
-        for i, repeat in enumerate(counts):
-            if repeat > 1:
-                same.append(i)
-        num = len(grid_1)
-        idx = np.delete(idx, same)
-        idx = [i for i in idx if i < num]
-        return idx
-    
-    def delete_same_selected_pymatgen(self, strus_1, strus_2):
-        """
-        delete common structures of set1 and set2 by pymatgen
-        return unique index of set1
-        
-        Parameters
-        ----------
-        strus_1 [obj, 1d]: structure objects in set1
-        strus_2 [obj, 1d]: structure objects in set2
-
-        Returns
-        ----------
-        idx [int, 1d]: index of sample in set 1
-        """
-        idx = []
-        for i, stru_1 in enumerate(strus_1):
-            for stru_2 in strus_2:
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    idx.append(i)
-                    break
-        all_idx = np.arange(len(strus_1))
-        idx = np.setdiff1d(all_idx, idx)
-        return idx
-    
-    def delete_same_poscars(self, path):
-        """
-        delete same structures
-        
-        Parameters
-        -----------
-        path [str, 0d]: path of poscars
-        """
-        poscars = sorted(os.listdir(path))
-        poscars_num = len(poscars)
-        same_poscars = []
-        for i in range(poscars_num):
-            stru_1 = Structure.from_file(f'{path}/{poscars[i]}')
-            for j in range(i+1, poscars_num):
-                stru_2 = Structure.from_file(f'{path}/{poscars[j]}')
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    same_poscars.append(poscars[i])
-                    break
-        for i in same_poscars:
-            os.remove(f'{path}/{i}')
-        same_poscars_num = len(same_poscars)
-        system_echo(f'Delete same structures: {same_poscars_num}')
-    
-    def delete_same_strus_energy(self, strus, energys):
-        """
-        delete same structures and retain structure with lower energy
-        
-        Parameters
-        ----------
-        strus [obj, 1d]: structure objects in pymatgen
-        energys [float, 1d]: corresponding energy
-        
-        Returns
-        ----------
-        idx [int, 1d, np]: index of different structures
-        """
-        strus_num = len(strus)
-        idx = []
-        #compare structure by pymatgen
-        for i in range(strus_num):
-            stru_1 = strus[i]
-            for j in range(i+1, strus_num):
-                stru_2 = strus[j]
-                same = stru_1.matches(stru_2, ltol=0.1, stol=0.15, angle_tol=5, 
-                                      primitive_cell=True, scale=False, 
-                                      attempt_supercell=False, allow_subset=False)
-                if same:
-                    if energys[i] < energys[j]:
-                        idx.append(j)
-                    else:
-                        idx.append(i)
-        all_idx = np.arange(strus_num)
-        idx = np.unique(idx)
-        idx = np.setdiff1d(all_idx, idx)
-        return idx
-    
-    def filter_samples(self, idx, atom_pos, atom_type, atom_symm, 
-                       grid_name, grid_ratio, space_group):
-        """
-        filter samples by index
-        
-        Parameters
-        ----------
-        idx [int, 1d]: index of select samples or binary mask
-        atom_pos [int, 2d]: position of atoms
-        atom_type [int, 2d]: type of atoms
-        atom_symm [int, 2d]: symmetry of atoms
         grid_name [int, 1d]: name of grids
         grid_ratio [float, 1d]: ratio of grids
         space_group [int, 1d]: space group number
+        angles [int, 2d]: cluster rotation angles
+        thicks [int, 2d]: atom displacement in z-direction
+        limit [int, 0d]: limit of core number
         
         Returns
         ----------
-        atom_pos [int, 2d]: position of atoms after constrain
-        atom_type [int, 2d]: type of atoms after constrain
-        atom_symm [int, 2d]: symmetry of atoms after constrain
-        grid_name [int, 1d]: name of grids after constrain
-        grid_ratio [float, 1d]: ratio of grids after constrain
-        space_group [int, 1d]: space group number after constrain
+        stru_bh [obj, 1d]: batch structure objects
         """
-        atom_pos = np.array(atom_pos, dtype=object)[idx].tolist()
-        atom_type = np.array(atom_type, dtype=object)[idx].tolist()
-        atom_symm = np.array(atom_symm, dtype=object)[idx].tolist()
-        grid_name = np.array(grid_name, dtype=object)[idx].tolist()
-        grid_ratio = np.array(grid_ratio, dtype=object)[idx].tolist()
-        space_group = np.array(space_group, dtype=object)[idx].tolist()
-        return atom_pos, atom_type, atom_symm, grid_name, grid_ratio, space_group
+        if limit == 0:
+            cores = pythonmp.cpu_count()
+        else:
+            cores = min(limit, pythonmp.cpu_count())
+        with pythonmp.get_context('fork').Pool(processes=cores) as pool:
+            #initialize
+            last_grid = grid_name[0]
+            i, stru_bh = 0, []
+            #get input of gnn under different grids
+            args_list = []
+            for j, grid in enumerate(grid_name):
+                if not grid == last_grid:
+                    #divide jobs
+                    latt_vec = self.import_data('latt', grid=last_grid)
+                    args_list = self.divide_jobs_stru_general(args_list, i, j, atom_pos, atom_type,
+                                                              last_grid, grid_ratio, space_group, angles, thicks, latt_vec)
+                    last_grid = grid
+                    i = j
+            #divide jobs
+            end = len(grid_name)
+            latt_vec = self.import_data('latt', grid=last_grid)
+            args_list = self.divide_jobs_stru_general(args_list, i, end, atom_pos, atom_type,
+                                                      last_grid, grid_ratio, space_group, angles, thicks, latt_vec)
+            #put atoms into grid with symmetry constrain
+            jobs = [pool.apply_async(self.get_stru_seq, args) for args in args_list]
+            pool.close()
+            pool.join()
+            #get results
+            jobs_pool = [p.get() for p in jobs]
+            for stru_seq in jobs_pool:
+                stru_bh += stru_seq
+        pool.close()
+        del pool
+        return stru_bh
+    
+    def divide_jobs_stru_general(self, args_list, start, end,
+                                 atom_pos, atom_type, grid, grid_ratio, space_group, angles, thicks,
+                                 latt_vec, limit=100):
+        """
+        divide parallel transfer jobs into smaller size for each core
 
+        Parameters
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        start [int, 0d]: start index
+        end [int, 0d]: end index
+        atom_pos [int, 2d]: position of atoms
+        atom_type [int, 2d]: type of atoms
+        grid [int, 1d]: grid name
+        grid_ratio [int, 1d]: grid ratio
+        space_group [int, 1d]: space group
+        angles [int, 2d]: cluster rotation angles
+        thicks [int, 2d]: atom displacement in z-direction
+        latt_vec [float, 2d, np]: lattice vector
+        limit [int, 0d]: number of structure per job
+        
+        Returns
+        ----------
+        args_list [list:tuple, 1d]: parameters of parallel jobs
+        """
+        a = start
+        counter = 0
+        for b in range(start, end):
+            counter += 1
+            if counter > limit:
+                args = (atom_pos[a:b], atom_type[a:b], grid, grid_ratio[a:b], space_group[a:b], angles[a:b], thicks[a:b], latt_vec)
+                args_list.append(args)
+                a = b
+                counter = 0
+        args = (atom_pos[a:end], atom_type[a:end], grid, grid_ratio[a:end], space_group[a:end], angles[a:end], thicks[a:end], latt_vec)
+        args_list.append(args)
+        return args_list
+    
     
 if __name__ == "__main__":
     pass

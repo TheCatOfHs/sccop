@@ -3,14 +3,13 @@ import numpy as np
 from fractions import Fraction
 
 sys.path.append(f'{os.getcwd()}/src')
-from core.path import *
-from core.input import *
+from core.log_print import *
 
 
 class PlaneSpaceGroup:
     #17 plane space groups
     def __init__(self):
-        pass    
+        pass
     
     def triclinic_001(frac_grain):
         """
@@ -217,7 +216,7 @@ class PlaneSpaceGroup:
         dau_area = equal_1 + equal_2 + equal_4
         return np.array(dau_area, dtype=float)
     
-    def tetragonal_099(frac_grain):
+    def tetragonal_099(frac_grain, delta=1e-10):
         """
         plane space group P4mm
         """
@@ -236,12 +235,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, .5, frac_grain[0]):
             for j in np.arange(0, .5, frac_grain[1]):
-                if 0 < i and 0 < j < i:
+                if 0 < i and 0 < j < i-delta:
                     equal_4.append([i, j, 0])
         dau_area = equal_1 + equal_2 + equal_4 + equal_8
         return np.array(dau_area, dtype=float)
     
-    def tetragonal_100(frac_grain):
+    def tetragonal_100(frac_grain, delta=1e-10):
         """
         plane space group P4gm
         """
@@ -256,12 +255,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, .5, frac_grain[0]):
             for j in np.arange(0, .5, frac_grain[1]):
-                if 0 < i and 0 < j < -i+.5:
+                if 0 < i and 0 < j < -i+.5-delta:
                     equal_8.append([i, j, 0])
         dau_area = equal_2 + equal_4 + equal_8
         return np.array(dau_area, dtype=float)
     
-    def hexagonal_143(frac_grain):
+    def hexagonal_143(frac_grain, delta=1e-10):
         """
         plane space group P3
         """
@@ -278,12 +277,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, 1, frac_grain[0]):
             for j in np.arange(0, 1, frac_grain[1]):
-                if .5*i < j and 2*i-1 < j and j < 2*i and j < .5*i+.5:
+                if .5*i < j-delta and 2*i-1 < j-delta and j < 2*i-delta and j < .5*i+.5-delta:
                     equal_3.append([i, j, 0])
         dau_area = equal_1 + equal_3
         return np.array(dau_area, dtype=float)
 
-    def hexagonal_156(frac_grain):
+    def hexagonal_156(frac_grain, delta=1e-10):
         """
         plane space group P3m1
         """
@@ -302,12 +301,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, Fraction(2, 3), frac_grain[0]):
             for j in np.arange(0, Fraction(2, 3), frac_grain[1]):
-                if .5*i < j and 0 < j < 2*i and j < -i+1:
+                if .5*i < j-delta and 0 < j < 2*i-delta and j < -i+1-delta:
                     equal_6.append([i, j, 0])
         dau_area = equal_1 + equal_3 + equal_6 
         return np.array(dau_area, dtype=float)
     
-    def hexagonal_157(frac_grain):
+    def hexagonal_157(frac_grain, delta=1e-10):
         """
         plane space group P31m
         """
@@ -327,12 +326,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, Fraction(2, 3), frac_grain[0]):
             for j in np.arange(0, .5, frac_grain[1]):
-                if 2*i-1 < j and 0 < j < i and j < -i+1:
+                if 2*i-1 < j-delta and 0 < j < i-delta and j < -i+1-delta:
                     equal_6.append([i, j, 0])
         dau_area = equal_1 + equal_2 + equal_3 + equal_6
         return np.array(dau_area, dtype=float)
     
-    def hexagonal_168(frac_grain):
+    def hexagonal_168(frac_grain, delta=1e-10):
         """
         plane space group P6
         """
@@ -351,12 +350,12 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, Fraction(2, 3), frac_grain[0]):
             for j in np.arange(0, .5, frac_grain[1]):
-                if 2*i-1 < j and 0 < j < i and j < -i+1:
+                if 2*i-1 < j-delta and 0 < j < i-delta and j < -i+1-delta:
                     equal_6.append([i, j, 0])
         dau_area = equal_1 + equal_2 + equal_3 + equal_6
         return np.array(dau_area, dtype=float)
     
-    def hexagonal_183(frac_grain):
+    def hexagonal_183(frac_grain, delta=1e-10):
         """
         plane space group P6mm
         """
@@ -377,10 +376,16 @@ class PlaneSpaceGroup:
         #inner
         for i in np.arange(0, Fraction(2, 3), frac_grain[0]):
             for j in np.arange(0, Fraction(1, 3), frac_grain[1]):
-                if 2*i-1 < j and 0 < j < .5*i:
+                if 2*i-1 < j-delta and 0 < j < .5*i-delta:
                     equal_12.append([i, j, 0])
         dau_area = equal_1 + equal_2 + equal_3 + equal_6 + equal_12
         return np.array(dau_area, dtype=float)
+
+
+class LayerSpaceGroup:
+    #80 layer groups
+    def __init__(self):
+        pass
     
 
 class BulkSpaceGroup:

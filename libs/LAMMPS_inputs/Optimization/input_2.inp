@@ -1,0 +1,18 @@
+units         metal
+dimension     3
+boundary      p p p
+atom_style    atomic
+
+read_data     lammps.inp
+
+pair_style    airebo 3.0
+pair_coeff    * * CH.airebo C
+
+fix           1 all box/relax aniso 0.0 vmax 0.001
+min_style     cg
+minimize      1e-15 1e-15 5000 10000
+
+dump 1 all custom 10000 dump.out id type x y z
+thermo_style custom step xlo xhi ylo yhi zlo zhi xy xz yz etotal
+thermo        10000
+run 10000

@@ -1,0 +1,20 @@
+units         metal
+dimension     3
+boundary      p p p
+atom_style    atomic
+
+read_data     lammps.inp
+
+pair_style    airebo 3.0
+pair_coeff    * * CH.airebo C
+
+neighbor       2.0 bin        
+neigh_modify   delay 10 check no
+
+compute        eng all pe/atom
+variable       toteng equal pe
+
+dump 1 all custom 1 dump.out id type x y z
+thermo_style custom step xlo xhi ylo yhi zlo zhi xy xz yz etotal
+thermo        1
+run           0
