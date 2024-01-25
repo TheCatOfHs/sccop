@@ -26,6 +26,14 @@ Please cite the following works if you want to use SCCOP.
 
 ```
 @article{SCCOP,
+    title = {Minimizing the training dataset for efficient crystal structure prediction by graph neural network},
+    author = {Li, Chuan-Nan and Liang, Han-Pu and Xu, Si-Yuan and Zhang, Xie and Wei, Su-Huai and Lin, Zijing},
+    journal = {submitted to Nat. Mach. Intell.}
+}
+```
+
+```
+@article{SCCOP,
     title = {Graph deep learning accelerated efficient crystal structure search and feature extraction},
     author = {Li, Chuan-Nan and Liang, Han-Pu and Zhang, Xie and Lin, Zijing and Wei, Su-Huai},
     journal = {npj Comput. Mater.},
