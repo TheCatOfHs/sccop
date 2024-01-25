@@ -5,7 +5,6 @@ This software package implements the Symmetry-based Combinatorial Crystal Optimi
 SCCOP combines graph neural network and DFT calculation to accelerate the search of crystal structure.
 The following paper describes the details of the SCCOP framework:
 
-[Graph deep learning accelerated efficient crystal structure search and feature extraction](XXX)
 ![](images/SCCOP.png)
 
 ## Table of Contents
@@ -174,6 +173,7 @@ Use_LAMMPS_Opt = True
 
 ### Job Script
 SCCOP supports the PBS and SLURM job system, we offer the job script here.
+
 For PBS job system
 ```bash
 #!/bin/bash
