@@ -1,8 +1,8 @@
 #Base
-Dimension = int('3')
-Composition = 'Cs1Ge1I3'
-Num_Atom = [int('15'), int('15')]
-Space_Group = [[int('SG0'), int('SG0')]]
+Dimension = 3
+Composition = 'C1'
+Num_Atom = [5, 10]
+Space_Group = [[1, 230]]
 
 #2-Dimension settings
 Vacuum_Space = 15
@@ -13,17 +13,17 @@ Z_Layers = 3
 Pressure = 0
 
 #Model
-Use_Pretrain_Model = [True if 'NOPRE' == 'PRE' else False][0]
+Use_Pretrain_Model = False
 Update_ML_Model = True
 
 #Recycling
 Num_Recycle = 1
-Num_ML_Iter = [1 for _ in range(Num_Recycle)]
+Num_ML_Iter = [1]
 Energy_Convergence = -1
 Use_Succeed = True
 
 #Sampling
-Use_ML_Clustering = [True if 'CLUS' == 'CLUS' else False][0]
+Use_ML_Clustering = True
 Min_Dis_Constraint = True
 Init_Strus_per_Node = 20
 Num_Sample_Limit = 50000

@@ -1,5 +1,5 @@
 #Server
-Job_System = 'PBS'
+Job_System = 'SLURM'
 Job_Queue = 'CPU'
 Host_Node = 'HOST_NODE'
 CPU_Nodes = 'CPU_NODES'
@@ -7,20 +7,6 @@ GPU_Nodes = 'GPU_NODES'
 Num_GPUs = 'GPU_NUM'
 
 #Environment
-# SCCOP_Env = 'source /public1/home/sch9368/anaconda3/bin/activate sccop'
-# Sources = ''
-# Modules = 'module load mpi/intel/17.0.5'
-# Envs = 'export PATH=/public1/home/sch9368/bin/vasp.5.4.4/bin:$PATH'
-# SCCOP_Env = 'source /public1/home/sch9368/anaconda3/bin/activate sccop'
-# Sources = ''
-# Modules = f'''
-#            module purge
-#            module load mpi/intel/20.0.4
-#            '''
-# Envs = f'''
-#         export PATH=/public1/home/sch9368/bin/new/lammps-2Aug2023/src:$PATH
-#         export LD_LIBRARY_PATH=/public1/soft/intel/2020/compilers_and_libraries_2020.4.304/linux/mkl/lib/intel64_lin:$LD_LIBRARY_PATH
-#         '''
 SCCOP_Env = ''
 Sources = ''
 Modules = ''
@@ -29,15 +15,8 @@ Envs = ''
 #Scf and Opt settings
 VASP_scf = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 4 vasp'
 VASP_opt = '/opt/intel/impi/4.0.3.008/intel64/bin/mpirun -np 48 vasp'
-# LAMMPS_scf = 'lmp_mpi -in input.inp'
-# LAMMPS_opt = 'mpirun -np 48 lmp_mpi -in input.inp'
 LAMMPS_scf = 'lmp_intel_cpu_intelmpi -in input.inp'
 LAMMPS_opt = 'mpirun -np 96 lmp_intel_cpu_intelmpi -in input.inp'
-# VASP_opt = '/opt/openmpi-1.6.3/bin/mpirun -np 48 vasp_relax_ab'
-# VASP_scf = 'mpirun -np 96 vasp_std'
-# VASP_opt = 'mpirun -np 96 /public5/home/sch6940/bin/vasp_relax_ab'
-# VASP_scf = 'mpirun -np 4 vasp_std'
-# VASP_opt = 'mpirun -np 96 vasp_std'
 
 #Save directory
 SCCOP_Path = '/tmp/sccop'
